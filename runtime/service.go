@@ -18,7 +18,6 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"strings"
 	"syscall"
 	"time"
 
@@ -29,11 +28,16 @@ import (
 	"github.com/containerd/ttrpc"
 	firecracker "github.com/firecracker-microvm/firecracker-go-sdk"
 	ptypes "github.com/gogo/protobuf/types"
+	"github.com/mdlayher/vsock"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 )
 
-const runcV1Path = "containerd-shim-runc-v1"
+const (
+	defaultVsockPort = 10789
+	// TODO: This will need to be changed once we are managing CID's
+	defaultCID = 3
+)
 
 // implements shimapi
 type service struct {
@@ -43,8 +47,8 @@ type service struct {
 	publish events.Publisher
 
 	//TODO: REALNAME
-	shimShimStarted bool
-	shimShimClient  taskAPI.TaskService
+	agentStarted bool
+	agentClient  taskAPI.TaskService
 }
 
 var _ = (taskAPI.TaskService)(&service{})
@@ -112,67 +116,63 @@ func (s *service) StartShim(ctx context.Context, id, containerdBinary, container
 func (s *service) Create(ctx context.Context, r *taskAPI.CreateTaskRequest) (*taskAPI.CreateTaskResponse, error) {
 	log.Println("CreateCalled")
 	// TODO: should there be a lock here
-	if !s.shimShimStarted {
+	if !s.agentStarted {
 		var err error
-		log.Println("Starting shimshim")
+		log.Println("Starting VM")
 		// Args[4] = containerd socket address
 		// Args[6] = containerd binary publish path
 		// TODO: refactor so we don't read directly from os.Args
-		s.shimShimClient, err = startShimShim(s.ctx, s.id, os.Args[4], os.Args[6])
+		s.agentClient, err = startVM(s.ctx, s.id, os.Args[4], os.Args[6])
 		if err != nil {
 			return nil, err
 		}
-		s.shimShimStarted = true
+		s.agentStarted = true
 	}
 	// Proxy Request
-	log.Println("Calling shimshimClient")
-	resp, err := s.shimShimClient.Create(ctx, r)
-	log.Println("Received ", resp, err, " from shimshim")
+	log.Println("Calling agentCreate")
+	resp, err := s.agentClient.Create(ctx, r)
+	log.Println("Received ", resp, err, " from agent")
+	log.Println("bundle:", r.Bundle)
+	for i := range r.Rootfs {
+		log.Println("Mount ", i, " ", r.Rootfs[i])
+	}
 	if err != nil {
 		return nil, err
 	}
 	return resp, nil
 }
 
-func startShimShim(ctx context.Context, id, containerdAddress, containerdBinary string) (taskAPI.TaskService, error) {
-	// Start binary -- get address
+func startVM(ctx context.Context, id, containerdAddress, containerdBinary string) (taskAPI.TaskService, error) {
+	/*
+		What needs to be done here:
+			- Start a firecracker agent with:
+				- The container rootfs as a block device
+					- rootfs will be the cwd
+				- Mount this device inside agent at a well known location
+				- With the agent running inside on a well-known port
+			- After agent startup, create a vsock client dialing to the
+				specified vsock port.
+				TODO: We will need some sort of vsock CID accounting mechanism
+				to know what CID to use, defaults to 3 for now
+			- Return this client or error
+	*/
 	ns, err := namespaces.NamespaceRequired(ctx)
+	log.Println("checking namespace: ", ns, err)
 	if err != nil {
 		return nil, err
 	}
-	log.Println(ns)
-	cwd, err := os.Getwd()
+	log.Println("startVM called")
+
+	conn, err := vsock.Dial(defaultCID, uint32(defaultVsockPort))
 	if err != nil {
-		return nil, err
-	}
-	args := []string{
-		"-namespace", "inside-shim",
-		"-address", containerdAddress,
-		"-publish-binary", containerdBinary,
-		"start",
-	}
-	cmd := exec.Command(runcV1Path, args...)
-	cmd.Dir = cwd
-	cmd.Env = append(os.Environ(), "GOMAXPROCS=2")
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Setpgid: true,
-	}
-	log.Println("Starting other shim")
-	out, err := cmd.CombinedOutput()
-	log.Println("inside shim exited, err:", err)
-	if err != nil {
-		return nil, errors.Wrapf(err, "%s", out)
-	}
-	address := strings.TrimSpace(string(out))
-	//conn, err := net.Dial("unix", address)
-	conn, err := shim.Connect(address, shim.AnonDialer)
-	if err != nil {
+		log.Println("error dialing vsock: ", err)
 		return nil, err
 	}
 	// THIS IS WHERE WE WOULD START A VM -- passing whatever args needed to
 	// TODO: will need to be vsock
 	_ = firecracker.Config{}
 	// Create ttrpc client
+	log.Println("Creating client")
 	rpcClient := ttrpc.NewClient(conn)
 	// Create taskClient
 	svc := taskAPI.NewTaskClient(rpcClient)
@@ -182,7 +182,7 @@ func startShimShim(ctx context.Context, id, containerdAddress, containerdBinary 
 
 func (s *service) Start(ctx context.Context, r *taskAPI.StartRequest) (*taskAPI.StartResponse, error) {
 	log.Println("StartCalled")
-	resp, err := s.shimShimClient.Start(ctx, r)
+	resp, err := s.agentClient.Start(ctx, r)
 	if err != nil {
 		return nil, err
 	}
@@ -192,7 +192,7 @@ func (s *service) Start(ctx context.Context, r *taskAPI.StartRequest) (*taskAPI.
 // Delete the initial process and container
 func (s *service) Delete(ctx context.Context, r *taskAPI.DeleteRequest) (*taskAPI.DeleteResponse, error) {
 	log.Println("DeleteCalled")
-	resp, err := s.shimShimClient.Delete(ctx, r)
+	resp, err := s.agentClient.Delete(ctx, r)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +202,7 @@ func (s *service) Delete(ctx context.Context, r *taskAPI.DeleteRequest) (*taskAP
 // Exec an additional process inside the container
 func (s *service) Exec(ctx context.Context, r *taskAPI.ExecProcessRequest) (*ptypes.Empty, error) {
 	log.Println("ExecCalled")
-	resp, err := s.shimShimClient.Exec(ctx, r)
+	resp, err := s.agentClient.Exec(ctx, r)
 	if err != nil {
 		return nil, err
 	}
@@ -212,7 +212,7 @@ func (s *service) Exec(ctx context.Context, r *taskAPI.ExecProcessRequest) (*pty
 // ResizePty of a process
 func (s *service) ResizePty(ctx context.Context, r *taskAPI.ResizePtyRequest) (*ptypes.Empty, error) {
 	log.Println("ResizePTYCalled")
-	resp, err := s.shimShimClient.ResizePty(ctx, r)
+	resp, err := s.agentClient.ResizePty(ctx, r)
 	if err != nil {
 		return nil, err
 	}
@@ -222,7 +222,7 @@ func (s *service) ResizePty(ctx context.Context, r *taskAPI.ResizePtyRequest) (*
 // State returns runtime state information for a process
 func (s *service) State(ctx context.Context, r *taskAPI.StateRequest) (*taskAPI.StateResponse, error) {
 	log.Println("StateCalled")
-	resp, err := s.shimShimClient.State(ctx, r)
+	resp, err := s.agentClient.State(ctx, r)
 	if err != nil {
 		return nil, err
 	}
@@ -232,7 +232,7 @@ func (s *service) State(ctx context.Context, r *taskAPI.StateRequest) (*taskAPI.
 // Pause the container
 func (s *service) Pause(ctx context.Context, r *taskAPI.PauseRequest) (*ptypes.Empty, error) {
 	log.Println("PauseCalled")
-	resp, err := s.shimShimClient.Pause(ctx, r)
+	resp, err := s.agentClient.Pause(ctx, r)
 	if err != nil {
 		return nil, err
 	}
@@ -242,7 +242,7 @@ func (s *service) Pause(ctx context.Context, r *taskAPI.PauseRequest) (*ptypes.E
 // Resume the container
 func (s *service) Resume(ctx context.Context, r *taskAPI.ResumeRequest) (*ptypes.Empty, error) {
 	log.Println("ResumeCalled")
-	resp, err := s.shimShimClient.Resume(ctx, r)
+	resp, err := s.agentClient.Resume(ctx, r)
 	if err != nil {
 		return nil, err
 	}
@@ -252,7 +252,7 @@ func (s *service) Resume(ctx context.Context, r *taskAPI.ResumeRequest) (*ptypes
 // Kill a process with the provided signal
 func (s *service) Kill(ctx context.Context, r *taskAPI.KillRequest) (*ptypes.Empty, error) {
 	log.Println("KillCalled")
-	resp, err := s.shimShimClient.Kill(ctx, r)
+	resp, err := s.agentClient.Kill(ctx, r)
 	if err != nil {
 		return nil, err
 	}
@@ -262,7 +262,7 @@ func (s *service) Kill(ctx context.Context, r *taskAPI.KillRequest) (*ptypes.Emp
 // Pids returns all pids inside the container
 func (s *service) Pids(ctx context.Context, r *taskAPI.PidsRequest) (*taskAPI.PidsResponse, error) {
 	log.Println("PidsCalled")
-	resp, err := s.shimShimClient.Pids(ctx, r)
+	resp, err := s.agentClient.Pids(ctx, r)
 	if err != nil {
 		return nil, err
 	}
@@ -272,7 +272,7 @@ func (s *service) Pids(ctx context.Context, r *taskAPI.PidsRequest) (*taskAPI.Pi
 // CloseIO of a process
 func (s *service) CloseIO(ctx context.Context, r *taskAPI.CloseIORequest) (*ptypes.Empty, error) {
 	log.Println("CloseIOCalled")
-	resp, err := s.shimShimClient.CloseIO(ctx, r)
+	resp, err := s.agentClient.CloseIO(ctx, r)
 	if err != nil {
 		return nil, err
 	}
@@ -282,7 +282,7 @@ func (s *service) CloseIO(ctx context.Context, r *taskAPI.CloseIORequest) (*ptyp
 // Checkpoint the container
 func (s *service) Checkpoint(ctx context.Context, r *taskAPI.CheckpointTaskRequest) (*ptypes.Empty, error) {
 	log.Println("CheckpointCalled")
-	resp, err := s.shimShimClient.Checkpoint(ctx, r)
+	resp, err := s.agentClient.Checkpoint(ctx, r)
 	if err != nil {
 		return nil, err
 	}
@@ -292,7 +292,7 @@ func (s *service) Checkpoint(ctx context.Context, r *taskAPI.CheckpointTaskReque
 // Connect returns shim information such as the shim's pid
 func (s *service) Connect(ctx context.Context, r *taskAPI.ConnectRequest) (*taskAPI.ConnectResponse, error) {
 	log.Println("ConnectCalled")
-	resp, err := s.shimShimClient.Connect(ctx, r)
+	resp, err := s.agentClient.Connect(ctx, r)
 	if err != nil {
 		return nil, err
 	}
@@ -301,14 +301,14 @@ func (s *service) Connect(ctx context.Context, r *taskAPI.ConnectRequest) (*task
 
 func (s *service) Shutdown(ctx context.Context, r *taskAPI.ShutdownRequest) (*ptypes.Empty, error) {
 	log.Println("ShutdownCalled")
-	s.shimShimClient.Shutdown(ctx, r)
+	s.agentClient.Shutdown(ctx, r)
 	os.Exit(0)
 	return &ptypes.Empty{}, nil
 }
 
 func (s *service) Stats(ctx context.Context, r *taskAPI.StatsRequest) (*taskAPI.StatsResponse, error) {
 	log.Println("StatsCalled")
-	resp, err := s.shimShimClient.Stats(ctx, r)
+	resp, err := s.agentClient.Stats(ctx, r)
 	if err != nil {
 		return nil, err
 	}
@@ -318,7 +318,7 @@ func (s *service) Stats(ctx context.Context, r *taskAPI.StatsRequest) (*taskAPI.
 // Update a running container
 func (s *service) Update(ctx context.Context, r *taskAPI.UpdateTaskRequest) (*ptypes.Empty, error) {
 	log.Println("UpdateCalled")
-	resp, err := s.shimShimClient.Update(ctx, r)
+	resp, err := s.agentClient.Update(ctx, r)
 	if err != nil {
 		return nil, err
 	}
@@ -328,7 +328,7 @@ func (s *service) Update(ctx context.Context, r *taskAPI.UpdateTaskRequest) (*pt
 // Wait for a process to exit
 func (s *service) Wait(ctx context.Context, r *taskAPI.WaitRequest) (*taskAPI.WaitResponse, error) {
 	log.Println("WaitCalled")
-	resp, err := s.shimShimClient.Wait(ctx, r)
+	resp, err := s.agentClient.Wait(ctx, r)
 	if err != nil {
 		return nil, err
 	}

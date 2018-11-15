@@ -9,19 +9,18 @@ import (
 	"syscall"
 	"time"
 
+	firecracker "github.com/awslabs/go-firecracker"
+	"github.com/containerd/containerd/events"
 	"github.com/containerd/containerd/namespaces"
+	"github.com/containerd/containerd/runtime/v2/shim"
 	taskAPI "github.com/containerd/containerd/runtime/v2/task"
+	"github.com/containerd/ttrpc"
+	ptypes "github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
-
-	"github.com/containerd/containerd/events"
-	"github.com/containerd/containerd/runtime/v2/shim"
-	"github.com/containerd/ttrpc"
-
-	ptypes "github.com/gogo/protobuf/types"
 )
 
-const RUNC_V1_PATH = "containerd-shim-runc-v1"
+const runcV1Path = "containerd-shim-runc-v1"
 
 // implements shimapi
 type service struct {
@@ -98,7 +97,7 @@ func (s *service) StartShim(ctx context.Context, id, containerdBinary, container
 }
 
 func (s *service) Create(ctx context.Context, r *taskAPI.CreateTaskRequest) (*taskAPI.CreateTaskResponse, error) {
-	log.Println("CreateClled")
+	log.Println("CreateCalled")
 	// TODO: should there be a lock here
 	if !s.shimShimStarted {
 		var err error
@@ -139,7 +138,7 @@ func startShimShim(ctx context.Context, id, containerdAddress, containerdBinary 
 		"-publish-binary", containerdBinary,
 		"start",
 	}
-	cmd := exec.Command(RUNC_V1_PATH, args...)
+	cmd := exec.Command(runcV1Path, args...)
 	cmd.Dir = cwd
 	cmd.Env = append(os.Environ(), "GOMAXPROCS=2")
 	cmd.SysProcAttr = &syscall.SysProcAttr{
@@ -159,6 +158,7 @@ func startShimShim(ctx context.Context, id, containerdAddress, containerdBinary 
 	}
 	// THIS IS WHERE WE WOULD START A VM -- passing whatever args needed to
 	// TODO: will need to be vsock
+	_ = firecracker.Config{}
 	// Create ttrpc client
 	rpcClient := ttrpc.NewClient(conn)
 	// Create taskClient

@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"github.com/awslabs/go-firecracker-snapshotter"
+	"github.com/awslabs/containerd-firecracker/snapshotter"
 	"google.golang.org/grpc"
 	"net"
 	"os"

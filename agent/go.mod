@@ -23,7 +23,7 @@ require (
 	github.com/pkg/errors v0.8.0 // indirect
 	github.com/sirupsen/logrus v1.2.0
 	golang.org/x/sync v0.0.0-20180314180146-1d60e4601c6f
-	golang.org/x/sys v0.0.0-20181107165924-66b7b1311ac8 // indirect
+	golang.org/x/sys v0.0.0-20181107165924-66b7b1311ac8
 	google.golang.org/grpc v1.16.0 // indirect
 	gotest.tools v2.1.0+incompatible // indirect
 )

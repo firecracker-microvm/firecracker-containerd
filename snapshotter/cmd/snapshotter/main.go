@@ -2,14 +2,17 @@ package main
 
 import (
 	"context"
-	"github.com/awslabs/containerd-firecracker/snapshotter"
-	"google.golang.org/grpc"
 	"net"
 	"os"
+	"os/signal"
+	"syscall"
 
+	"github.com/awslabs/containerd-firecracker/snapshotter"
 	snapshotsapi "github.com/containerd/containerd/api/services/snapshots/v1"
 	"github.com/containerd/containerd/contrib/snapshotservice"
 	"github.com/containerd/containerd/log"
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
 )
 
 func main() {
@@ -19,7 +22,14 @@ func main() {
 
 	var unixAddr, rootPath = os.Args[1], os.Args[2]
 
-	ctx := context.Background()
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	group, ctx := errgroup.WithContext(ctx)
+
 	rpc := grpc.NewServer()
 
 	snap, err := snapshotter.NewSnapshotter(ctx, rootPath)
@@ -37,9 +47,34 @@ func main() {
 		log.G(ctx).WithError(err).Fatalf("failed to listen socket at %s", os.Args[1])
 	}
 
-	defer listener.Close()
+	group.Go(func() error {
+		return rpc.Serve(listener)
+	})
 
-	if err := rpc.Serve(listener); err != nil {
-		log.G(ctx).WithError(err).Fatal("failed to run gRPC server")
+	group.Go(func() error {
+		defer func() {
+			log.G(ctx).Info("stopping  server")
+			rpc.Stop()
+
+			if err := snap.Close(); err != nil {
+				log.G(ctx).WithError(err).Error("failed to close snapshotter")
+			}
+		}()
+
+		for {
+			select {
+			case <-stop:
+				cancel()
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+	})
+
+	if err := group.Wait(); err != nil {
+		log.G(ctx).WithError(err).Warn("snapshotter error")
 	}
+
+	log.G(ctx).Info("done")
 }

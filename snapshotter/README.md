@@ -42,3 +42,9 @@ snapshotter plugin process as follows:
 ```
 ./snapshotter /var/run/firecracker-snapshotter.sock /var/lib/firecracker-snapshotter
 ```
+
+Now you can use snapshotter with containerd:
+
+```
+$ CONTAINERD_SNAPSHOTTER=firecracker-snapshotter ctr images pull docker.io/library/alpine:latest
+```

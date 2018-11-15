@@ -23,7 +23,7 @@ func main() {
 	var unixAddr, rootPath = os.Args[1], os.Args[2]
 
 	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM, syscall.SIGPIPE, syscall.SIGHUP, syscall.SIGQUIT)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

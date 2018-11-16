@@ -9,12 +9,12 @@ import (
 	"syscall"
 	"time"
 
-	firecracker "github.com/awslabs/go-firecracker"
 	"github.com/containerd/containerd/events"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/runtime/v2/shim"
 	taskAPI "github.com/containerd/containerd/runtime/v2/task"
 	"github.com/containerd/ttrpc"
+	firecracker "github.com/firecracker-microvm/go-firecracker"
 	ptypes "github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"

@@ -1,4 +1,4 @@
-# containerd-firecracker
+# firecracker-containerd
 
 This repository contains software that enables using
 [containerd](https://containerd.io) to manage
@@ -35,3 +35,7 @@ microVMs with containerd:
   component, configured to start on boot (TODO: provide this)
 * The `snapshotter` component, configured to be loaded by containerd
 * The `runtime` component, configured to be loaded by containerd
+
+## License
+
+This library is licensed under the Apache 2.0 License.

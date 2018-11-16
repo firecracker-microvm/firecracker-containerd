@@ -27,7 +27,7 @@ import (
 	"github.com/containerd/containerd/runtime/v2/shim"
 	taskAPI "github.com/containerd/containerd/runtime/v2/task"
 	"github.com/containerd/ttrpc"
-	firecracker "github.com/firecracker-microvm/go-firecracker"
+	firecracker "github.com/firecracker-microvm/firecracker-go-sdk"
 	ptypes "github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"

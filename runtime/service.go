@@ -15,7 +15,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -48,6 +47,7 @@ type service struct {
 
 	agentStarted bool
 	agentClient  taskAPI.TaskService
+	config       *Config
 	machine      *firecracker.Machine
 }
 
@@ -59,11 +59,19 @@ func NewService(ctx context.Context, id string, publisher events.Publisher) (shi
 	if err != nil {
 		return nil, err
 	}
+
+	config, err := LoadConfig("")
+	if err != nil {
+		return nil, err
+	}
+
 	s := &service{
 		server:  server,
 		id:      id,
 		publish: publisher,
+		config:  config,
 	}
+
 	return s, nil
 }
 
@@ -159,14 +167,25 @@ func (s *service) startVM(ctx context.Context) (taskAPI.TaskService, error) {
 	cid := defaultCID
 
 	cfg := firecracker.Config{
-		BinPath:         "./firecracker",
-		SocketPath:      fmt.Sprintf("./firecracker_%d.sock", cid),
+		BinPath:         s.config.FirecrackerBinaryPath,
+		SocketPath:      s.config.SocketPath,
 		VsockDevices:    []firecracker.VsockDevice{{Path: "root", CID: cid}},
-		KernelImagePath: "./vmlinux",
-		KernelArgs:      "console=ttyS0 noapic reboot=k panic=1 pci=off nomodules rw",
-		RootDrive:       firecracker.BlockDevice{HostPath: "vsock.img", Mode: "rw"},
-		CPUCount:        1,
-		CPUTemplate:     firecracker.CPUTemplate(firecracker.CPUTemplateT2),
+		KernelImagePath: s.config.KernelImagePath,
+		KernelArgs:      s.config.KernelArgs,
+		RootDrive:       firecracker.BlockDevice{HostPath: s.config.RootDrive, Mode: "rw"},
+		CPUCount:        int64(s.config.CPUCount),
+		CPUTemplate:     firecracker.CPUTemplate(s.config.CPUTemplate),
+		Console:         s.config.Console,
+		LogFifo:         s.config.LogFifo,
+		LogLevel:        s.config.LogLevel,
+		MetricsFifo:     s.config.MetricsFifo,
+	}
+
+	for path, mode := range s.config.AdditionalDrives {
+		cfg.AdditionalDrives = append(cfg.AdditionalDrives, firecracker.BlockDevice{
+			HostPath: path,
+			Mode:     mode,
+		})
 	}
 
 	s.machine = firecracker.NewMachine(cfg)

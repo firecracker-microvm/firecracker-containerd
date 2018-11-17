@@ -15,6 +15,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -36,19 +37,18 @@ import (
 const (
 	defaultVsockPort = 10789
 	// TODO: This will need to be changed once we are managing CID's
-	defaultCID = 3
+	defaultCID = uint32(3)
 )
 
 // implements shimapi
 type service struct {
 	server  *ttrpc.Server
 	id      string
-	ctx     context.Context
 	publish events.Publisher
 
-	//TODO: REALNAME
 	agentStarted bool
 	agentClient  taskAPI.TaskService
+	machine      *firecracker.Machine
 }
 
 var _ = (taskAPI.TaskService)(&service{})
@@ -61,7 +61,6 @@ func NewService(ctx context.Context, id string, publisher events.Publisher) (shi
 	}
 	s := &service{
 		server:  server,
-		ctx:     ctx,
 		id:      id,
 		publish: publisher,
 	}
@@ -117,15 +116,12 @@ func (s *service) Create(ctx context.Context, r *taskAPI.CreateTaskRequest) (*ta
 	log.Println("CreateCalled")
 	// TODO: should there be a lock here
 	if !s.agentStarted {
-		var err error
-		log.Println("Starting VM")
-		// Args[4] = containerd socket address
-		// Args[6] = containerd binary publish path
-		// TODO: refactor so we don't read directly from os.Args
-		s.agentClient, err = startVM(s.ctx, s.id, os.Args[4], os.Args[6])
+		client, err := s.startVM(ctx)
 		if err != nil {
 			return nil, err
 		}
+
+		s.agentClient = client
 		s.agentStarted = true
 	}
 	// Proxy Request
@@ -142,7 +138,7 @@ func (s *service) Create(ctx context.Context, r *taskAPI.CreateTaskRequest) (*ta
 	return resp, nil
 }
 
-func startVM(ctx context.Context, id, containerdAddress, containerdBinary string) (taskAPI.TaskService, error) {
+func (s *service) startVM(ctx context.Context) (taskAPI.TaskService, error) {
 	/*
 		What needs to be done here:
 			- Start a firecracker agent with:
@@ -156,21 +152,45 @@ func startVM(ctx context.Context, id, containerdAddress, containerdBinary string
 				to know what CID to use, defaults to 3 for now
 			- Return this client or error
 	*/
-	ns, err := namespaces.NamespaceRequired(ctx)
-	log.Println("checking namespace: ", ns, err)
-	if err != nil {
-		return nil, err
-	}
-	log.Println("startVM called")
 
-	conn, err := vsock.Dial(defaultCID, uint32(defaultVsockPort))
-	if err != nil {
-		log.Println("error dialing vsock: ", err)
+	log.Println("starting VM")
+
+	// TODO: find next available CID
+	cid := defaultCID
+
+	cfg := firecracker.Config{
+		BinPath:         "./firecracker",
+		SocketPath:      fmt.Sprintf("./firecracker_%d.sock", cid),
+		VsockDevices:    []firecracker.VsockDevice{{Path: "root", CID: cid}},
+		KernelImagePath: "./vmlinux",
+		KernelArgs:      "console=ttyS0 noapic reboot=k panic=1 pci=off nomodules rw",
+		RootDrive:       firecracker.BlockDevice{HostPath: "vsock.img", Mode: "rw"},
+		CPUCount:        1,
+		CPUTemplate:     firecracker.CPUTemplate(firecracker.CPUTemplateT2),
+	}
+
+	s.machine = firecracker.NewMachine(cfg)
+
+	log.Println("initializing FC")
+	if _, err := s.machine.Init(ctx); err != nil {
 		return nil, err
 	}
-	// THIS IS WHERE WE WOULD START A VM -- passing whatever args needed to
-	// TODO: will need to be vsock
-	_ = firecracker.Config{}
+
+	log.Println("starting instance")
+	if err := s.machine.StartInstance(ctx); err != nil {
+		s.stopVM()
+		return nil, err
+	}
+
+	// TODO: wait for agent to be started / Dial retries?
+
+	log.Println("calling agent")
+	conn, err := vsock.Dial(cid, defaultVsockPort)
+	if err != nil {
+		s.stopVM()
+		return nil, err
+	}
+
 	// Create ttrpc client
 	log.Println("Creating client")
 	rpcClient := ttrpc.NewClient(conn)
@@ -178,6 +198,10 @@ func startVM(ctx context.Context, id, containerdAddress, containerdBinary string
 	svc := taskAPI.NewTaskClient(rpcClient)
 	// return client
 	return svc, nil
+}
+
+func (s *service) stopVM() error {
+	return s.machine.StopVMM()
 }
 
 func (s *service) Start(ctx context.Context, r *taskAPI.StartRequest) (*taskAPI.StartResponse, error) {
@@ -301,8 +325,16 @@ func (s *service) Connect(ctx context.Context, r *taskAPI.ConnectRequest) (*task
 
 func (s *service) Shutdown(ctx context.Context, r *taskAPI.ShutdownRequest) (*ptypes.Empty, error) {
 	log.Println("ShutdownCalled")
-	s.agentClient.Shutdown(ctx, r)
-	os.Exit(0)
+
+	if _, err := s.agentClient.Shutdown(ctx, r); err != nil {
+		log.Printf("failed to shutdown agent: %v", err)
+	}
+
+	if err := s.stopVM(); err != nil {
+		log.Printf("failed to stop VM: %v", err)
+		return nil, err
+	}
+
 	return &ptypes.Empty{}, nil
 }
 

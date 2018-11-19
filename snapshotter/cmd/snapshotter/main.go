@@ -20,10 +20,10 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/awslabs/containerd-firecracker/snapshotter"
 	snapshotsapi "github.com/containerd/containerd/api/services/snapshots/v1"
 	"github.com/containerd/containerd/contrib/snapshotservice"
 	"github.com/containerd/containerd/log"
+	"github.com/firecracker-microvm/firecracker-containerd/snapshotter"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 )

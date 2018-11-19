@@ -50,6 +50,12 @@ type Snapshotter struct {
 func NewSnapshotter(ctx context.Context, root string) (snapshots.Snapshotter, error) {
 	log.G(ctx).WithField("root", root).Info("creating snapshotter")
 
+	root, err := filepath.Abs(root)
+	if err != nil {
+		log.G(ctx).WithError(err).Error("failed to get absoluate path")
+		return nil, err
+	}
+
 	for _, path := range []string{
 		root,
 		filepath.Join(root, imageDirName),

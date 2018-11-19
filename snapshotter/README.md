@@ -34,9 +34,9 @@ determined when you run it.
 ```
 
 To run the snapshotter, you must specify both a Unix domain socket and a root
-directory where the snapshots will be stored.  For example, to run the
-snapshotter with its domain socket at `/var/run/firecracker-snapshotter.sock`
-and its storage at `/var/lib/firecracker-snapshotter`, you would run the
+directory where the snapshots will be stored. This root directory mmust be a
+fully qualified path. For example, to run the snapshotter with its domain socket
+at `/var/run/firecracker-snapshotter.sock` and its storage at `/var/lib/firecracker-snapshotter`, you would run the
 snapshotter plugin process as follows:
 
 ```

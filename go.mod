@@ -1,4 +1,4 @@
-module github.com/awslabs/containerd-firecracker
+module github.com/firecracker-microvm/containerd-firecracker
 
 require (
 	github.com/Microsoft/go-winio v0.4.11 // indirect
@@ -14,7 +14,6 @@ require (
 	github.com/containerd/typeurl v0.0.0-20181015155603-461401dc8f19 // indirect
 	github.com/coreos/go-systemd v0.0.0-20181031085051-9002847aa142 // indirect
 	github.com/firecracker-microvm/firecracker-go-sdk v0.0.0-20181116214658-cd39b2273d9b
-	github.com/firecracker-microvm/go-firecracker v0.0.0-20181116060722-136d079aab32
 	github.com/godbus/dbus v0.0.0-20181025153459-66d97aec3384 // indirect
 	github.com/gogo/protobuf v1.1.1
 	github.com/google/go-cmp v0.2.0 // indirect

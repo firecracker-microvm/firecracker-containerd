@@ -5,6 +5,9 @@ This repository contains software that enables using
 [Firecracker](https://github.com/firecracker-microvm/firecracker) microVMs
 using familiar container ecosystem technologies like OCI images.
 
+Firecracker microVMs enable a container-like experience with fast start-up and
+shut-down while providing a separate kernel and KVM hypervisor isolation.
+
 There are three separate components in this repository:
 
 * A [snapshotter](snapshotter) that creates files used as block-devices for
@@ -15,6 +18,9 @@ There are three separate components in this repository:
 * An [agent](agent) running inside the microVM, which invokes
   [runC](https://runc.io) to create standard Linux containers inside the
   microVM.
+  
+For more detailed information on the components and how they work, see
+[architecture.md](docs/architecture.md).
 
 ## Requirements
 

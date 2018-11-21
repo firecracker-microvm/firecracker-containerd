@@ -28,8 +28,8 @@ import (
 )
 
 const (
-	defaultNamespace  = "default"
-	defaultBundlePath = "/container"
+	defaultNamespace = "default"
+	bundleMountPath  = "/container"
 )
 
 // TaskService represents inner shim wrapper over runc in order to:
@@ -47,12 +47,19 @@ func NewTaskService(runc shim.Shim) shim.Shim {
 func (ts *TaskService) Create(ctx context.Context, req *shimapi.CreateTaskRequest) (*shimapi.CreateTaskResponse, error) {
 	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "bundle": req.Bundle}).Info("create")
 
+	// Use mount path instead of bundle path inside the VM
+	req.Bundle = bundleMountPath
+
+	// Do not pass any mounts to runc, everything is already mounted for us
+	req.Rootfs = nil
+
 	// Passthrough runcOptions
-	opts, err := unpackBundle(filepath.Join(defaultBundlePath, "config.json"), req.Options)
+	opts, err := unpackBundle(filepath.Join(bundleMountPath, "config.json"), req.Options)
 	if err != nil {
 		return nil, err
 	}
 	req.Options = opts
+
 	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
 	resp, err := ts.runc.Create(ctx, req)
 	if err != nil {

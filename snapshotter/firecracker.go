@@ -15,6 +15,7 @@ package snapshotter
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -26,6 +27,7 @@ import (
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/containerd/snapshots/storage"
 	"github.com/containerd/continuity/fs"
+	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -408,10 +410,13 @@ func (s *Snapshotter) buildMounts(snap storage.Snapshot) []mount.Mount {
 		options = append(options, "rw")
 	}
 
+	// Save filesystem image path so it can be consumed by runtime
+	options = append(options, fmt.Sprintf("%s=%s", internal.SnapshotterImageKey, s.getImagePath(snap.ID)))
+
 	mounts := []mount.Mount{
 		{
 			Source:  s.getMountDir(snap.ID),
-			Type:    "firecracker",
+			Type:    internal.SnapshotterMountType,
 			Options: options,
 		},
 	}

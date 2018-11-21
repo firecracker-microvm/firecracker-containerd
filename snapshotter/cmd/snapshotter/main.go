@@ -15,6 +15,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"net"
 	"os"
 	"os/signal"
@@ -24,16 +25,26 @@ import (
 	"github.com/containerd/containerd/contrib/snapshotservice"
 	"github.com/containerd/containerd/log"
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 )
 
 func main() {
-	if len(os.Args) < 3 {
-		log.L.Fatalf("invalid args: usage %s <unix addr> <root>", os.Args[0])
-	}
+	var (
+		unixAddr string
+		rootPath string
+		debug bool
+	)
 
-	var unixAddr, rootPath = os.Args[1], os.Args[2]
+	flag.StringVar(&unixAddr, "address", "./firecracker-snapshotter.sock", "RPC server unix address (default: ./firecracker-snapshotter.sock)")
+	flag.StringVar(&rootPath, "path", "./images", "Path to snapshotter data (default: ./images)")
+	flag.BoolVar(&debug, "debug", false, "Debug mode")
+	flag.Parse()
+
+	if debug {
+		logrus.SetLevel(logrus.DebugLevel)
+	}
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM, syscall.SIGPIPE, syscall.SIGHUP, syscall.SIGQUIT)
@@ -57,7 +68,7 @@ func main() {
 
 	listener, err := net.Listen("unix", unixAddr)
 	if err != nil {
-		log.G(ctx).WithError(err).Fatalf("failed to listen socket at %s", os.Args[1])
+		log.G(ctx).WithError(err).Fatalf("failed to listen socket at %s", unixAddr)
 	}
 
 	group.Go(func() error {

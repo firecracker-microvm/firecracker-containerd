@@ -30,7 +30,7 @@ determined when you run it.
 ## Usage
 
 ```
-./snapshotter UNIX-DOMAIN-SOCKET ROOT
+./snapshotter -address UNIX-DOMAIN-SOCKET -path ROOT -debug
 ```
 
 To run the snapshotter, you must specify both a Unix domain socket and a root
@@ -40,11 +40,11 @@ and its storage at `/var/lib/firecracker-snapshotter`, you would run the
 snapshotter plugin process as follows:
 
 ```
-./snapshotter /var/run/firecracker-snapshotter.sock /var/lib/firecracker-snapshotter
+./snapshotter -address /var/run/firecracker-snapshotter.sock -path /var/lib/firecracker-snapshotter
 ```
 
 Now you can use snapshotter with containerd:
 
 ```
-$ CONTAINERD_SNAPSHOTTER=firecracker-snapshotter ctr images pull docker.io/library/alpine:latest
+CONTAINERD_SNAPSHOTTER=firecracker-snapshotter ctr images pull docker.io/library/alpine:latest
 ```

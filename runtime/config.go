@@ -38,6 +38,7 @@ type Config struct {
 	LogLevel              string            `json:"log_level"`
 	MetricsFifo           string            `json:"metrics_fifo"`
 	HtEnabled             bool              `json:"ht_enabled"`
+	Debug                 bool              `json:"debug"`
 }
 
 func LoadConfig(path string) (*Config, error) {

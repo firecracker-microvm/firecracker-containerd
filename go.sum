@@ -34,6 +34,8 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/docker/go-units v0.3.3 h1:Xk8S3Xj5sLGlG5g67hJmYMmUgXv5N4PhkjJHHqrwnTk=
 github.com/docker/go-units v0.3.3/go.mod h1:fgPhTUdO+D/Jk86RDLlptpiXQzgHJF7gydDDbaIK4Dk=
+github.com/firecracker-microvm/firecracker-go-sdk v0.0.0-20181116214658-3cb94c781a7fe559c07826d2d47baeea1f087e60 h1:DIB6JjWbvthD2FKcuW3u2JiWEJ4QSi6XIuXX9agbafU=
+github.com/firecracker-microvm/firecracker-go-sdk v0.0.0-20181116214658-3cb94c781a7fe559c07826d2d47baeea1f087e60/go.mod h1:KR1UiFhChhMA+u9+uGP1N3dCdJfXi1s+/BLSPEZm0kk=
 github.com/firecracker-microvm/firecracker-go-sdk v0.0.0-20181116214658-cd39b2273d9b h1:Nm03bzrlcPziZ9W6FAzGwuSMYwmbo8qZNh1lhO+MqbU=
 github.com/firecracker-microvm/firecracker-go-sdk v0.0.0-20181116214658-cd39b2273d9b/go.mod h1:KR1UiFhChhMA+u9+uGP1N3dCdJfXi1s+/BLSPEZm0kk=
 github.com/globalsign/mgo v0.0.0-20180905125535-1ca0a4f7cbcb h1:D4uzjWwKYQ5XnAvUbuvHW93esHg7F8N/OYeBBcJoTr0=

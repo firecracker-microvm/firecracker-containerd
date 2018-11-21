@@ -11,14 +11,9 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package main
+package internal
 
-import (
-	"github.com/containerd/containerd/runtime/v2/shim"
+const (
+	SnapshotterMountType = "firecracker-snapshotter"
+	SnapshotterImageKey  = "firecracker-image"
 )
-
-const ShimID = "aws.firecracker"
-
-func main() {
-	shim.Run(ShimID, NewService)
-}

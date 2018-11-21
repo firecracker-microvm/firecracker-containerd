@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package firecracker.containerd;
+
+import "google/protobuf/any.proto";
+//import weak "gogoproto/gogo.proto";
+
+option go_package = "github.com/firecracker-microvm/firecracker-containerd/proto";
+// Message to store bundle/config.json bytes
+message ExtraData {
+	bytes JsonSpec = 1;
+	google.protobuf.Any RuncOptions = 2;
+}

@@ -15,9 +15,11 @@ package main
 
 import (
 	"context"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -26,6 +28,7 @@ import (
 	"github.com/containerd/containerd/runtime/v2/shim"
 	taskAPI "github.com/containerd/containerd/runtime/v2/task"
 	"github.com/containerd/ttrpc"
+	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	firecracker "github.com/firecracker-microvm/firecracker-go-sdk"
 	ptypes "github.com/gogo/protobuf/types"
 	"github.com/mdlayher/vsock"
@@ -132,6 +135,13 @@ func (s *service) Create(ctx context.Context, r *taskAPI.CreateTaskRequest) (*ta
 		s.agentClient = client
 		s.agentStarted = true
 	}
+	// Generate new anyData with bundle/config.json packed inside
+	anyData, err := packBundle(filepath.Join(r.Bundle, "config.json"), r.Options)
+	if err != nil {
+		return nil, err
+	}
+	// Add to createTaskRequest
+	r.Options = anyData
 	// Proxy Request
 	log.Println("Calling agentCreate")
 	resp, err := s.agentClient.Create(ctx, r)
@@ -144,6 +154,34 @@ func (s *service) Create(ctx context.Context, r *taskAPI.CreateTaskRequest) (*ta
 		return nil, err
 	}
 	return resp, nil
+}
+
+func packBundle(path string, options *ptypes.Any) (*ptypes.Any, error) {
+	// Add the bundle/config.json to the request so it can be recreated
+	// inside the vm:
+	// Read bundle json
+	jsonBytes, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	var opts *ptypes.Any
+	if options != nil {
+		// Copy values of existing options over
+		valCopy := make([]byte, len(options.Value))
+		copy(valCopy, options.Value)
+		opts = &ptypes.Any{
+			TypeUrl: options.TypeUrl,
+			Value:   valCopy,
+		}
+	}
+	// add it to a type
+	// Convert to any
+	extraData := &proto.ExtraData{
+		JsonSpec:    jsonBytes,
+		RuncOptions: opts,
+	}
+	return ptypes.MarshalAny(extraData)
 }
 
 func (s *service) startVM(ctx context.Context) (taskAPI.TaskService, error) {
@@ -202,7 +240,8 @@ func (s *service) startVM(ctx context.Context) (taskAPI.TaskService, error) {
 	}
 
 	// TODO: wait for agent to be started / Dial retries?
-
+	// Sleep for now to make sure agent has started before we dial
+	time.Sleep(time.Second)
 	log.Println("calling agent")
 	conn, err := vsock.Dial(cid, defaultVsockPort)
 	if err != nil {
@@ -353,7 +392,8 @@ func (s *service) Shutdown(ctx context.Context, r *taskAPI.ShutdownRequest) (*pt
 		log.Printf("failed to stop VM: %v", err)
 		return nil, err
 	}
-
+	// Exit to avoid 'zombie' shim processes
+	defer os.Exit(0)
 	return &ptypes.Empty{}, nil
 }
 

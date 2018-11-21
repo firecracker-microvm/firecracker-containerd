@@ -15,16 +15,22 @@ package main
 
 import (
 	"context"
+	"io/ioutil"
+	"path/filepath"
 
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/runtime/v2/shim"
 	shimapi "github.com/containerd/containerd/runtime/v2/task"
+	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	"github.com/gogo/protobuf/types"
 	"github.com/sirupsen/logrus"
 )
 
-const defaultNamespace = "default"
+const (
+	defaultNamespace  = "default"
+	defaultBundlePath = "/container"
+)
 
 // TaskService represents inner shim wrapper over runc in order to:
 // - Add default namespace to ctx as it's not passed by ttrpc over vsock
@@ -41,6 +47,12 @@ func NewTaskService(runc shim.Shim) shim.Shim {
 func (ts *TaskService) Create(ctx context.Context, req *shimapi.CreateTaskRequest) (*shimapi.CreateTaskResponse, error) {
 	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "bundle": req.Bundle}).Info("create")
 
+	// Passthrough runcOptions
+	opts, err := unpackBundle(filepath.Join(defaultBundlePath, "config.json"), req.Options)
+	if err != nil {
+		return nil, err
+	}
+	req.Options = opts
 	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
 	resp, err := ts.runc.Create(ctx, req)
 	if err != nil {
@@ -50,6 +62,21 @@ func (ts *TaskService) Create(ctx context.Context, req *shimapi.CreateTaskReques
 
 	log.G(ctx).WithField("pid", resp.Pid).Debugf("create succeeded")
 	return resp, nil
+}
+
+func unpackBundle(path string, bundle *types.Any) (*types.Any, error) {
+	// get json bytes from task request
+	extraData := &proto.ExtraData{}
+	err := types.UnmarshalAny(bundle, extraData)
+	if err != nil {
+		return nil, err
+	}
+	// write bundle/config.json bytes
+	err = ioutil.WriteFile(path, extraData.JsonSpec, 0644)
+	if err != nil {
+		return nil, err
+	}
+	return extraData.RuncOptions, nil
 }
 
 func (ts *TaskService) State(ctx context.Context, req *shimapi.StateRequest) (*shimapi.StateResponse, error) {

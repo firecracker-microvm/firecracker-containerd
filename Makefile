@@ -25,6 +25,10 @@ runtime:
 snapshotter:
 	$(MAKE) -C snapshotter
 
+.PHONY: proto
+proto:
+	proto/generate.sh
+
 .PHONY: clean
 clean:
 	$(MAKE) -C agent clean

@@ -16,6 +16,7 @@ package main
 import (
 	"context"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 
 	"github.com/containerd/containerd/log"
@@ -47,23 +48,30 @@ func NewTaskService(runc shim.Shim) shim.Shim {
 func (ts *TaskService) Create(ctx context.Context, req *shimapi.CreateTaskRequest) (*shimapi.CreateTaskResponse, error) {
 	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "bundle": req.Bundle}).Info("create")
 
-	// Use mount path instead of bundle path inside the VM
-	req.Bundle = bundleMountPath
-
-	// Do not pass any mounts to runc, everything is already mounted for us
-	req.Rootfs = nil
-
 	// Passthrough runcOptions
 	opts, err := unpackBundle(filepath.Join(bundleMountPath, "config.json"), req.Options)
 	if err != nil {
 		return nil, err
 	}
 	req.Options = opts
+	// Use mount path instead of bundle path inside the VM
+	req.Bundle = bundleMountPath
+
+	// Do not pass any mounts to runc, everything is already mounted for us
+	req.Rootfs = nil
+	// TODO: handle stdio see: https://github.com/firecracker-microvm/firecracker-containerd/issues/17
+	req.Stdin = ""
+	req.Stdout = ""
+	req.Stderr = ""
 
 	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
+	// before create call ensure we remove any existing .init.pid file
+	// We can ignore errors since it's valid for the file to not be present
+	os.Remove(".init.pid")
 	resp, err := ts.runc.Create(ctx, req)
+
 	if err != nil {
-		log.G(ctx).WithError(err).Error("create failed")
+		log.G(ctx).WithError(err).Error("error creating container")
 		return nil, err
 	}
 
@@ -327,8 +335,14 @@ func (ts *TaskService) Connect(ctx context.Context, req *shimapi.ConnectRequest)
 
 func (ts *TaskService) Shutdown(ctx context.Context, req *shimapi.ShutdownRequest) (*types.Empty, error) {
 	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "now": req.Now}).Debug("shutdown")
-
 	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
+
+	_, err := ts.runc.Cleanup(ctx)
+	if err != nil {
+		log.G(ctx).WithError(err).Warn("error cleaning up")
+	}
+
+	// TODO: cleaner method of shutdown
 	resp, err := ts.runc.Shutdown(ctx, req)
 	if err != nil {
 		log.G(ctx).WithError(err).Error("shutdown failed")

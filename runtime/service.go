@@ -24,11 +24,14 @@ import (
 	"syscall"
 	"time"
 
+	eventstypes "github.com/containerd/containerd/api/events"
 	"github.com/containerd/containerd/api/types"
+	"github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/containerd/events"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/namespaces"
+	"github.com/containerd/containerd/runtime"
 	"github.com/containerd/containerd/runtime/v2/shim"
 	taskAPI "github.com/containerd/containerd/runtime/v2/task"
 	"github.com/containerd/ttrpc"
@@ -182,7 +185,6 @@ func (s *service) Create(ctx context.Context, request *taskAPI.CreateTaskRequest
 		log.G(ctx).WithError(err).Error("create failed")
 		return nil, err
 	}
-
 	log.G(ctx).Infof("successfully created task with pid %d", resp.Pid)
 	return resp, nil
 }
@@ -193,8 +195,45 @@ func (s *service) Start(ctx context.Context, req *taskAPI.StartRequest) (*taskAP
 	if err != nil {
 		return nil, err
 	}
+	// TODO: Do we need to cancel this at some point?
+	go s.monitorState(ctx, req.ID, req.ExecID, resp.Pid)
 
 	return resp, nil
+}
+
+func (s *service) monitorState(ctx context.Context, id, exec_id string, pid uint32) {
+	ticker := time.NewTicker(time.Second)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			//make a state request
+			req := &taskAPI.StateRequest{
+				ID:     id,
+				ExecID: exec_id,
+			}
+			resp, err := s.agentClient.State(ctx, req)
+			if err != nil {
+				log.G(ctx).WithError(err).Error("error monitoring state")
+				continue
+			}
+			// if ending state, stop vm and break
+			if resp.Status == task.StatusStopped {
+				s.publish.Publish(ctx, runtime.TaskExitEventTopic, &eventstypes.TaskExit{
+					ContainerID: s.id,
+					ID:          s.id,
+					Pid:         pid,
+					ExitStatus:  resp.ExitStatus,
+					ExitedAt:    time.Now(),
+				})
+				s.server.Close()
+				s.Shutdown(ctx, &taskAPI.ShutdownRequest{ID: id})
+				return
+			}
+		}
+
+	}
 }
 
 // Delete the initial process and container
@@ -266,11 +305,18 @@ func (s *service) Resume(ctx context.Context, req *taskAPI.ResumeRequest) (*ptyp
 // Kill a process with the provided signal
 func (s *service) Kill(ctx context.Context, req *taskAPI.KillRequest) (*ptypes.Empty, error) {
 	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("kill")
+	// right now we want to kill vm always when kill is called
+	// may not be true in multi-container vm
+	defer func() {
+		log.G(ctx).Debug("Stopping VM during kill")
+		if err := s.stopVM(); err != nil {
+			log.G(ctx).WithError(err).Error("failed to stop VM")
+		}
+	}()
 	resp, err := s.agentClient.Kill(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-
 	return resp, nil
 }
 
@@ -540,6 +586,7 @@ func (s *service) startVM(ctx context.Context, request *taskAPI.CreateTaskReques
 
 	log.G(ctx).Info("creating clients")
 	rpcClient := ttrpc.NewClient(conn)
+	rpcClient.OnClose(func() { conn.Close() })
 	apiClient := taskAPI.NewTaskClient(rpcClient)
 
 	return apiClient, nil

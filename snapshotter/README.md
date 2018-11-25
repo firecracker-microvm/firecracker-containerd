@@ -8,6 +8,19 @@ The snapshots created by this snapshotter are usable with the
 containerd-firecracker-runtime to run microVM-backed containers with the
 Firecracker VMM.
 
+This snapshotter plugin is written for broad compatibility, and should run on
+any Linux system capable of running Firecracker and containerd. However, it
+sacrifices efficiency in order to achieve this compatibility. Each layer in a
+container image is represented as a unique filesystem image. Each container is
+given a complete private copy of it's root filesystem image upon creation. Thus,
+container creation is expensive in terms IO and disk space.
+
+We should consider writing a more efficient snapshotter plugin. Linux's
+device-mapper subsystem would allow us to build something based on copy-on-write
+snapshots that is performant and space-efficient, with the tradeoff being that
+it would require some additional setup on the host. Refer to the
+[TODO](../TODO.md) document.
+
 ## Installation
 
 To make containerd aware of this plugin, you need to register it in

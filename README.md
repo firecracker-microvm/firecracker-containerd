@@ -12,15 +12,23 @@ There are three separate components in this repository:
 
 * A [snapshotter](snapshotter) that creates files used as block-devices for
   pass-through into the microVM.  This snapshotter is used for providing the
-  container image to the microVM.
+  container image to the microVM.  The snapshotter runs as an out-of-process
+  gRPC proxy plugin.
 * A [runtime](runtime) linking containerd (outside the microVM) to the
-  Firecracker virtual machine manager (VMM).
+  Firecracker virtual machine manager (VMM).  The runtime is implemented as an
+  out-of-process
+  [shim runtime](https://github.com/containerd/containerd/issues/2426)
+  communicating over ttrpc.
 * An [agent](agent) running inside the microVM, which invokes
   [runC](https://runc.io) to create standard Linux containers inside the
   microVM.
   
 For more detailed information on the components and how they work, see
 [architecture.md](docs/architecture.md).
+
+_Please note that this software is still early in its development and
+it lacks some basic features. See the [TODO](TODO.md) file for a
+partial list._
 
 ## Requirements
 

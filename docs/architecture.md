@@ -10,22 +10,21 @@ Firecracker microVMs.
 
 There are currently three components in this repository:
 
-* A [snapshotter](snapshotter) that creates files used as block-devices for
-  pass-through into the microVM.  This snapshotter is used for providing the
-  container image to the microVM.  The snapshotter runs as an out-of-process
-  gRPC proxy plugin.
-* A [runtime](runtime) linking containerd (outside the microVM) to the
-  Firecracker virtual machine manager (VMM).  The runtime is implemented as an
+* A [snapshotter](https://github.com/firecracker-microvm/firecracker-containerd/tree/master/snapshotter)
+  that creates files used as block-devices for pass-through into the
+  microVM.  This snapshotter is used for providing the container image
+  to the microVM.  The snapshotter runs as an out-of-process gRPC
+  proxy plugin.
+* A [runtime](https://github.com/firecracker-microvm/firecracker-containerd/tree/master/runtime)
+  linking containerd (outside the microVM) to the Firecracker virtual
+  machine manager (VMM).  The runtime is implemented as an
   out-of-process
   [shim runtime](https://github.com/containerd/containerd/issues/2426)
   communicating over ttrpc.
-* An [agent](agent) running inside the microVM, which invokes
-  [runC](https://runc.io) to create standard Linux containers inside the
-  microVM.
+* An [agent](https://github.com/firecracker-microvm/firecracker-containerd/tree/master/agent)
+  running inside the microVM, which invokes [runC](https://runc.io) to
+  create standard Linux containers inside the microVM.
   
-We expect to add at least one additional component to help enable networking
-with microVMs in the future.
-
 A high-level diagram of the various components and their interactions can be
 seen below:
 

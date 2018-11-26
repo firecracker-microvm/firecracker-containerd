@@ -8,7 +8,7 @@ compliance within the bounds of Firecracker's feature set.
 
 ## Building
 
-`make GO111MODULE=on`
+`make`
 
 This will generate a `containerd-shim-aws-firecracker` binary in the current
 working directory.

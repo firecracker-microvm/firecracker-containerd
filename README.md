@@ -2,19 +2,29 @@
 
 This repository enables the use of a container runtime,
 [containerd](https://containerd.io), to manage
-[Firecracker](https://github.com/firecracker-microvm/firecracker) microVMs in
-order to achieve a strong isolation boundary around containers.  Firecracker
-microVMs have container-like properties such as fast start-up and shut-down and
-minimal overhead, and they can be used to provide a separate kernel and KVM
-hypervisor isolation. Examples of potential use cases that might benefit from
-stronger container isolation include the desire to sandbox untrusted third party
-code and the need to separate disparate workloads that are bin-packed into one
-server.
+[Firecracker](https://github.com/firecracker-microvm/firecracker) microVMs.  
+Like traditional containers, Firecracker microVMs offer fast 
+start-up and shut-down and minimal overhead.  Unlike traditional 
+containers, however, they can provide an additional layer of 
+isolation via the KVM hypervisor. 
+
+Potential use cases of Firecracker-based containers include:
+* Sandbox partially or fully untrusted third party container 
+in its own microVM.  This would reduce the likelihood of 
+leaking secrets via the third party container, for example.
+* Bin-pack disparate container workloads on the same host, 
+while maintaining a high level of isolation between containers.  
+Because the overhead of Firecracker is low, the achievable 
+container density per host should be comparable to 
+running containers using kernel-based container runtimes, 
+without the isolation compromise of such solutions.  
+Multi-tentant hosts would particularly benefit from this use case.
 
 To maintain compatibility with the container ecosystem, where possible, we use
 container technologies such as OCI images.
 
-There are three separate components in this repository:
+There are three separate components in this repository that enable containerd 
+to use Firecracker microVMs to run containers:
 
 * A [snapshotter](snapshotter) that creates files used as block-devices for
   pass-through into the microVM.  This snapshotter is used for providing the
@@ -37,7 +47,7 @@ For more detailed information on the components and how they work, see
 Initially, this project allows you to launch one container per microVM.  We
 intend it to be a drop-in component that can run a variety of containerized
 applications, so the short term roadmap contains work to support container
-standards such as OCI and CNI. In addition, we will support launching multiple
+standards such as OCI and CNI. In addition, we intend to support launching multiple
 containers inside of one microVM.  To support the widest variety of workloads,
 the new runtime component has to work with popular container orchestration
 frameworks such as Kubernetes and Amazon ECS, so we will work to ensure that the

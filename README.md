@@ -53,13 +53,15 @@ the new runtime component has to work with popular container orchestration
 frameworks such as Kubernetes and Amazon ECS, so we will work to ensure that the
 software is conformant or compatible where necessary.
 
-Details of specific roadmap items are tracked in [GitHub issues](issues).
+Details of specific roadmap items are tracked in [GitHub issues](https://github.com/firecracker-microvm/firecracker-containerd/issues).
 
 ## Questions?
 
-About Features/Use cases: [Link to Github Issues] About Usage clarifications/
-Issues: [Link to Github Issues] Other discussion:
-[Get invited to #containers on AWS Developers [awsdevelopers.slack.com]]
+Please use [GitHub issues](https://github.com/firecracker-microvm/firecracker-containerd/issues) to report problems, discuss roadmap items,
+or make feature requests.
+
+Other discussion: For general discussion, please join us in the `#containerd`
+channel on the [Firecracker Slack](https://tinyurl.com/firecracker-microvm)
 
 ## Requirements
 

@@ -13,12 +13,12 @@ Potential use cases of Firecracker-based containers include:
 in its own microVM.  This would reduce the likelihood of 
 leaking secrets via the third party container, for example.
 * Bin-pack disparate container workloads on the same host, 
-while maintaining a high level of isolation between containers.  
-Because the overhead of Firecracker is low, the achievable 
-container density per host should be comparable to 
+while maintaining a high level of isolation between containers.  Because 
+the overhead of Firecracker is low, the achievable container 
+density per host should be comparable to 
 running containers using kernel-based container runtimes, 
-without the isolation compromise of such solutions.  
-Multi-tentant hosts would particularly benefit from this use case.
+without the isolation compromise of such solutions.  Multi-tentant 
+hosts would particularly benefit from this use case.
 
 To maintain compatibility with the container ecosystem, where possible, we use
 container technologies such as OCI images.

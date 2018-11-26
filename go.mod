@@ -8,7 +8,7 @@ require (
 	github.com/containerd/console v0.0.0-20181022165439-0650fd9eeb50 // indirect
 	github.com/containerd/containerd v1.2.0
 	github.com/containerd/continuity v0.0.0-20181027224239-bea7585dbfac
-	github.com/containerd/fifo v0.0.0-20180307165137-3d5202aec260 // indirect
+	github.com/containerd/fifo v0.0.0-20180307165137-3d5202aec260
 	github.com/containerd/go-runc v0.0.0-20180907222934-5a6d9f37cfa3 // indirect
 	github.com/containerd/ttrpc v0.0.0-20181001154009-f51df4475b76
 	github.com/containerd/typeurl v0.0.0-20181015155603-461401dc8f19 // indirect

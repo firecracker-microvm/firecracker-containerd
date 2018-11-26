@@ -15,23 +15,31 @@ package main
 
 import (
 	"context"
+	"io"
 	"io/ioutil"
+	"net"
 	"os"
 	"path/filepath"
+	"syscall"
 
+	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/runtime/v2/shim"
 	shimapi "github.com/containerd/containerd/runtime/v2/task"
+	"github.com/containerd/fifo"
 	"github.com/gogo/protobuf/types"
+	"github.com/mdlayher/vsock"
 	"github.com/sirupsen/logrus"
 
+	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 )
 
 const (
 	defaultNamespace = "default"
 	bundleMountPath  = "/container"
+	defaultStdioPath = "/container/fifo"
 )
 
 // TaskService represents inner shim wrapper over runc in order to:
@@ -39,14 +47,15 @@ const (
 // - Add debug logging to simplify debugging
 // - Make place for future extensions as needed
 type TaskService struct {
-	runc   shim.Shim
-	cancel context.CancelFunc
+	runc    shim.Shim
+	cancels []context.CancelFunc
+	io      *cio.FIFOSet
 }
 
 func NewTaskService(runc shim.Shim, cancel context.CancelFunc) shimapi.TaskService {
 	return &TaskService{
-		runc:   runc,
-		cancel: cancel,
+		runc:    runc,
+		cancels: []context.CancelFunc{cancel},
 	}
 }
 
@@ -64,15 +73,23 @@ func (ts *TaskService) Create(ctx context.Context, req *shimapi.CreateTaskReques
 
 	// Do not pass any mounts to runc, everything is already mounted for us
 	req.Rootfs = nil
-	// TODO: handle stdio see: https://github.com/firecracker-microvm/firecracker-containerd/issues/17
-	req.Stdin = ""
-	req.Stdout = ""
-	req.Stderr = ""
-
+	// handle STDIO
+	ts.io, err = cio.NewFIFOSetInDir(defaultStdioPath, req.ID, req.Terminal)
+	if err != nil {
+		log.G(ctx).WithError(err).Error("error proxying io")
+		return nil, err
+	}
+	req.Stdin = ts.io.Stdin
+	req.Stderr = ts.io.Stderr
+	req.Stdout = ts.io.Stdout
+	ioctx, cancel := context.WithCancel(ctx)
+	ts.cancels = append(ts.cancels, cancel)
+	ts.proxyStdio(ioctx, req.Stdin, req.Stdout, req.Stderr)
 	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
 	// before create call ensure we remove any existing .init.pid file
 	// We can ignore errors since it's valid for the file to not be present
 	os.Remove(".init.pid")
+	log.G(ctx).Debug("calling runc create")
 	resp, err := ts.runc.Create(ctx, req)
 
 	if err != nil {
@@ -82,6 +99,58 @@ func (ts *TaskService) Create(ctx context.Context, req *shimapi.CreateTaskReques
 
 	log.G(ctx).WithField("pid", resp.Pid).Debugf("create succeeded")
 	return resp, nil
+}
+
+func (ts *TaskService) proxyStdio(ctx context.Context, stdin, stdout, stderr string) {
+	go proxyIO(ctx, stdin, internal.StdinPort, true)
+	go proxyIO(ctx, stdout, internal.StdoutPort, false)
+	go proxyIO(ctx, stderr, internal.StderrPort, false)
+}
+
+func proxyIO(ctx context.Context, path string, port uint32, in bool) {
+	if path == "" {
+		return
+	}
+	log.G(ctx).Debug("setting up IO for " + path)
+	f, err := fifo.OpenFifo(ctx, path, syscall.O_RDWR|syscall.O_NONBLOCK|syscall.O_CREAT, 0700)
+	if err != nil {
+		log.G(ctx).WithError(err).Error("error opening fifo")
+		return
+	}
+	listener, err := vsock.Listen(port)
+	if err != nil {
+		log.G(ctx).WithError(err).Error("unable to listen on vsock")
+		f.Close()
+		return
+	}
+
+	var conn net.Conn
+	for {
+		// accept is non-blocking so try to accept until we get
+		// a connection
+		// TODO: investigate if there is a way to distinguish
+		// transient errors from permanent ones.
+		conn, err = listener.Accept()
+		if err != nil {
+			continue
+		}
+		break
+	}
+	go func() {
+		<-ctx.Done()
+		conn.Close()
+		f.Close()
+	}()
+	log.G(ctx).Debug("begin copying io")
+	buf := make([]byte, internal.DefaultBufferSize)
+	if in {
+		_, err = io.CopyBuffer(f, conn, buf)
+	} else {
+		_, err = io.CopyBuffer(conn, f, buf)
+	}
+	if err != nil {
+		log.G(ctx).WithError(err).Error("error with stdio")
+	}
 }
 
 func unpackBundle(path string, bundle *types.Any) (*types.Any, error) {
@@ -331,9 +400,17 @@ func (ts *TaskService) Shutdown(ctx context.Context, req *shimapi.ShutdownReques
 	}
 
 	// We don't want to call runc.Shutdown here as it just os.Exits behind.
-	// Invoking cancel here for graceful shutdown instead and call runc Shutdown at end.
-	ts.cancel()
+	// calling all cancels here for graceful shutdown instead and call runc Shutdown at end.
+	ts.cancelAll()
 
 	log.G(ctx).Debug("going to gracefully shutdown agent")
 	return &types.Empty{}, nil
+}
+
+func (ts *TaskService) cancelAll() {
+	// cancel LIFO order
+	for i := len(ts.cancels); i >= 0; i-- {
+		log.G(context.Background()).Debug("Cancelling ", i)
+		ts.cancels[i]()
+	}
 }

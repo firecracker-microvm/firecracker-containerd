@@ -15,6 +15,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"io/ioutil"
 	"net"
 	"os"
@@ -34,6 +35,7 @@ import (
 	"github.com/containerd/containerd/runtime"
 	"github.com/containerd/containerd/runtime/v2/shim"
 	taskAPI "github.com/containerd/containerd/runtime/v2/task"
+	"github.com/containerd/fifo"
 	"github.com/containerd/ttrpc"
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
@@ -61,6 +63,8 @@ type service struct {
 	agentClient  taskAPI.TaskService
 	config       *Config
 	machine      *firecracker.Machine
+	ctx          context.Context
+	cancel       context.CancelFunc
 }
 
 var _ = (taskAPI.TaskService)(&service{})
@@ -185,6 +189,8 @@ func (s *service) Create(ctx context.Context, request *taskAPI.CreateTaskRequest
 		log.G(ctx).WithError(err).Error("create failed")
 		return nil, err
 	}
+	s.ctx, s.cancel = context.WithCancel(ctx)
+	go s.proxyStdio(s.ctx, request.Stdin, request.Stdout, request.Stderr, defaultCID)
 	log.G(ctx).Infof("successfully created task with pid %d", resp.Pid)
 	return resp, nil
 }
@@ -196,7 +202,7 @@ func (s *service) Start(ctx context.Context, req *taskAPI.StartRequest) (*taskAP
 		return nil, err
 	}
 	// TODO: Do we need to cancel this at some point?
-	go s.monitorState(ctx, req.ID, req.ExecID, resp.Pid)
+	go s.monitorState(s.ctx, req.ID, req.ExecID, resp.Pid)
 
 	return resp, nil
 }
@@ -227,12 +233,51 @@ func (s *service) monitorState(ctx context.Context, id, execID string, pid uint3
 					ExitStatus:  resp.ExitStatus,
 					ExitedAt:    time.Now(),
 				})
-				s.server.Close()
 				s.Shutdown(ctx, &taskAPI.ShutdownRequest{ID: id})
+				s.server.Close()
 				return
 			}
 		}
 
+	}
+}
+
+func (s *service) proxyStdio(ctx context.Context, stdin, stdout, stderr string, CID uint32) {
+	go proxyIO(ctx, stdin, CID, internal.StdinPort, true)
+	go proxyIO(ctx, stdout, CID, internal.StdoutPort, false)
+	go proxyIO(ctx, stderr, CID, internal.StderrPort, false)
+}
+
+func proxyIO(ctx context.Context, path string, CID, port uint32, in bool) {
+	if path == "" {
+		return
+	}
+	log.G(ctx).Debug("setting up IO for " + path)
+	f, err := fifo.OpenFifo(ctx, path, syscall.O_RDWR|syscall.O_NONBLOCK, 0700)
+	if err != nil {
+		log.G(ctx).WithError(err).Error("error opening fifo")
+		return
+	}
+	conn, err := vsock.Dial(CID, port)
+	if err != nil {
+		log.G(ctx).WithError(err).Error("unable to dial agent vsock")
+		f.Close()
+		return
+	}
+	go func() {
+		<-ctx.Done()
+		conn.Close()
+		f.Close()
+	}()
+	log.G(ctx).Debug("begin copying io")
+	buf := make([]byte, internal.DefaultBufferSize)
+	if in {
+		_, err = io.CopyBuffer(conn, f, buf)
+	} else {
+		_, err = io.CopyBuffer(f, conn, buf)
+	}
+	if err != nil {
+		log.G(ctx).WithError(err).Error("error with stdio")
 	}
 }
 
@@ -317,6 +362,7 @@ func (s *service) Kill(ctx context.Context, req *taskAPI.KillRequest) (*ptypes.E
 	if err != nil {
 		return nil, err
 	}
+	s.cancel()
 	return resp, nil
 }
 
@@ -366,17 +412,18 @@ func (s *service) Connect(ctx context.Context, req *taskAPI.ConnectRequest) (*ta
 
 func (s *service) Shutdown(ctx context.Context, req *taskAPI.ShutdownRequest) (*ptypes.Empty, error) {
 	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "now": req.Now}).Debug("shutdown")
-
 	if _, err := s.agentClient.Shutdown(ctx, req); err != nil {
 		log.G(ctx).WithError(err).Error("failed to shutdown agent")
 	}
-
+	log.G(ctx).Debug("stopping VM")
 	if err := s.stopVM(); err != nil {
 		log.G(ctx).WithError(err).Error("failed to stop VM")
 		return nil, err
 	}
+	s.cancel()
 	// Exit to avoid 'zombie' shim processes
 	defer os.Exit(0)
+	log.G(ctx).Debug("stopping runtime")
 	return &ptypes.Empty{}, nil
 }
 
@@ -475,6 +522,7 @@ func dialVsock(ctx context.Context, contextID uint32, port uint32) (net.Conn, er
 	for i := 1; i <= retryCount; i++ {
 		conn, err := vsock.Dial(contextID, port)
 		if err == nil {
+			log.G(ctx).WithField("connection", conn).Debug("Dial succeeded")
 			return conn, nil
 		}
 

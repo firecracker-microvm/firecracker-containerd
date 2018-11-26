@@ -1,12 +1,18 @@
 # firecracker-containerd
 
-This repository contains software that enables using
-[containerd](https://containerd.io) to manage
-[Firecracker](https://github.com/firecracker-microvm/firecracker) microVMs
-using familiar container ecosystem technologies like OCI images.
+This repository enables the use of a container runtime,
+[containerd](https://containerd.io), to manage
+[Firecracker](https://github.com/firecracker-microvm/firecracker) microVMs in
+order to achieve a strong isolation boundary around containers.  Firecracker
+microVMs have container-like properties such as fast start-up and shut-down and
+minimal overhead, and they can be used to provide a separate kernel and KVM
+hypervisor isolation. Examples of potential use cases that might benefit from
+stronger container isolation include the desire to sandbox untrusted third party
+code and the need to separate disparate workloads that are bin-packed into one
+server.
 
-Firecracker microVMs enable a container-like experience with fast start-up and
-shut-down while providing a separate kernel and KVM hypervisor isolation.
+To maintain compatibility with the container ecosystem, where possible, we use
+container technologies such as OCI images.
 
 There are three separate components in this repository:
 
@@ -26,9 +32,24 @@ There are three separate components in this repository:
 For more detailed information on the components and how they work, see
 [architecture.md](docs/architecture.md).
 
-_Please note that this software is still early in its development and
-it lacks some basic features. See the [TODO](TODO.md) file for a
-partial list._
+## Roadmap
+
+Initially, this project allows you to launch one container per microVM.  We
+intend it to be a drop-in component that can run a variety of containerized
+applications, so the short term roadmap contains work to support container
+standards such as OCI and CNI. In addition, we will support launching multiple
+containers inside of one microVM.  To support the widest variety of workloads,
+the new runtime component has to work with popular container orchestration
+frameworks such as Kubernetes and Amazon ECS, so we will work to ensure that the
+software is conformant or compatible where necessary.
+
+Details of specific roadmap items are tracked in [GitHub issues](issues).
+
+## Questions?
+
+About Features/Use cases: [Link to Github Issues] About Usage clarifications/
+Issues: [Link to Github Issues] Other discussion:
+[Get invited to #containers on AWS Developers [awsdevelopers.slack.com]]
 
 ## Requirements
 
@@ -43,12 +64,12 @@ You must have the following components available in order to run Firecracker
 microVMs with containerd:
 
 * containerd >= 1.2
-* Firecracker >= 0.10.1
-* A filesystem image of the Linux kernel (TODO: provide this)
-* A filesystem image for the microVM, which must contain `runc` and the `agent`
-  component, configured to start on boot (TODO: provide this)
-* The `snapshotter` component, configured to be loaded by containerd
-* The `runtime` component, configured to be loaded by containerd
+* Firecracker >= 0.10.1 with [vsock support](https://github.com/firecracker-microvm/firecracker/blob/master/docs/experimental-vsock.md) enabled.
+* A firecracker compatible kernel
+* A filesystem image for the microVM, including the [agent](agent)
+  component configured to start on boot
+* The [snapshotter](snapshotter) component, configured to be loaded by containerd
+* The [runtime](runtime) component, configured to be loaded by containerd
 
 ## License
 

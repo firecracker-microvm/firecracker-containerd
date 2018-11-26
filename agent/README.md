@@ -7,8 +7,8 @@ commands to `runc`
 
 ## Installation
 
-The containerd Firecracker agent must be embedded into the filesystem image
-used to launch the microVM and configured to start on boot.
+The containerd Firecracker agent must be embedded into the filesystem image used
+to launch the microVM and configured to start on boot.
 
 ## Usage
 

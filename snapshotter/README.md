@@ -10,7 +10,7 @@ Firecracker VMM.
 
 This snapshotter plugin is written for broad compatibility, and should run on
 any Linux system capable of running Firecracker and containerd. However, it
-sacrifices efficientcy in order to achieve this compatibility. Each layer in a
+sacrifices efficiency in order to achieve this compatibility. Each layer in a
 container image is represented as a unique filesystem image. Each container is
 given a complete private copy of it's root filesystem image upon creation. Thus,
 container creation is expensive in terms IO and disk space.

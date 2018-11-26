@@ -20,8 +20,8 @@ There are three separate components in this repository:
   [shim runtime](https://github.com/containerd/containerd/issues/2426)
   communicating over ttrpc.
 * An [agent](agent) running inside the microVM, which invokes
-  [runC](https://runc.io) to create standard Linux containers inside the
-  microVM.
+  [runC](https://runc.io) via containerd's `containerd-shim-runc-v1`
+  to create standard Linux containers inside the microVM.
   
 For more detailed information on the components and how they work, see
 [architecture.md](docs/architecture.md).

@@ -2,28 +2,28 @@
 
 This repository enables the use of a container runtime,
 [containerd](https://containerd.io), to manage
-[Firecracker](https://github.com/firecracker-microvm/firecracker) microVMs.  
-Like traditional containers, Firecracker microVMs offer fast 
-start-up and shut-down and minimal overhead.  Unlike traditional 
-containers, however, they can provide an additional layer of 
-isolation via the KVM hypervisor. 
+[Firecracker](https://github.com/firecracker-microvm/firecracker) microVMs.
+Like traditional containers, Firecracker microVMs offer fast start-up and
+shut-down and minimal overhead.  Unlike traditional containers, however, they
+can provide an additional layer of isolation via the KVM hypervisor.
 
 Potential use cases of Firecracker-based containers include:
-* Sandbox a partially or fully untrusted third party container 
-in its own microVM.  This would reduce the likelihood of 
-leaking secrets via the third party container, for example.
-* Bin-pack disparate container workloads on the same host, 
-while maintaining a high level of isolation between containers.  Because 
-the overhead of Firecracker is low, the achievable container 
-density per host should be comparable to 
-running containers using kernel-based container runtimes, 
-without the isolation compromise of such solutions.  Multi-tentant 
-hosts would particularly benefit from this use case.
+
+* Sandbox a partially or fully untrusted third party container
+  in its own microVM.  This would reduce the likelihood of
+  leaking secrets via the third party container, for example.
+* Bin-pack disparate container workloads on the same host,
+  while maintaining a high level of isolation between containers.  Because
+  the overhead of Firecracker is low, the achievable container
+  density per host should be comparable to
+  running containers using kernel-based container runtimes,
+  without the isolation compromise of such solutions.  Multi-tentant
+  hosts would particularly benefit from this use case.
 
 To maintain compatibility with the container ecosystem, where possible, we use
-container technologies such as OCI images.
+container standards such as the OCI image format.
 
-There are three separate components in this repository that enable containerd 
+There are three separate components in this repository that enable containerd
 to use Firecracker microVMs to run containers:
 
 * A [snapshotter](snapshotter) that creates files used as block-devices for

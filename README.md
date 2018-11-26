@@ -9,7 +9,7 @@ containers, however, they can provide an additional layer of
 isolation via the KVM hypervisor. 
 
 Potential use cases of Firecracker-based containers include:
-* Sandbox partially or fully untrusted third party container 
+* Sandbox a partially or fully untrusted third party container 
 in its own microVM.  This would reduce the likelihood of 
 leaking secrets via the third party container, for example.
 * Bin-pack disparate container workloads on the same host, 

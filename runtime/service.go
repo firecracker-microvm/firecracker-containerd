@@ -16,6 +16,7 @@ package main
 import (
 	"context"
 	"io/ioutil"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -415,6 +416,33 @@ func newServer() (*ttrpc.Server, error) {
 	return ttrpc.NewServer(ttrpc.WithServerHandshaker(ttrpc.UnixSocketRequireSameUser()))
 }
 
+func dialVsock(ctx context.Context, contextID uint32, port uint32) (net.Conn, error) {
+	// VM should start within 200ms, vsock dial will make retries at 100ms, 200ms, 400ms, 800ms and 1.6s
+	const (
+		retryCount      = 5
+		initialDelay    = 100 * time.Millisecond
+		delayMultiplier = 2
+	)
+
+	var lastErr error
+	var currentDelay = initialDelay
+	for i := 1; i <= retryCount; i++ {
+		conn, err := vsock.Dial(contextID, port)
+		if err == nil {
+			return conn, nil
+		}
+
+		log.G(ctx).WithError(err).Warnf("vsock dial failed (attempt %d of %d), will retry in %s", i, retryCount, currentDelay)
+		time.Sleep(currentDelay)
+
+		lastErr = err
+		currentDelay *= delayMultiplier
+	}
+
+	log.G(ctx).WithError(lastErr).WithFields(logrus.Fields{"context_id": contextID, "port": port}).Error("vsock dial failed")
+	return nil, lastErr
+}
+
 func (s *service) startVM(ctx context.Context, request *taskAPI.CreateTaskRequest) (taskAPI.TaskService, error) {
 	/*
 		What needs to be done here:
@@ -502,13 +530,8 @@ func (s *service) startVM(ctx context.Context, request *taskAPI.CreateTaskReques
 		return nil, err
 	}
 
-	// TODO: wait for agent to be started / Dial retries?
-
-	// Give Firecracker some time to boot kernel and run agent
-	time.Sleep(time.Second)
-
 	log.G(ctx).Info("calling agent")
-	conn, err := vsock.Dial(cid, defaultVsockPort)
+	conn, err := dialVsock(ctx, cid, defaultVsockPort)
 	if err != nil {
 		s.stopVM()
 		return nil, err

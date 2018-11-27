@@ -18,8 +18,7 @@ container creation is expensive in terms IO and disk space.
 We should consider writing a more efficient snapshotter plugin. Linux's
 device-mapper subsystem would allow us to build something based on copy-on-write
 snapshots that is performant and space-efficient, with the tradeoff being that
-it would require some additional setup on the host. Refer to the
-[TODO](../TODO.md) document.
+it would require some additional setup on the host. 
 
 ## Installation
 

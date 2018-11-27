@@ -13,7 +13,7 @@ require (
 	github.com/containerd/ttrpc v0.0.0-20181001154009-f51df4475b76
 	github.com/containerd/typeurl v0.0.0-20181015155603-461401dc8f19 // indirect
 	github.com/coreos/go-systemd v0.0.0-20181031085051-9002847aa142 // indirect
-	github.com/firecracker-microvm/firecracker-go-sdk v0.0.0-20181116214658-3cb94c781a7fe559c07826d2d47baeea1f087e60
+	github.com/firecracker-microvm/firecracker-go-sdk v0.0.0-20181116214658-451f195f2a6fd41b8cebf0a35d718643142dbe6c
 	github.com/godbus/dbus v0.0.0-20181025153459-66d97aec3384 // indirect
 	github.com/gogo/protobuf v1.1.1
 	github.com/google/go-cmp v0.2.0 // indirect

@@ -449,6 +449,7 @@ func (s *service) startVM(ctx context.Context, request *taskAPI.CreateTaskReques
 		LogFifo:         s.config.LogFifo,
 		LogLevel:        s.config.LogLevel,
 		MetricsFifo:     s.config.MetricsFifo,
+		Debug:           s.config.Debug,
 	}
 
 	// Verify rootfs mount and get file system image path

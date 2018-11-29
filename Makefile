@@ -24,4 +24,10 @@ proto:
 clean:
 	for d in $(SUBDIRS); do $(MAKE) -C $$d clean; done
 
-.PHONY: all $(SUBDIRS) clean proto
+deps:
+	curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $GOPATH/bin v1.12.3
+
+lint:
+	golangci-lint run
+
+.PHONY: all $(SUBDIRS) clean proto deps lint

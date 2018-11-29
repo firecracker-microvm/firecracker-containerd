@@ -13,9 +13,10 @@
 
 all: agent
 
-agent:
+agent: *.go
 	go build -o agent
 
-.PHONY: clean
 clean:
 	- rm -f agent
+
+.PHONY: clean all

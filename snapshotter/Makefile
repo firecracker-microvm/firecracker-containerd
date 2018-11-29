@@ -13,9 +13,10 @@
 
 all: snapshotter
 
-snapshotter:
+snapshotter: *.go
 	go build -o snapshotter ./cmd/snapshotter
 
-.PHONY: clean
 clean:
 	- rm -f snapshotter
+
+.PHONY: all clean

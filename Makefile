@@ -11,26 +11,17 @@
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
-all: agent runtime snapshotter
+SUBDIRS:=agent runtime snapshotter
 
-.PHONY: agent
-agent:
-	$(MAKE) -C agent
+all: $(SUBDIRS)
 
-.PHONY: runtime
-runtime:
-	$(MAKE) -C runtime
+$(SUBDIRS):
+	$(MAKE) -C $@
 
-.PHONY: snapshotter
-snapshotter:
-	$(MAKE) -C snapshotter
-
-.PHONY: proto
 proto:
 	proto/generate.sh
 
-.PHONY: clean
 clean:
-	$(MAKE) -C agent clean
-	$(MAKE) -C runtime clean
-	$(MAKE) -C snapshotter clean
+	for d in $(SUBDIRS); do $(MAKE) -C $$d clean; done
+
+.PHONY: all $(SUBDIRS) clean proto

@@ -13,12 +13,12 @@
 
 all: runtime
 
-.PHONY: runtime
 runtime: containerd-shim-aws-firecracker
 
-containerd-shim-aws-firecracker:
+containerd-shim-aws-firecracker: *.go
 	go build -o containerd-shim-aws-firecracker
 
-.PHONY: clean
 clean:
 	- rm -f containerd-shim-aws-firecracker
+
+.PHONY: all runtime clean

@@ -343,7 +343,7 @@ func (s *Snapshotter) createImage(ctx context.Context, imagePath string, fileSiz
 
 	// Build a Linux filesystem
 	log.G(ctx).WithField("image", file.Name()).Info("building file system")
-	if err := run("mkfs", "-t", "ext4", file.Name()); err != nil {
+	if err := run("mkfs", "-t", "ext4", "-F", file.Name()); err != nil {
 		return err
 	}
 

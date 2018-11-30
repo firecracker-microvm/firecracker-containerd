@@ -23,9 +23,10 @@ import (
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/runtime/v2/shim"
 	shimapi "github.com/containerd/containerd/runtime/v2/task"
-	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	"github.com/gogo/protobuf/types"
 	"github.com/sirupsen/logrus"
+
+	"github.com/firecracker-microvm/firecracker-containerd/proto"
 )
 
 const (
@@ -41,7 +42,7 @@ type TaskService struct {
 	runc shim.Shim
 }
 
-func NewTaskService(runc shim.Shim) shim.Shim {
+func NewTaskService(runc shim.Shim) shimapi.TaskService {
 	return &TaskService{runc: runc}
 }
 
@@ -284,23 +285,6 @@ func (ts *TaskService) Wait(ctx context.Context, req *shimapi.WaitRequest) (*shi
 	return resp, nil
 }
 
-func (ts *TaskService) Cleanup(ctx context.Context) (*shimapi.DeleteResponse, error) {
-	log.G(ctx).Debug("cleanup")
-
-	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
-	resp, err := ts.runc.Cleanup(ctx)
-	if err != nil {
-		log.G(ctx).WithError(err).Error("cleanup failed")
-		return nil, err
-	}
-
-	log.G(ctx).WithFields(logrus.Fields{
-		"pid":         resp.Pid,
-		"exit_status": resp.ExitStatus,
-	}).Error("cleanup succeeded")
-	return resp, nil
-}
-
 func (ts *TaskService) Stats(ctx context.Context, req *shimapi.StatsRequest) (*shimapi.StatsResponse, error) {
 	log.G(ctx).WithField("id", req.ID).Debug("stats")
 
@@ -351,18 +335,4 @@ func (ts *TaskService) Shutdown(ctx context.Context, req *shimapi.ShutdownReques
 
 	log.G(ctx).Debug("shutdown succeeded")
 	return resp, nil
-}
-
-func (ts *TaskService) StartShim(ctx context.Context, id, containerdBinary, containerdAddress string) (string, error) {
-	log.G(ctx).WithFields(logrus.Fields{"id": id, "bin": containerdAddress, "addr": containerdAddress}).Debug("start_shim")
-
-	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
-	resp, err := ts.runc.StartShim(ctx, id, containerdBinary, containerdAddress)
-	if err != nil {
-		log.G(ctx).WithError(err).Error("start shim failed")
-		return "", err
-	}
-
-	log.G(ctx).Debugf("start shim succeeded: %s", resp)
-	return resp, err
 }

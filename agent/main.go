@@ -65,16 +65,14 @@ func main() {
 
 	runcTaskService, err := runc.New(ctx, id, nil)
 	if err != nil {
-		log.G(ctx).WithError(err).Error("failed to create runc shim")
-		os.Exit(1)
+		log.G(ctx).WithError(err).Fatal("failed to create runc shim")
 	}
 
 	taskService := NewTaskService(runcTaskService)
 
 	server, err := ttrpc.NewServer()
 	if err != nil {
-		log.G(ctx).WithError(err).Error("failed to create ttrpc server")
-		os.Exit(1)
+		log.G(ctx).WithError(err).Fatal("failed to create ttrpc server")
 	}
 
 	shimapi.RegisterTaskService(server, taskService)
@@ -82,24 +80,19 @@ func main() {
 	// Run ttrpc over vsock
 
 	log.G(ctx).WithField("port", port).Info("listening to vsock")
-
 	listener, err := vsock.Listen(uint32(port))
 	if err != nil {
-		log.G(ctx).WithError(err).Errorf("failed to listen to vsock on port %d", port)
-		os.Exit(1)
+		log.G(ctx).WithError(err).Fatalf("failed to listen to vsock on port %d", port)
 	}
 
 	group.Go(func() error {
-		// TODO: this doesn't exit after server.Close when using vsock (listener.Accept remains blocked), need ugly workaround.
-		// Github issue to track: https://github.com/mdlayher/vsock/issues/19
 		return server.Serve(ctx, listener)
 	})
 
 	group.Go(func() error {
 		defer func() {
 			log.G(ctx).Info("stopping ttrpc server")
-
-			if err := server.Close(); err != nil {
+			if err := server.Shutdown(ctx); err != nil {
 				log.G(ctx).WithError(err).Errorf("failed to close ttrpc server")
 			}
 		}()

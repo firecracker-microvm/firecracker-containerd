@@ -11,7 +11,7 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package main
+package snapshotter
 
 import (
 	"context"
@@ -24,21 +24,28 @@ import (
 	snapshotsapi "github.com/containerd/containerd/api/services/snapshots/v1"
 	"github.com/containerd/containerd/contrib/snapshotservice"
 	"github.com/containerd/containerd/log"
-	"github.com/firecracker-microvm/firecracker-containerd/snapshotter"
+	"github.com/containerd/containerd/snapshots"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 )
 
-func main() {
+type CreateFunc func(ctx context.Context) (snapshots.Snapshotter, error)
+
+// Run runs snapshotter ttrpc server for containerd (somewhat similar to shim.Run).
+// snapInit should create concrete snapshotter implementation such as naive or devmapper.
+// There are two command line parameters available out of the box:
+// - address: specifies unix address to run ttrpc server on
+// - debug: turns on debug logging
+// Any extra flags might me specified if additional configuration needed, flags.Parse will
+// be called prior snapshot create callback (see naive example).
+func Run(snapInit CreateFunc) {
 	var (
 		unixAddr string
-		rootPath string
 		debug bool
 	)
 
 	flag.StringVar(&unixAddr, "address", "./firecracker-snapshotter.sock", "RPC server unix address (default: ./firecracker-snapshotter.sock)")
-	flag.StringVar(&rootPath, "path", "./images", "Path to snapshotter data (default: ./images)")
 	flag.BoolVar(&debug, "debug", false, "Debug mode")
 	flag.Parse()
 
@@ -56,7 +63,7 @@ func main() {
 
 	rpc := grpc.NewServer()
 
-	snap, err := snapshotter.NewSnapshotter(ctx, rootPath)
+	snap, err := snapInit(ctx)
 	if err != nil {
 		log.G(ctx).WithError(err).Fatal("failed to create snapshotter")
 	}

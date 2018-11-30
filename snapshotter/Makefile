@@ -11,12 +11,12 @@
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
-all: snapshotter
+all: naive
 
-snapshotter: *.go
-	go build -o snapshotter ./cmd/snapshotter
+naive: *.go
+	go build -o naive_snapshotter ./cmd/naive
 
 clean:
-	- rm -f snapshotter
+	- rm -f naive_snapshotter
 
 .PHONY: all clean

@@ -11,7 +11,7 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package snapshotter
+package naive
 
 import (
 	"context"
@@ -27,9 +27,10 @@ import (
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/containerd/snapshots/storage"
 	"github.com/containerd/continuity/fs"
-	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+
+	"github.com/firecracker-microvm/firecracker-containerd/internal"
 )
 
 const (
@@ -50,7 +51,7 @@ type Snapshotter struct {
 // 	{root}/mounts/{ID} - keeps mounts for correcponding images
 // 	{root}/metadata.db - keeps metadata (info and relationships between layers)
 func NewSnapshotter(ctx context.Context, root string) (snapshots.Snapshotter, error) {
-	log.G(ctx).WithField("root", root).Info("creating snapshotter")
+	log.G(ctx).WithField("root", root).Info("creating naive snapshotter")
 
 	root, err := filepath.Abs(root)
 	if err != nil {

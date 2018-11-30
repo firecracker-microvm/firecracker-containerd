@@ -17,7 +17,7 @@ require (
 	github.com/godbus/dbus v0.0.0-20181025153459-66d97aec3384 // indirect
 	github.com/gogo/protobuf v1.1.1
 	github.com/google/go-cmp v0.2.0 // indirect
-	github.com/mdlayher/vsock v0.0.0-20180806202057-2b18bec03226
+	github.com/mdlayher/vsock v0.0.0-20181130155850-676f733b747c
 	github.com/opencontainers/go-digest v1.0.0-rc1 // indirect
 	github.com/opencontainers/runc v0.1.1 // indirect
 	github.com/opencontainers/runtime-spec v0.1.2-0.20181106065543-31e0d16c1cb7 // indirect

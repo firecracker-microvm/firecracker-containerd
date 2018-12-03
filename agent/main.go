@@ -68,7 +68,7 @@ func main() {
 		log.G(ctx).WithError(err).Fatal("failed to create runc shim")
 	}
 
-	taskService := NewTaskService(runcTaskService)
+	taskService := NewTaskService(runcTaskService, cancel)
 
 	server, err := ttrpc.NewServer()
 	if err != nil {
@@ -119,5 +119,8 @@ func main() {
 		log.G(ctx).WithError(err).Warn("shim error")
 	}
 
-	log.G(ctx).Info("done")
+	log.G(ctx).Info("shutting down agent")
+	if _, err := runcTaskService.Shutdown(ctx, &shimapi.ShutdownRequest{ID: id, Now: true}); err != nil {
+		log.G(ctx).WithError(err).Error("runc shutdown error")
+	}
 }

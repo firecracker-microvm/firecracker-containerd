@@ -11,14 +11,12 @@
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
-SUBDIRS:=cmd/devmapper cmd/naive
+all: devmapper
 
-all: $(SUBDIRS)
-
-$(SUBDIRS):
-	$(MAKE) -C $@
+devmapper: *.go
+	go build -o devmapper_snapshotter
 
 clean:
-	for d in $(SUBDIRS); do $(MAKE) -C $$d clean; done
+	- rm -f devmapper_snapshotter
 
-.PHONY: all $(SUBDIRS) clean proto
+.PHONY: all clean

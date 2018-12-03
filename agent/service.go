@@ -39,11 +39,15 @@ const (
 // - Add debug logging to simplify debugging
 // - Make place for future extensions as needed
 type TaskService struct {
-	runc shim.Shim
+	runc   shim.Shim
+	cancel context.CancelFunc
 }
 
-func NewTaskService(runc shim.Shim) shimapi.TaskService {
-	return &TaskService{runc: runc}
+func NewTaskService(runc shim.Shim, cancel context.CancelFunc) shimapi.TaskService {
+	return &TaskService{
+		runc:   runc,
+		cancel: cancel,
+	}
 }
 
 func (ts *TaskService) Create(ctx context.Context, req *shimapi.CreateTaskRequest) (*shimapi.CreateTaskResponse, error) {
@@ -326,13 +330,10 @@ func (ts *TaskService) Shutdown(ctx context.Context, req *shimapi.ShutdownReques
 		log.G(ctx).WithError(err).Warn("error cleaning up")
 	}
 
-	// TODO: cleaner method of shutdown
-	resp, err := ts.runc.Shutdown(ctx, req)
-	if err != nil {
-		log.G(ctx).WithError(err).Error("shutdown failed")
-		return nil, err
-	}
+	// We don't want to call runc.Shutdown here as it just os.Exits behind.
+	// Invoking cancel here for gracefull shutdown instead and call runc Shutdown at end.
+	ts.cancel()
 
-	log.G(ctx).Debug("shutdown succeeded")
-	return resp, nil
+	log.G(ctx).Debug("going to gracefully shutdown agent")
+	return &types.Empty{}, nil
 }

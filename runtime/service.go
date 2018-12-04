@@ -201,7 +201,7 @@ func (s *service) Start(ctx context.Context, req *taskAPI.StartRequest) (*taskAP
 	return resp, nil
 }
 
-func (s *service) monitorState(ctx context.Context, id, exec_id string, pid uint32) {
+func (s *service) monitorState(ctx context.Context, id, execID string, pid uint32) {
 	ticker := time.NewTicker(time.Second)
 	for {
 		select {
@@ -211,7 +211,7 @@ func (s *service) monitorState(ctx context.Context, id, exec_id string, pid uint
 			//make a state request
 			req := &taskAPI.StateRequest{
 				ID:     id,
-				ExecID: exec_id,
+				ExecID: execID,
 			}
 			resp, err := s.agentClient.State(ctx, req)
 			if err != nil {

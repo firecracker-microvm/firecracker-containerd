@@ -331,7 +331,7 @@ func (ts *TaskService) Shutdown(ctx context.Context, req *shimapi.ShutdownReques
 	}
 
 	// We don't want to call runc.Shutdown here as it just os.Exits behind.
-	// Invoking cancel here for gracefull shutdown instead and call runc Shutdown at end.
+	// Invoking cancel here for graceful shutdown instead and call runc Shutdown at end.
 	ts.cancel()
 
 	log.G(ctx).Debug("going to gracefully shutdown agent")

@@ -42,7 +42,7 @@ type CreateFunc func(ctx context.Context) (snapshots.Snapshotter, error)
 func Run(snapInit CreateFunc) {
 	var (
 		unixAddr string
-		debug bool
+		debug    bool
 	)
 
 	flag.StringVar(&unixAddr, "address", "./firecracker-snapshotter.sock", "RPC server unix address (default: ./firecracker-snapshotter.sock)")

@@ -87,7 +87,7 @@ func createSnapshotter(ctx context.Context, root string) (snapshots.Snapshotter,
 		return nil, nil, err
 	}
 
-	return snap, func() error { return snap.Close() }, nil
+	return snap, snap.Close, nil
 }
 
 func TestSnapshotterSuite(t *testing.T) {

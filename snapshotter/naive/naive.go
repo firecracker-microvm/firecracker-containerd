@@ -365,7 +365,7 @@ func (s *Snapshotter) mount(imagePath string, mountPath string, readonly bool) e
 		}
 	}
 
-	// Unmount immediatelly followed by mount causes a mount with no files in it. I assume it needs some time
+	// Unmount immediately followed by mount causes a mount with no files in it. I assume it needs some time
 	// to flush data on disk (async flag used by default in 'mount' util and time.Sleep after unmount confirms
 	// this theory). Hence 'sync' flags is needed here.
 	if err := run("mount", "-t", "ext4", "-o", "sync", imagePath, mountPath); err != nil {

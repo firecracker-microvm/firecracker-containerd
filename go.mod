@@ -18,12 +18,15 @@ require (
 	github.com/godbus/dbus v0.0.0-20181025153459-66d97aec3384 // indirect
 	github.com/gogo/protobuf v1.1.1
 	github.com/google/go-cmp v0.2.0 // indirect
+	github.com/hashicorp/go-multierror v1.0.0
 	github.com/mdlayher/vsock v0.0.0-20181130155850-676f733b747c
+	github.com/moby/moby v0.7.3-0.20181205005855-1895e082b613
 	github.com/opencontainers/go-digest v1.0.0-rc1 // indirect
 	github.com/opencontainers/runc v0.1.1 // indirect
 	github.com/opencontainers/runtime-spec v0.1.2-0.20181106065543-31e0d16c1cb7 // indirect
 	github.com/pkg/errors v0.8.0
 	github.com/sirupsen/logrus v1.2.0
+	github.com/stretchr/testify v1.2.2
 	go.etcd.io/bbolt v1.3.0 // indirect
 	golang.org/x/sync v0.0.0-20181108010431-42b317875d0f
 	golang.org/x/sys v0.0.0-20181107165924-66b7b1311ac8

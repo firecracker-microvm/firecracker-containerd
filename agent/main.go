@@ -15,6 +15,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"os"
 	"os/signal"
@@ -40,7 +41,7 @@ func main() {
 		debug bool
 	)
 
-	flag.StringVar(&id, "id", "", "Shim task id")
+	flag.StringVar(&id, "id", "", "ContainerID (required)")
 	flag.IntVar(&port, "port", defaultPort, "Vsock port to listen to")
 	flag.BoolVar(&debug, "debug", false, "Turn on debug mode")
 	flag.Parse()
@@ -56,6 +57,11 @@ func main() {
 	defer cancel()
 
 	group, ctx := errgroup.WithContext(ctx)
+
+	// verify arguments, id is required
+	if id == "" {
+		log.G(ctx).WithError(errors.New("invalid argument")).Fatal("id not set")
+	}
 
 	// Create a runc task service that can be used via GRPC.
 	// This can be wrapped to add missing functionality (like

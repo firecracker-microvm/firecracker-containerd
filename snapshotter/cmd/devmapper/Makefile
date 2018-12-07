@@ -14,7 +14,7 @@
 all: devmapper
 
 devmapper: *.go
-	go build -o devmapper_snapshotter
+	go build -o devmapper_snapshotter -tags libdm_dlsym_deferred_remove
 
 clean:
 	- rm -f devmapper_snapshotter

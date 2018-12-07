@@ -15,6 +15,7 @@ package main
 
 import (
 	"context"
+	"flag"
 
 	"github.com/containerd/containerd/snapshots"
 
@@ -23,7 +24,10 @@ import (
 )
 
 func main() {
+	var configPath string
+	flag.StringVar(&configPath, "config", "", "Path to devmapper configuration file")
+
 	snapshotter.Run(func(ctx context.Context) (snapshots.Snapshotter, error) {
-		return devmapper.NewSnapshotter(ctx)
+		return devmapper.NewSnapshotter(ctx, configPath)
 	})
 }

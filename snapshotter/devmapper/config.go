@@ -19,6 +19,7 @@ import (
 	"os"
 
 	"github.com/docker/go-units"
+	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 )
 
@@ -30,28 +31,28 @@ const (
 // Config represents device mapper configuration loaded from file.
 // Size units might be specified in human-readable string format (like "32KIB", "32GB", "32Tb")
 type Config struct {
-	// Use loopback devices when creating thin-pool. Loopback is slow and should not be
-	// used in production, but easy to setup and might be useful for debugging and testing.
-	UseLoopback bool `json:"use_loopback"`
+	// Device snapshotter root directory for metadata and mounts
+	RootPath string `json:"root_path"`
 
-	// Size of a filesystem image used by thin-pool as data device
-	LoopbackDataFileSize      string `json:"loopback_data_file_size"`
-	LoopbackDataFileSizeBytes int64  `json:"-"`
+	// Name for 'thin-pool' device to be used by snapshotter (without /dev/mapper/ prefix)
+	PoolName string `json:"pool_name"`
 
-	// Size of a filesystem image used by thin-pool as metadata device
-	LoopbackMetadataFileSize      string `json:"loopback_metadata_file_size"`
-	LoopbackMetadataFileSizeBytes int64  `json:"-"`
+	// Path to data volume to be used by thin-pool
+	DataDevice string `json:"data_device"`
+
+	// Path to metadata volume to be used by thin-pool
+	MetadataDevice string `json:"meta_device"`
 
 	// The size of allocation chunks in data file.
 	// Must be between 128 sectors (64KB) and 2097152 sectors (1GB) and a mutlipole of 128 sectors (64KB)
 	// Block size can't be changed after pool created.
 	// See https://www.kernel.org/doc/Documentation/device-mapper/thin-provisioning.txt
-	DataBlockSize        string `json:"data_block_size_sectors"`
-	DataBlockSizeSectors int64  `json:"-"`
+	DataBlockSize        string `json:"data_block_size"`
+	DataBlockSizeSectors uint32 `json:"-"`
 
 	// Defines how much space to allocate when creating base image for container
 	BaseImageSize      string `json:"base_image_size"`
-	BaseImageSizeBytes int64  `json:"-"`
+	BaseImageSizeBytes uint64 `json:"-"`
 }
 
 // LoadConfig reads devmapper configuration file JSON format from disk
@@ -66,12 +67,12 @@ func LoadConfig(path string) (*Config, error) {
 
 	data, err := ioutil.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to read file")
 	}
 
 	config := Config{}
 	if err := json.Unmarshal(data, &config); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to unmarshal data")
 	}
 
 	if err := config.validate(); err != nil {
@@ -82,6 +83,24 @@ func LoadConfig(path string) (*Config, error) {
 }
 
 func (c *Config) validate() error {
+	var result *multierror.Error
+
+	strChecks := []struct {
+		field string
+		name  string
+	}{
+		{c.PoolName, "pool name"},
+		{c.RootPath, "root name"},
+		{c.DataDevice, "data device path"},
+		{c.MetadataDevice, "metadata device path"},
+	}
+
+	for _, check := range strChecks {
+		if check.field == "" {
+			result = multierror.Append(result, errors.Errorf("%s is empty", check.name))
+		}
+	}
+
 	const (
 		sectorSize       = 512
 		dataBlockMinSize = 128
@@ -89,34 +108,24 @@ func (c *Config) validate() error {
 	)
 
 	if blockSize, err := units.RAMInBytes(c.DataBlockSize); err != nil {
-		return errors.Wrap(err, "failed to parse data block size")
+		result = multierror.Append(result, errors.Wrap(err, "failed to parse data block size"))
 	} else {
-		c.DataBlockSizeSectors = blockSize / sectorSize
+		c.DataBlockSizeSectors = uint32(blockSize / sectorSize)
 	}
 
 	if c.DataBlockSizeSectors < dataBlockMinSize || c.DataBlockSizeSectors > dataBlockMaxSize {
-		return errors.Errorf("block size should be between %d and %d", dataBlockMinSize, dataBlockMaxSize)
+		result = multierror.Append(result, errors.Errorf("block size should be between %d and %d", dataBlockMinSize, dataBlockMaxSize))
 	}
 
 	if c.DataBlockSizeSectors%dataBlockMinSize != 0 {
-		return errors.Errorf("block size should be mutlipole of %d sectors", dataBlockMinSize)
+		result = multierror.Append(result, errors.Errorf("block size should be mutlipole of %d sectors", dataBlockMinSize))
 	}
 
-	var err error
-
-	if c.UseLoopback {
-		if c.LoopbackDataFileSizeBytes, err = units.RAMInBytes(c.LoopbackDataFileSize); err != nil {
-			return errors.Wrap(err, "failed to parse loopback data file size")
-		}
-
-		if c.LoopbackMetadataFileSizeBytes, err = units.RAMInBytes(c.LoopbackMetadataFileSize); err != nil {
-			return errors.Wrap(err, "failed to parse loopback metadata file size")
-		}
+	if baseImageSize, err := units.RAMInBytes(c.BaseImageSize); err != nil {
+		result = multierror.Append(result, errors.Wrap(err, "failed to parse base image size"))
+	} else {
+		c.BaseImageSizeBytes = uint64(baseImageSize)
 	}
 
-	if c.BaseImageSizeBytes, err = units.RAMInBytes(c.BaseImageSize); err != nil {
-		return errors.Wrap(err, "failed to parse base image size")
-	}
-
-	return nil
+	return result.ErrorOrNil()
 }

@@ -32,6 +32,9 @@ const (
 	thinDevice1 = "thin-1"
 	thinDevice2 = "thin-2"
 	snapDevice1 = "snap-1"
+	device1Size = 100000
+	device2Size = 200000
+	testsPrefix = "devmapper-snapshotter-tests-"
 )
 
 // TestPoolDevice runs integration tests for pool device.
@@ -48,8 +51,8 @@ func TestPoolDevice(t *testing.T) {
 	logrus.SetLevel(logrus.DebugLevel)
 	ctx := context.Background()
 
-	dataImagePath, loopDataDevice := createLoopbackDevice(t)
-	metaImagePath, loopMetaDevice := createLoopbackDevice(t)
+	dataImagePath, loopDataDevice := createLoopbackDevice(t, "")
+	metaImagePath, loopMetaDevice := createLoopbackDevice(t, "")
 
 	defer func() {
 		// Detach loop devices and remove images
@@ -68,7 +71,7 @@ func TestPoolDevice(t *testing.T) {
 	require.NotNil(t, pool)
 
 	defer func() {
-		err := pool.Close(ctx, true)
+		err := pool.Close(ctx, true, true)
 		require.NoError(t, err, "can't close device pool")
 	}()
 
@@ -121,11 +124,6 @@ func TestPoolDevice(t *testing.T) {
 }
 
 func testCreateThinDevice(t *testing.T, pool *PoolDevice) {
-	const (
-		device1Size = 100000
-		device2Size = 200000
-	)
-
 	deviceID1, err := pool.CreateThinDevice(thinDevice1, device1Size)
 	require.NoError(t, err, "can't create first thin device")
 
@@ -151,7 +149,7 @@ func testMakeFileSystem(t *testing.T, pool *PoolDevice) {
 }
 
 func testCreateSnapshot(t *testing.T, pool *PoolDevice) {
-	err := pool.CreateSnapshotDevice(thinDevice1, snapDevice1, 100000)
+	_, err := pool.CreateSnapshotDevice(thinDevice1, snapDevice1, device1Size)
 	assert.NoErrorf(t, err, "failed to create snapshot from '%s' volume", thinDevice1)
 }
 
@@ -178,11 +176,11 @@ func tempMountPath(t *testing.T) string {
 	return path
 }
 
-func createLoopbackDevice(t *testing.T) (string, string) {
-	file, err := ioutil.TempFile("", "devmapper-snapshotter-")
+func createLoopbackDevice(t *testing.T, dir string) (string, string) {
+	file, err := ioutil.TempFile(dir, testsPrefix)
 	require.NoError(t, err)
 
-	size, err := units.RAMInBytes("100Mb")
+	size, err := units.RAMInBytes("128Mb")
 	require.NoError(t, err)
 
 	err = file.Truncate(size)

@@ -33,18 +33,17 @@ import (
 
 const (
 	metadataFileName = "metadata.db"
-	mountsDirName    = "mounts"
 	fsTypeExt4       = "ext4"
 )
 
 // devmapper implements containerd's snapshotter based on Linux device-mapper targets.
-type devmapper struct {
+type Snapshotter struct {
 	store  *storage.MetaStore
 	pool   *PoolDevice
 	config *Config
 }
 
-func NewSnapshotter(ctx context.Context, configPath string) (*devmapper, error) {
+func NewSnapshotter(ctx context.Context, configPath string) (*Snapshotter, error) {
 	log.G(ctx).WithField("cfg_path", configPath).Info("creating devmapper snapshotter")
 
 	config, err := LoadConfig(configPath)
@@ -52,11 +51,8 @@ func NewSnapshotter(ctx context.Context, configPath string) (*devmapper, error) 
 		return nil, err
 	}
 
-	// Create directories needed for snapshotter
-	for _, path := range []string{config.RootPath, filepath.Join(config.RootPath, mountsDirName)} {
-		if err := os.MkdirAll(path, 0755); err != nil && !os.IsExist(err) {
-			return nil, errors.Wrapf(err, "failed to create root directory: %s", path)
-		}
+	if err := os.MkdirAll(config.RootPath, 0755); err != nil && !os.IsExist(err) {
+		return nil, errors.Wrapf(err, "failed to create root directory: %s", config.RootPath)
 	}
 
 	store, err := storage.NewMetaStore(filepath.Join(config.RootPath, metadataFileName))
@@ -69,14 +65,14 @@ func NewSnapshotter(ctx context.Context, configPath string) (*devmapper, error) 
 		return nil, err
 	}
 
-	return &devmapper{
+	return &Snapshotter{
 		store:  store,
 		config: config,
 		pool:   poolDevice,
 	}, nil
 }
 
-func (dm *devmapper) Stat(ctx context.Context, key string) (snapshots.Info, error) {
+func (dm *Snapshotter) Stat(ctx context.Context, key string) (snapshots.Info, error) {
 	log.G(ctx).WithField("key", key).Debug("stat")
 
 	ctx, trans, err := dm.store.TransactionContext(ctx, false)
@@ -94,7 +90,7 @@ func (dm *devmapper) Stat(ctx context.Context, key string) (snapshots.Info, erro
 	return info, nil
 }
 
-func (dm *devmapper) Update(ctx context.Context, info snapshots.Info, fieldpaths ...string) (snapshots.Info, error) {
+func (dm *Snapshotter) Update(ctx context.Context, info snapshots.Info, fieldpaths ...string) (snapshots.Info, error) {
 	log.G(ctx).Debugf("update: %s", strings.Join(fieldpaths, ", "))
 
 	ctx, trans, err := dm.store.TransactionContext(ctx, true)
@@ -110,13 +106,13 @@ func (dm *devmapper) Update(ctx context.Context, info snapshots.Info, fieldpaths
 	return info, complete(ctx, trans, nil)
 }
 
-func (dm *devmapper) Usage(ctx context.Context, key string) (snapshots.Usage, error) {
+func (dm *Snapshotter) Usage(ctx context.Context, key string) (snapshots.Usage, error) {
 	log.G(ctx).WithField("key", key).Debug("usage")
 
 	return snapshots.Usage{}, errors.New("usage not implemented")
 }
 
-func (dm *devmapper) Mounts(ctx context.Context, key string) ([]mount.Mount, error) {
+func (dm *Snapshotter) Mounts(ctx context.Context, key string) ([]mount.Mount, error) {
 	log.G(ctx).WithField("key", key).Debug("mounts")
 
 	ctx, trans, err := dm.store.TransactionContext(ctx, false)
@@ -134,17 +130,17 @@ func (dm *devmapper) Mounts(ctx context.Context, key string) ([]mount.Mount, err
 	return dm.buildMounts(snap), nil
 }
 
-func (dm *devmapper) Prepare(ctx context.Context, key, parent string, opts ...snapshots.Opt) ([]mount.Mount, error) {
+func (dm *Snapshotter) Prepare(ctx context.Context, key, parent string, opts ...snapshots.Opt) ([]mount.Mount, error) {
 	log.G(ctx).WithFields(logrus.Fields{"key": key, "parent": parent}).Debug("prepare")
 	return dm.createSnapshot(ctx, snapshots.KindActive, key, parent, opts...)
 }
 
-func (dm *devmapper) View(ctx context.Context, key, parent string, opts ...snapshots.Opt) ([]mount.Mount, error) {
+func (dm *Snapshotter) View(ctx context.Context, key, parent string, opts ...snapshots.Opt) ([]mount.Mount, error) {
 	log.G(ctx).WithFields(logrus.Fields{"key": key, "parent": parent}).Debug("prepare")
 	return dm.createSnapshot(ctx, snapshots.KindView, key, parent, opts...)
 }
 
-func (dm *devmapper) Commit(ctx context.Context, name, key string, opts ...snapshots.Opt) error {
+func (dm *Snapshotter) Commit(ctx context.Context, name, key string, opts ...snapshots.Opt) error {
 	log.G(ctx).WithFields(logrus.Fields{"name": name, "key": key}).Debug("commit")
 
 	ctx, trans, err := dm.store.TransactionContext(ctx, true)
@@ -160,7 +156,7 @@ func (dm *devmapper) Commit(ctx context.Context, name, key string, opts ...snaps
 	return complete(ctx, trans, nil)
 }
 
-func (dm *devmapper) Remove(ctx context.Context, key string) error {
+func (dm *Snapshotter) Remove(ctx context.Context, key string) error {
 	log.G(ctx).WithField("key", key).Debug("remove")
 
 	ctx, trans, err := dm.store.TransactionContext(ctx, true)
@@ -182,7 +178,7 @@ func (dm *devmapper) Remove(ctx context.Context, key string) error {
 	return complete(ctx, trans, nil)
 }
 
-func (dm *devmapper) Walk(ctx context.Context, fn func(context.Context, snapshots.Info) error) error {
+func (dm *Snapshotter) Walk(ctx context.Context, fn func(context.Context, snapshots.Info) error) error {
 	log.G(ctx).Debug("walk")
 
 	ctx, trans, err := dm.store.TransactionContext(ctx, false)
@@ -194,7 +190,7 @@ func (dm *devmapper) Walk(ctx context.Context, fn func(context.Context, snapshot
 	return storage.WalkInfo(ctx, fn)
 }
 
-func (dm *devmapper) Close() error {
+func (dm *Snapshotter) Close() error {
 	log.L.Debug("close")
 
 	var result *multierror.Error
@@ -210,7 +206,7 @@ func (dm *devmapper) Close() error {
 	return result.ErrorOrNil()
 }
 
-func (dm *devmapper) createSnapshot(ctx context.Context, kind snapshots.Kind, key, parent string, opts ...snapshots.Opt) ([]mount.Mount, error) {
+func (dm *Snapshotter) createSnapshot(ctx context.Context, kind snapshots.Kind, key, parent string, opts ...snapshots.Opt) ([]mount.Mount, error) {
 	ctx, trans, err := dm.store.TransactionContext(ctx, true)
 	if err != nil {
 		return nil, err
@@ -259,7 +255,7 @@ func (dm *devmapper) createSnapshot(ctx context.Context, kind snapshots.Kind, ke
 	return mounts, complete(ctx, trans, nil)
 }
 
-func (dm *devmapper) mkfs(ctx context.Context, deviceName string) error {
+func (dm *Snapshotter) mkfs(ctx context.Context, deviceName string) error {
 	args := []string{
 		"-E",
 		"nodiscard,lazy_itable_init=0,lazy_journal_init=0",
@@ -280,21 +276,17 @@ func (dm *devmapper) mkfs(ctx context.Context, deviceName string) error {
 	return nil
 }
 
-func (dm *devmapper) getMountDir(id string) string {
-	return filepath.Join(dm.config.RootPath, mountsDirName, id)
-}
-
-func (dm *devmapper) getDeviceName(snapID string) string {
+func (dm *Snapshotter) getDeviceName(snapID string) string {
 	// Add pool name as prefix to avoid collisions with devices from other pools
 	return fmt.Sprintf("%s-snap-%s", dm.config.PoolName, snapID)
 }
 
-func (dm *devmapper) getDevicePath(snap storage.Snapshot) string {
+func (dm *Snapshotter) getDevicePath(snap storage.Snapshot) string {
 	name := dm.getDeviceName(snap.ID)
 	return dm.pool.GetDevicePath(name)
 }
 
-func (dm *devmapper) buildMounts(snap storage.Snapshot) []mount.Mount {
+func (dm *Snapshotter) buildMounts(snap storage.Snapshot) []mount.Mount {
 	var options []string
 
 	if snap.Kind != snapshots.KindActive {

@@ -74,6 +74,6 @@ func saveConfig(t *testing.T, path string, config *Config) {
 	data, err := json.Marshal(config)
 	require.NoError(t, err)
 
-	err = ioutil.WriteFile(path, data, 700)
+	err = ioutil.WriteFile(path, data, 0700)
 	require.NoError(t, err)
 }

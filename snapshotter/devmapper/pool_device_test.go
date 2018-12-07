@@ -92,7 +92,7 @@ func TestPoolDevice(t *testing.T) {
 
 	// Write v1 test file on 'thin-1' device
 	thin1TestFilePath := filepath.Join(thin1MountPath, "TEST")
-	err = ioutil.WriteFile(thin1TestFilePath, []byte("test file (v1)"), 700)
+	err = ioutil.WriteFile(thin1TestFilePath, []byte("test file (v1)"), 0700)
 	require.NoErrorf(t, err, "failed to write test file v1 on '%s' volume", thinDevice1)
 
 	// Take snapshot of 'thin-1'
@@ -101,7 +101,7 @@ func TestPoolDevice(t *testing.T) {
 	})
 
 	// Update TEST file on 'thin-1' to v2
-	err = ioutil.WriteFile(thin1TestFilePath, []byte("test file (v2)"), 700)
+	err = ioutil.WriteFile(thin1TestFilePath, []byte("test file (v2)"), 0700)
 	assert.NoErrorf(t, err, "failed to write test file v2 on 'thin-1' volume after taking snapshot")
 
 	// Mount 'snap-1' and make sure TEST file is v1

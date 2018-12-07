@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	maxDeviceID     = 0xffffff // Device IDs are 24-bit numbers
+	maxDeviceID = 0xffffff // Device IDs are 24-bit numbers
 )
 
 // This needs to be global since 'devicemapper' package is not thread-safe, so
@@ -40,7 +40,6 @@ type PoolDevice struct {
 	poolName        string
 	currentDeviceID int
 	devices         map[string]int
-
 }
 
 // NewPoolDevice creates new thin-pool from existing data and metadata volumes.
@@ -48,19 +47,19 @@ type PoolDevice struct {
 func NewPoolDevice(ctx context.Context, poolName, dataVolume, metaVolume string, blockSizeSectors uint32) (*PoolDevice, error) {
 	log.G(ctx).Infof("initializing pool device '%s'", poolName)
 
-	if driverVersion, err := devicemapper.GetDriverVersion(); err != nil {
+	driverVersion, err := devicemapper.GetDriverVersion()
+	if err != nil {
 		return nil, errors.Wrap(err, "failed to get driver version")
-	} else {
-		log.G(ctx).Debugf("using driver: %s", driverVersion)
 	}
 
-	if libVersion, err := devicemapper.GetLibraryVersion(); err != nil {
+	log.G(ctx).Debugf("using driver: %s", driverVersion)
+
+	libVersion, err := devicemapper.GetLibraryVersion()
+	if err != nil {
 		return nil, errors.Wrap(err, "failed to get library version")
-	} else {
-		log.G(ctx).Debugf("using lib version: %s", libVersion)
 	}
 
-	log.G(ctx).Infof("creating pool (data: '%s', meta: '%s', block size: %d)", dataVolume, metaVolume, blockSizeSectors)
+	log.G(ctx).Debugf("using lib version: %s", libVersion)
 
 	dataFile, err := os.Open(dataVolume)
 	if err != nil {
@@ -243,10 +242,10 @@ func (p *PoolDevice) removeDevice(name string, deferred bool) error {
 	if deferred {
 		if err := devicemapper.RemoveDeviceDeferred(devicePath); err != nil {
 			return errors.Wrap(err, "deferred remove failed")
-		} else {
-			delete(p.devices, name)
-			return nil
 		}
+
+		delete(p.devices, name)
+		return nil
 	}
 
 	const (

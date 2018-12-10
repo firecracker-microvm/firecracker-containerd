@@ -11,9 +11,9 @@
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
-all: naive
+all: naive_snapshotter
 
-naive: *.go
+naive_snapshotter: *.go
 	go build -o naive_snapshotter ./cmd/naive
 
 clean:

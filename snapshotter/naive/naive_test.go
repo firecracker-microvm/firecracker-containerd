@@ -54,33 +54,6 @@ func TestCreateImage(t *testing.T) {
 	}
 }
 
-func TestMountUnmount(t *testing.T) {
-	snap := Snapshotter{}
-
-	tempDir, err := ioutil.TempDir("", "fc-snapshotter")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	defer os.RemoveAll(tempDir)
-
-	imgPath := filepath.Join(tempDir, "x.img")
-	mntPath := filepath.Join(tempDir, "/mnt")
-
-	err = snap.createImage(context.Background(), imgPath, 100)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err := snap.mount(imgPath, mntPath, false); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := snap.unmount(context.Background(), mntPath); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func createSnapshotter(ctx context.Context, root string) (snapshots.Snapshotter, func() error, error) {
 	snap, err := NewSnapshotter(ctx, root)
 	if err != nil {

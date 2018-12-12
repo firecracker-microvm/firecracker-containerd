@@ -32,7 +32,6 @@ import (
 	"github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/containerd/events"
 	"github.com/containerd/containerd/log"
-	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/runtime"
 	"github.com/containerd/containerd/runtime/v2/shim"
@@ -51,7 +50,8 @@ import (
 )
 
 const (
-	defaultVsockPort = 10789
+	defaultVsockPort     = 10789
+	supportedMountFSType = "ext4"
 )
 
 // implements shimapi
@@ -616,40 +616,13 @@ func (s *service) startVM(ctx context.Context, request *taskAPI.CreateTaskReques
 		Debug:           s.config.Debug,
 	}
 
-	// Verify rootfs mount and get file system image path
+	// Attach block devices passed from snapshotter
+	for _, mnt := range request.Rootfs {
+		if mnt.Type != supportedMountFSType {
+			return nil, errors.Errorf("unsupported mount type '%s', expected '%s'", mnt.Type, supportedMountFSType)
+		}
 
-	if len(request.Rootfs) != 1 {
-		return nil, errors.Errorf("unexpected number of mounts: %d", len(request.Rootfs))
-	}
-
-	mnt := request.Rootfs[0]
-	if mnt.Type != internal.SnapshotterMountType {
-		// Mount came not from Firecracker snapshotter, which is not supported by Firecracker.
-		log.G(ctx).Errorf("invalid mount (type: '%s', source: '%s')", mnt.Type, mnt.Source)
-		return nil, errors.New("unsupported mount, use Firecracker snapshotter")
-	}
-
-	imagePath, err := getOptionByKey(mnt, internal.SnapshotterImageKey)
-	if err != nil {
-		log.G(ctx).WithError(err).Error("can't find rootfs image path option")
-		return nil, err
-	}
-
-	cfg.AdditionalDrives = append(cfg.AdditionalDrives, firecracker.BlockDevice{HostPath: imagePath, Mode: "rw"})
-
-	// Snapshotter.Prepare creates an active snapshot, returned mounts are used to mount the snapshot to capture changes.
-	// In the case of Firecracker, Prepare makes a file system image and mounts it for writing (hence Commit captures changes
-	// by unmounting this image).
-	// There are 2 cases when containerd calls Prepare:
-	// - When pulling an image, containerd calls Prepare and unpacks layer data to it. This works as expected similar to
-	// other snapshotter implementations.
-	// - When running a task, an image is mounted for writing as well. In this case we don't need writable mount on
-	// host machine as it must be attached to Firecracker instead and mounted inside a VM. So in order to prevent 2
-	// writable mounts in 2 different places, unmount image on host machine.
-	log.G(ctx).Debugf("umounting fs: %s", mnt.Source)
-	if err := mount.Unmount(mnt.Source, 0); err != nil {
-		log.G(ctx).WithError(err).Error("failed to unmount fs")
-		return nil, err
+		cfg.AdditionalDrives = append(cfg.AdditionalDrives, firecracker.BlockDevice{HostPath: mnt.Source, Mode: "rw"})
 	}
 
 	s.machine = firecracker.NewMachine(cfg, firecracker.WithLogger(log.G(ctx)))

@@ -17,6 +17,7 @@ import (
 	"context"
 	"io"
 	"io/ioutil"
+	"math"
 	"net"
 	"os"
 	"os/exec"
@@ -24,6 +25,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unsafe"
 
 	eventstypes "github.com/containerd/containerd/api/events"
 	"github.com/containerd/containerd/api/types"
@@ -37,20 +39,19 @@ import (
 	taskAPI "github.com/containerd/containerd/runtime/v2/task"
 	"github.com/containerd/fifo"
 	"github.com/containerd/ttrpc"
-	"github.com/firecracker-microvm/firecracker-containerd/internal"
-	"github.com/firecracker-microvm/firecracker-containerd/proto"
-	firecracker "github.com/firecracker-microvm/firecracker-go-sdk"
+	"github.com/firecracker-microvm/firecracker-go-sdk"
 	ptypes "github.com/gogo/protobuf/types"
 	"github.com/mdlayher/vsock"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
+
+	"github.com/firecracker-microvm/firecracker-containerd/internal"
+	"github.com/firecracker-microvm/firecracker-containerd/proto"
 )
 
 const (
 	defaultVsockPort = 10789
-	// TODO: This will need to be changed once we are managing CID's
-	defaultCID = uint32(3)
 )
 
 // implements shimapi
@@ -537,6 +538,47 @@ func dialVsock(ctx context.Context, contextID uint32, port uint32) (net.Conn, er
 	return nil, lastErr
 }
 
+// findNextAvailableVsockCID finds first available vsock context ID.
+// It uses VHOST_VSOCK_SET_GUEST_CID ioctl which allows some CID ranges to be statically reserved in advance.
+// The ioctl fails with EADDRINUSE if cid is already taken and with EINVAL if the CID is invalid.
+// Taken from https://bugzilla.redhat.com/show_bug.cgi?id=1291851
+func findNextAvailableVsockCID() (uint32, error) {
+	const (
+		ioctlVsockSetGuestCID = uintptr(0x4008AF60) // Corresponds to VHOST_VSOCK_SET_GUEST_CID in vhost.h
+		startCID              = uint32(3)           // 0, 1 and 2 are reserved CIDs, see http://man7.org/linux/man-pages/man7/vsock.7.html
+		maxCID                = math.MaxUint32
+	)
+
+	file, err := os.OpenFile("/dev/vhost-vsock", syscall.O_RDWR, 0666)
+	if err != nil {
+		return 0, errors.Wrap(err, "failed to open vsock device")
+	}
+
+	defer file.Close()
+
+	for contextID := startCID; contextID < maxCID; contextID++ {
+		cid := contextID
+		_, _, err = unix.Syscall(
+			unix.SYS_IOCTL,
+			file.Fd(),
+			ioctlVsockSetGuestCID,
+			uintptr(unsafe.Pointer(&cid)))
+
+		switch err {
+		case unix.Errno(0):
+			return contextID, nil
+		case unix.EADDRINUSE:
+			// ID is already taken, try next one
+			continue
+		default:
+			// Fail if we get an error we don't expect
+			return 0, err
+		}
+	}
+
+	return 0, errors.New("couldn't find any available vsock context id")
+}
+
 func (s *service) startVM(ctx context.Context, request *taskAPI.CreateTaskRequest) (taskAPI.TaskService, error) {
 	/*
 		What needs to be done here:
@@ -554,8 +596,10 @@ func (s *service) startVM(ctx context.Context, request *taskAPI.CreateTaskReques
 
 	log.G(ctx).Info("starting VM")
 
-	// TODO: find next available CID
-	cid := defaultCID
+	cid, err := findNextAvailableVsockCID()
+	if err != nil {
+		return nil, err
+	}
 
 	cfg := firecracker.Config{
 		BinPath:         s.config.FirecrackerBinaryPath,

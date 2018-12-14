@@ -22,13 +22,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"time"
 	"unsafe"
 
 	eventstypes "github.com/containerd/containerd/api/events"
-	"github.com/containerd/containerd/api/types"
 	"github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/containerd/events"
 	"github.com/containerd/containerd/log"
@@ -658,17 +656,6 @@ func (s *service) startVM(ctx context.Context, request *taskAPI.CreateTaskReques
 
 func (s *service) stopVM() error {
 	return s.machine.StopVMM()
-}
-
-func getOptionByKey(mount *types.Mount, key string) (string, error) {
-	prefix := key + "="
-	for _, opt := range mount.Options {
-		if strings.HasPrefix(opt, prefix) {
-			return strings.TrimPrefix(opt, prefix), nil
-		}
-	}
-
-	return "", errors.Errorf("couldn't find option with key '%s'", key)
 }
 
 func packBundle(path string, options *ptypes.Any) (*ptypes.Any, error) {

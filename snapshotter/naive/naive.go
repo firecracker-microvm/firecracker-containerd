@@ -373,16 +373,3 @@ func complete(ctx context.Context, trans storage.Transactor, err error) error {
 
 	return err
 }
-
-func exists(path string) (bool, error) {
-	_, err := os.Stat(path)
-	if err == nil {
-		return true, nil
-	}
-
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-
-	return false, err
-}

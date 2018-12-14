@@ -68,7 +68,10 @@ type service struct {
 	cancel       context.CancelFunc
 }
 
-var _ = (taskAPI.TaskService)(&service{})
+var (
+	_       = (taskAPI.TaskService)(&service{})
+	sysCall = syscall.Syscall
+)
 
 // Matches type Init func(..).. defined https://github.com/containerd/containerd/blob/master/runtime/v2/shim/shim.go#L47
 func NewService(ctx context.Context, id string, publisher events.Publisher) (shim.Shim, error) {
@@ -547,11 +550,12 @@ func findNextAvailableVsockCID(ctx context.Context) (uint32, error) {
 		// Corresponds to VHOST_VSOCK_SET_GUEST_CID in vhost.h
 		ioctlVsockSetGuestCID = uintptr(0x4008AF60)
 		// 0, 1 and 2 are reserved CIDs, see http://man7.org/linux/man-pages/man7/vsock.7.html
-		startCID = 3
-		maxCID   = math.MaxUint32
+		startCID        = 3
+		maxCID          = math.MaxUint32
+		vsockDevicePath = "/dev/vhost-vsock"
 	)
 
-	file, err := os.OpenFile("/dev/vhost-vsock", syscall.O_RDWR, 0666)
+	file, err := os.OpenFile(vsockDevicePath, syscall.O_RDWR, 0666)
 	if err != nil {
 		return 0, errors.Wrap(err, "failed to open vsock device")
 	}
@@ -564,7 +568,7 @@ func findNextAvailableVsockCID(ctx context.Context) (uint32, error) {
 			return 0, ctx.Err()
 		default:
 			cid := contextID
-			_, _, err = unix.Syscall(
+			_, _, err = sysCall(
 				unix.SYS_IOCTL,
 				file.Fd(),
 				ioctlVsockSetGuestCID,

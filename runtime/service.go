@@ -64,6 +64,7 @@ type service struct {
 	agentClient  taskAPI.TaskService
 	config       *Config
 	machine      *firecracker.Machine
+	machineCID   uint32
 	ctx          context.Context
 	cancel       context.CancelFunc
 }
@@ -194,7 +195,7 @@ func (s *service) Create(ctx context.Context, request *taskAPI.CreateTaskRequest
 		return nil, err
 	}
 	s.ctx, s.cancel = context.WithCancel(ctx)
-	go s.proxyStdio(s.ctx, request.Stdin, request.Stdout, request.Stderr, defaultCID)
+	go s.proxyStdio(s.ctx, request.Stdin, request.Stdout, request.Stderr, s.machineCID)
 	log.G(ctx).Infof("successfully created task with pid %d", resp.Pid)
 	return resp, nil
 }
@@ -591,20 +592,6 @@ func findNextAvailableVsockCID(ctx context.Context) (uint32, error) {
 }
 
 func (s *service) startVM(ctx context.Context, request *taskAPI.CreateTaskRequest) (taskAPI.TaskService, error) {
-	/*
-		What needs to be done here:
-			- Start a firecracker agent with:
-				- The container rootfs as a block device
-					- rootfs will be the cwd
-				- Mount this device inside agent at a well known location
-				- With the agent running inside on a well-known port
-			- After agent startup, create a vsock client dialing to the
-				specified vsock port.
-				TODO: We will need some sort of vsock CID accounting mechanism
-				to know what CID to use, defaults to 3 for now
-			- Return this client or error
-	*/
-
 	log.G(ctx).Info("starting VM")
 
 	cid, err := findNextAvailableVsockCID(ctx)
@@ -666,6 +653,7 @@ func (s *service) startVM(ctx context.Context, request *taskAPI.CreateTaskReques
 	}
 
 	s.machine = firecracker.NewMachine(cfg, firecracker.WithLogger(log.G(ctx)))
+	s.machineCID = cid
 
 	log.G(ctx).Println("initializing machine")
 	if _, err := s.machine.Init(ctx); err != nil {

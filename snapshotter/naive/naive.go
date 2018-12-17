@@ -35,7 +35,7 @@ const (
 	metadataFileName  = "metadata.db"
 	imageDirName      = "images"
 	imageFSType       = "ext4"
-	sparseImageSizeMB = 256
+	sparseImageSizeMB = 1024
 )
 
 type Snapshotter struct {

@@ -15,25 +15,19 @@ package devmapper
 
 import (
 	"context"
-	"fmt"
 	"os"
-	"strings"
-	"sync"
-	"time"
 
 	"github.com/containerd/containerd/log"
 	"github.com/hashicorp/go-multierror"
-	"github.com/moby/moby/pkg/devicemapper"
 	"github.com/pkg/errors"
+	"golang.org/x/sys/unix"
+
+	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/pkg/dmsetup"
 )
 
 const (
 	maxDeviceID = 0xffffff // Device IDs are 24-bit numbers
 )
-
-// This needs to be global since 'devicemapper' package is not thread-safe, so
-// containerd's snapshotter tests could not be passed.
-var mutex sync.Mutex
 
 // PoolDevice ties together data and metadata volumes, represents thin-pool and manages volumes, snapshots and device ids.
 type PoolDevice struct {
@@ -47,38 +41,17 @@ type PoolDevice struct {
 func NewPoolDevice(ctx context.Context, poolName, dataVolume, metaVolume string, blockSizeSectors uint32) (*PoolDevice, error) {
 	log.G(ctx).Infof("initializing pool device '%s'", poolName)
 
-	driverVersion, err := devicemapper.GetDriverVersion()
+	version, err := dmsetup.Version()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get driver version")
+		log.G(ctx).Errorf("dmsetup not available")
+	} else {
+		log.G(ctx).Debugf("using dmsetup: %s", version)
 	}
 
-	log.G(ctx).Debugf("using driver: %s", driverVersion)
-
-	libVersion, err := devicemapper.GetLibraryVersion()
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to get library version")
-	}
-
-	log.G(ctx).Debugf("using lib version: %s", libVersion)
-
-	dataFile, err := os.Open(dataVolume)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to open data volume")
-	}
-
-	defer dataFile.Close()
-
-	metaFile, err := os.Open(metaVolume)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to open meta volume")
-	}
-
-	defer metaFile.Close()
-
-	poolPath := getDevMapperPath(poolName)
+	poolPath := dmsetup.GetFullDevicePath(poolName)
 	if _, err := os.Stat(poolPath); err == nil {
 		log.G(ctx).Debugf("reloading existing pool '%s'", poolPath)
-		if err := devicemapper.ReloadPool(poolName, dataFile, metaFile, blockSizeSectors); err != nil {
+		if err := dmsetup.ReloadPool(poolName, dataVolume, metaVolume, blockSizeSectors); err != nil {
 			return nil, errors.Wrapf(err, "failed to reload pool '%s'", poolName)
 		}
 	} else {
@@ -87,7 +60,7 @@ func NewPoolDevice(ctx context.Context, poolName, dataVolume, metaVolume string,
 		}
 
 		log.G(ctx).Debug("creating new pool device")
-		if err := devicemapper.CreatePool(poolName, dataFile, metaFile, blockSizeSectors); err != nil {
+		if err := dmsetup.CreatePool(poolName, dataVolume, metaVolume, blockSizeSectors); err != nil {
 			return nil, errors.Wrapf(err, "failed to create thin-pool with name '%s'", poolName)
 		}
 	}
@@ -99,16 +72,13 @@ func NewPoolDevice(ctx context.Context, poolName, dataVolume, metaVolume string,
 }
 
 func (p *PoolDevice) CreateThinDevice(deviceName string, virtualSizeBytes uint64) (int, error) {
-	mutex.Lock()
-	defer mutex.Unlock()
-
 	if _, ok := p.devices[deviceName]; ok {
 		return 0, errors.Errorf("device with name '%s' already created", deviceName)
 	}
 
 	// Create device, retry if device id is taken
 	deviceID, err := p.tryAcquireDeviceID(func(thinDeviceID int) error {
-		return devicemapper.CreateDevice(p.poolName, thinDeviceID)
+		return dmsetup.CreateDevice(p.poolName, thinDeviceID)
 	})
 
 	if err != nil {
@@ -116,9 +86,7 @@ func (p *PoolDevice) CreateThinDevice(deviceName string, virtualSizeBytes uint64
 	}
 
 	p.devices[deviceName] = deviceID
-
-	devicePath := p.GetDevicePath(p.poolName)
-	if err := devicemapper.ActivateDevice(devicePath, deviceName, deviceID, virtualSizeBytes); err != nil {
+	if err := dmsetup.ActivateDevice(p.poolName, deviceName, deviceID, virtualSizeBytes, ""); err != nil {
 		return 0, errors.Wrap(err, "failed to activate thin device")
 	}
 
@@ -126,9 +94,6 @@ func (p *PoolDevice) CreateThinDevice(deviceName string, virtualSizeBytes uint64
 }
 
 func (p *PoolDevice) CreateSnapshotDevice(deviceName string, snapshotName string, virtualSizeBytes uint64) (int, error) {
-	mutex.Lock()
-	defer mutex.Unlock()
-
 	deviceID, ok := p.devices[deviceName]
 	if !ok {
 		return 0, errors.Errorf("device '%s' not found", deviceName)
@@ -138,19 +103,25 @@ func (p *PoolDevice) CreateSnapshotDevice(deviceName string, snapshotName string
 		return 0, errors.Errorf("snapshot with name '%s' already exists", snapshotName)
 	}
 
-	// Send 'create_snap' message to pool-device
-	devicePoolPath := p.GetDevicePath(p.poolName)
-	thinDevicePath := p.GetDevicePath(deviceName)
+	// TODO: suspend/resume not needed if thin-device not active
+	if err := dmsetup.SuspendDevice(deviceName); err != nil {
+		return 0, errors.Wrapf(err, "failed to suspend device %q", deviceName)
+	}
+
 	snapshotDeviceID, err := p.tryAcquireDeviceID(func(snapshotDeviceID int) error {
-		return devicemapper.CreateSnapDevice(devicePoolPath, snapshotDeviceID, thinDevicePath, deviceID)
+		return dmsetup.CreateSnapshot(p.poolName, snapshotDeviceID, deviceID)
 	})
 
 	if err != nil {
-		return 0, errors.Wrap(err, "failed to create snapshot")
+		return 0, errors.Wrapf(err, "failed to create snapshot %q", snapshotName)
+	}
+
+	if err := dmsetup.ResumeDevice(deviceName); err != nil {
+		return 0, errors.Wrapf(err, "failed to resume device %q", deviceName)
 	}
 
 	// Activate snapshot
-	if err := devicemapper.ActivateDevice(devicePoolPath, snapshotName, snapshotDeviceID, virtualSizeBytes); err != nil {
+	if err := dmsetup.ActivateDevice(p.poolName, snapshotName, snapshotDeviceID, virtualSizeBytes, ""); err != nil {
 		return 0, errors.Wrap(err, "failed to activate snapshot device")
 	}
 
@@ -158,39 +129,26 @@ func (p *PoolDevice) CreateSnapshotDevice(deviceName string, snapshotName string
 	return snapshotDeviceID, nil
 }
 
-func (p *PoolDevice) RemoveDevice(deviceName string) error {
-	mutex.Lock()
-	defer mutex.Unlock()
+func (p *PoolDevice) RemoveDevice(deviceName string, deferred bool) error {
+	if err := dmsetup.RemoveDevice(deviceName, true, true, deferred); err != nil {
+		return errors.Wrapf(err, "failed to remove device '%s'", deviceName)
+	}
 
-	return p.removeDevice(deviceName, true)
+	delete(p.devices, deviceName)
+	return nil
 }
 
-func (p *PoolDevice) GetDevicePath(deviceName string) string {
-	return getDevMapperPath(deviceName)
-}
-
-func (p *PoolDevice) Close(ctx context.Context, removeDevices, removePool bool) error {
-	mutex.Lock()
-	defer mutex.Unlock()
-
+func (p *PoolDevice) RemovePool() error {
 	var result *multierror.Error
 
-	// Clean thin devices
-	if removeDevices {
-		for name, id := range p.devices {
-			if err := p.removeDevice(name, false); err != nil {
-				log.G(ctx).WithError(err).Errorf("failed to remove device '%s' (id: %d)", name, id)
-				result = multierror.Append(result, err)
-			}
+	for name := range p.devices {
+		if err := p.RemoveDevice(name, true); err != nil {
+			result = multierror.Append(result, errors.Wrapf(err, "failed to remove %q", name))
 		}
 	}
 
-	// Remove thin-pool
-	if removePool {
-		if err := p.removePool(ctx); err != nil {
-			log.G(ctx).WithError(err).Errorf("failed to remove thin-pool '%s'", p.poolName)
-			result = multierror.Append(result, err)
-		}
+	if err := dmsetup.RemoveDevice(p.poolName, true, true, true); err != nil {
+		result = multierror.Append(result, errors.Wrapf(err, "failed to remove pool %q", p.poolName))
 	}
 
 	return result.ErrorOrNil()
@@ -213,7 +171,7 @@ func (p *PoolDevice) tryAcquireDeviceID(acquire func(deviceID int) error) (int, 
 			return deviceID, nil
 		}
 
-		if devicemapper.DeviceIDExists(err) {
+		if err == unix.EEXIST {
 			// This device ID already taken, try next one
 			continue
 		}
@@ -223,67 +181,4 @@ func (p *PoolDevice) tryAcquireDeviceID(acquire func(deviceID int) error) (int, 
 	}
 
 	return 0, errors.Errorf("thin-pool error: all device ids are taken")
-}
-
-func (p *PoolDevice) removeDevice(name string, deferred bool) error {
-	var (
-		err        error
-		devicePath = p.GetDevicePath(name)
-	)
-
-	if deferred {
-		if err := devicemapper.RemoveDeviceDeferred(devicePath); err != nil {
-			return errors.Wrap(err, "deferred remove failed")
-		}
-
-		delete(p.devices, name)
-		return nil
-	}
-
-	const (
-		retryCount          = 10
-		delayBetweenRetries = 1 * time.Second
-	)
-
-	for i := 0; i < retryCount; i++ {
-		err = devicemapper.RemoveDevice(devicePath)
-		if err == nil {
-			delete(p.devices, name)
-			return nil
-		}
-
-		// Device no longer exists, do not return any errors
-		if err == devicemapper.ErrEnxio {
-			return nil
-		}
-
-		if err == devicemapper.ErrBusy {
-			time.Sleep(delayBetweenRetries)
-			continue
-		}
-
-		return errors.Wrapf(err, "failed to remove device '%s'", name)
-	}
-
-	return errors.Wrapf(err, "failed to remove device '%s' after %d retries", name, retryCount)
-}
-
-func (p *PoolDevice) removePool(ctx context.Context) error {
-	if err := devicemapper.RemoveDevice(p.poolName); err != nil {
-		return errors.Wrap(err, "failed to remove pool")
-	}
-
-	if deps, err := devicemapper.GetDeps(p.poolName); err == nil {
-		log.G(ctx).Warnf("thin-pool '%s' still has %d dependents", p.poolName, deps.Count)
-	}
-
-	return nil
-}
-
-func getDevMapperPath(deviceName string) string {
-	if strings.HasPrefix(deviceName, "/dev/mapper/") {
-		return deviceName
-	}
-
-	return fmt.Sprintf("/dev/mapper/%s", deviceName)
 }

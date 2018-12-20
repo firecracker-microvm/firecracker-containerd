@@ -41,7 +41,8 @@ func AttachLoopDevice(imagePath string) (string, error) {
 
 // DetachLoopDevice detaches loop devices
 func DetachLoopDevice(loopDevice ...string) error {
-	_, err := losetup("--detach", strings.Join(loopDevice, " "))
+	args := append([]string{"--detach"}, loopDevice...)
+	_, err := losetup(args...)
 	return err
 }
 

@@ -26,9 +26,10 @@ import (
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/containerd/snapshots/storage"
 	"github.com/hashicorp/go-multierror"
-	"github.com/moby/moby/pkg/dmesg"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+
+	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/pkg/dmsetup"
 )
 
 const (
@@ -171,7 +172,7 @@ func (dm *Snapshotter) Remove(ctx context.Context, key string) error {
 	}
 
 	deviceName := dm.getDeviceName(snapID)
-	if err := dm.pool.RemoveDevice(deviceName); err != nil {
+	if err := dm.pool.RemoveDevice(deviceName, true); err != nil {
 		log.G(ctx).WithError(err).Errorf("failed to remove device")
 		return complete(ctx, trans, err)
 	}
@@ -197,10 +198,6 @@ func (dm *Snapshotter) Close() error {
 	var result *multierror.Error
 
 	if err := dm.store.Close(); err != nil {
-		result = multierror.Append(result, err)
-	}
-
-	if err := dm.pool.Close(context.Background(), false, false); err != nil {
 		result = multierror.Append(result, err)
 	}
 
@@ -261,16 +258,13 @@ func (dm *Snapshotter) mkfs(ctx context.Context, deviceName string) error {
 		"-E",
 		// We don't want any zeroing in advance when running mkfs on thin devices (see "man mkfs.ext4")
 		"nodiscard,lazy_itable_init=0,lazy_journal_init=0",
-		dm.pool.GetDevicePath(deviceName),
+		dmsetup.GetFullDevicePath(deviceName),
 	}
 
 	log.G(ctx).Debugf("mkfs.ext4 %s", strings.Join(args, " "))
 	output, err := exec.Command("mkfs.ext4", args...).CombinedOutput()
 	if err != nil {
-		log.G(ctx).WithError(err).Errorf(
-			"failed to write fs: %s\ndmesg: %s\n",
-			string(output),
-			string(dmesg.Dmesg(256)))
+		log.G(ctx).WithError(err).Errorf("failed to write fs:\n%s", string(output))
 		return err
 	}
 
@@ -285,7 +279,7 @@ func (dm *Snapshotter) getDeviceName(snapID string) string {
 
 func (dm *Snapshotter) getDevicePath(snap storage.Snapshot) string {
 	name := dm.getDeviceName(snap.ID)
-	return dm.pool.GetDevicePath(name)
+	return dmsetup.GetFullDevicePath(name)
 }
 
 func (dm *Snapshotter) buildMounts(snap storage.Snapshot) []mount.Mount {

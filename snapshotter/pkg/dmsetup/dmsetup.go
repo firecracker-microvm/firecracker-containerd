@@ -47,8 +47,8 @@ var (
 )
 
 // CreatePool creates a device with the given name, data and metadata file and block size (see "dmsetup create")
-func CreatePool(poolName, dataFile, metaFile string, blockSizeBytes uint32) error {
-	thinPool, err := makeThinPoolMapping(dataFile, metaFile, blockSizeBytes)
+func CreatePool(poolName, dataFile, metaFile string, blockSizeSectors uint32) error {
+	thinPool, err := makeThinPoolMapping(dataFile, metaFile, blockSizeSectors)
 	if err != nil {
 		return err
 	}
@@ -58,8 +58,8 @@ func CreatePool(poolName, dataFile, metaFile string, blockSizeBytes uint32) erro
 }
 
 // ReloadPool reloads existing thin-pool (see "dmsetup reload")
-func ReloadPool(deviceName, dataFile, metaFile string, blockSizeBytes uint32) error {
-	thinPool, err := makeThinPoolMapping(dataFile, metaFile, blockSizeBytes)
+func ReloadPool(deviceName, dataFile, metaFile string, blockSizeSectors uint32) error {
+	thinPool, err := makeThinPoolMapping(dataFile, metaFile, blockSizeSectors)
 	if err != nil {
 		return err
 	}
@@ -129,7 +129,7 @@ func RemoveDevice(deviceName string, force, retry, deferred bool) error {
 		args = append(args, "--deferred")
 	}
 
-	args = append(args, getFullDevicePath(deviceName))
+	args = append(args, GetFullDevicePath(deviceName))
 
 	_, err := dmsetup(args...)
 	return err
@@ -153,11 +153,11 @@ func Info(deviceName string) ([]*DeviceInfo, error) {
 	}
 
 	var (
-		devices []*DeviceInfo
 		lines   = strings.Split(output, "\n")
+		devices = make([]*DeviceInfo, len(lines))
 	)
 
-	for _, line := range lines {
+	for i, line := range lines {
 		var (
 			attr = ""
 			info = &DeviceInfo{}
@@ -174,7 +174,7 @@ func Info(deviceName string) ([]*DeviceInfo, error) {
 			&info.EventNumber)
 
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to parse line '%s'", line)
+			return nil, errors.Wrapf(err, "failed to parse line %q", line)
 		}
 
 		// Parse attributes (see "man dmsetup") for details
@@ -183,7 +183,7 @@ func Info(deviceName string) ([]*DeviceInfo, error) {
 		info.TableLive = strings.Contains(attr, "L")
 		info.TableInactive = strings.Contains(attr, "I")
 
-		devices = append(devices, info)
+		devices[i] = info
 	}
 
 	return devices, nil
@@ -193,7 +193,7 @@ func Version() (string, error) {
 	return dmsetup("version")
 }
 
-func getFullDevicePath(deviceName string) string {
+func GetFullDevicePath(deviceName string) string {
 	if strings.HasPrefix(deviceName, DevMapperDir) {
 		return deviceName
 	}
@@ -241,7 +241,7 @@ func extractErrorText(output string) string {
 	str := re.FindString(output)
 
 	// Strip "failed: " prefix
-	str = strings.TrimLeft(str, "failed: ")
+	str = strings.TrimPrefix(str, "failed: ")
 
 	str = strings.ToLower(str)
 	return str

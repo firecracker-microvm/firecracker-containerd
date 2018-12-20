@@ -37,7 +37,7 @@ func BlockDeviceSize(devicePath string) (uint64, error) {
 }
 
 // makeThinPoolMapping makes thin-pool table entry
-func makeThinPoolMapping(dataFile, metaFile string, blockSizeBytes uint32) (string, error) {
+func makeThinPoolMapping(dataFile, metaFile string, blockSizeSectors uint32) (string, error) {
 	dataDeviceSizeBytes, err := BlockDeviceSize(dataFile)
 	if err != nil {
 		return "", errors.Wrapf(err, "failed to get block device size: %s", dataFile)
@@ -52,9 +52,8 @@ func makeThinPoolMapping(dataFile, metaFile string, blockSizeBytes uint32) (stri
 	// low_water_mark - the low water mark, expressed in blocks of size data_block_size
 	// feature_args - the number of feature arguments
 	// args
-	dataBlockSizeSectors := blockSizeBytes / SectorSize
 	lengthSectors := dataDeviceSizeBytes / SectorSize
-	target := fmt.Sprintf("0 %d thin-pool %s %s %d 32768 1 skip_block_zeroing", lengthSectors, metaFile, dataFile, dataBlockSizeSectors)
+	target := fmt.Sprintf("0 %d thin-pool %s %s %d 32768 1 skip_block_zeroing", lengthSectors, metaFile, dataFile, blockSizeSectors)
 
 	return target, nil
 }
@@ -69,6 +68,6 @@ func makeThinMapping(poolName string, deviceID int, sizeBytes uint64, externalOr
 	// pool_dev - the thin-pool device, can be /dev/mapper/pool_name or 253:0
 	// dev_id - the internal device id of the device to be activated
 	// external_origin_dev - an optional block device outside the pool to be treated as a read-only snapshot origin.
-	target := fmt.Sprintf("0 %d thin %s %d %s", lengthSectors, getFullDevicePath(poolName), deviceID, externalOriginDevice)
+	target := fmt.Sprintf("0 %d thin %s %d %s", lengthSectors, GetFullDevicePath(poolName), deviceID, externalOriginDevice)
 	return strings.TrimSpace(target)
 }

@@ -55,17 +55,18 @@ func TestDMSetup(t *testing.T) {
 	}()
 
 	t.Run("CreatePool", func(t *testing.T) {
-		err := CreatePool(testPoolName, loopDataDevice, loopMetaDevice, 128*512)
+		err := CreatePool(testPoolName, loopDataDevice, loopMetaDevice, 128)
 		require.NoErrorf(t, err, "failed to create thin-pool")
 
 		table, err := Table(testPoolName)
+		t.Logf("table: %s", table)
 		assert.NoError(t, err)
 		assert.True(t, strings.HasPrefix(table, "0 32768 thin-pool"))
 		assert.True(t, strings.HasSuffix(table, "128 32768 1 skip_block_zeroing"))
 	})
 
 	t.Run("ReloadPool", func(t *testing.T) {
-		err := ReloadPool(testPoolName, loopDataDevice, loopMetaDevice, 256*512)
+		err := ReloadPool(testPoolName, loopDataDevice, loopMetaDevice, 256)
 		assert.NoErrorf(t, err, "failed to reload thin-pool")
 	})
 
@@ -116,7 +117,7 @@ func testActivateDevice(t *testing.T) {
 	require.NoErrorf(t, err, "failed to activate device")
 
 	err = ActivateDevice(testPoolName, testDeviceName, 1, 1024, "")
-	assert.Error(t, unix.EBUSY)
+	assert.Equal(t, err, unix.EBUSY)
 
 	if _, err := os.Stat("/dev/mapper/" + testDeviceName); err != nil && !os.IsExist(err) {
 		assert.Errorf(t, err, "failed to stat device")

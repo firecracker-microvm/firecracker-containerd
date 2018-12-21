@@ -1,4 +1,6 @@
 cloud.google.com/go v0.26.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
+github.com/BurntSushi/toml v0.3.1 h1:WXkYYl6Yr3qBf1K79EBnL4mak0OimBfB0XUf9Vl28OQ=
+github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/Microsoft/go-winio v0.4.11 h1:zoIOcVf0xPN1tnMVbTtEdI+P8OofVk3NObnwOQ6nK2Q=
 github.com/Microsoft/go-winio v0.4.11/go.mod h1:VhR8bwka0BXejwEJY73c50VrPtXAaKcyvVC4A4RozmA=
 github.com/Microsoft/hcsshim v0.8.1 h1:0RKPd1pQB/4YRjdw0jFwq3A5nWFN4n1ojNzcm4B+8ZI=
@@ -36,6 +38,8 @@ github.com/docker/go-units v0.3.3 h1:Xk8S3Xj5sLGlG5g67hJmYMmUgXv5N4PhkjJHHqrwnTk
 github.com/docker/go-units v0.3.3/go.mod h1:fgPhTUdO+D/Jk86RDLlptpiXQzgHJF7gydDDbaIK4Dk=
 github.com/firecracker-microvm/firecracker-go-sdk v0.0.0-20181116214658-451f195f2a6fd41b8cebf0a35d718643142dbe6c h1:kg/YkAGFrjzSA5A6ORiZcy/Q9fUQmWFPxS/jq3ktW6Q=
 github.com/firecracker-microvm/firecracker-go-sdk v0.0.0-20181116214658-451f195f2a6fd41b8cebf0a35d718643142dbe6c/go.mod h1:KR1UiFhChhMA+u9+uGP1N3dCdJfXi1s+/BLSPEZm0kk=
+github.com/firecracker-microvm/firecracker-go-sdk v0.0.0-20181220230332-433f262dc33b h1:5vIdzbfLuWaResxGLVzoNbpg2LEjSkEzDoJLJpqJqeE=
+github.com/firecracker-microvm/firecracker-go-sdk v0.0.0-20181220230332-433f262dc33b/go.mod h1:7ZuTUkeKoyUmdR6Tn4eepqjYeKMXcOg9gJytYVz8TuE=
 github.com/globalsign/mgo v0.0.0-20180905125535-1ca0a4f7cbcb h1:D4uzjWwKYQ5XnAvUbuvHW93esHg7F8N/OYeBBcJoTr0=
 github.com/globalsign/mgo v0.0.0-20180905125535-1ca0a4f7cbcb/go.mod h1:xkRDCp4j0OGD1HRkm4kmhM+pmpv3AKq5SU7GMg4oO/Q=
 github.com/go-openapi/analysis v0.0.0-20180825180245-b006789cd277/go.mod h1:k70tL6pCuVxPJOHXQ+wIac1FUrvNkHolPie/cLEU6hI=

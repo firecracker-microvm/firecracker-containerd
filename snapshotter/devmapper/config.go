@@ -16,7 +16,6 @@ package devmapper
 import (
 	"encoding/json"
 	"io/ioutil"
-	"os"
 
 	"github.com/docker/go-units"
 	"github.com/hashicorp/go-multierror"
@@ -24,12 +23,14 @@ import (
 )
 
 const (
-	configPathEnvName = "FIRECRACKER_CONTAINERD_DEVMAPPER_SNAPSHOTTER_CONFIG_PATH"
-	defaultConfigPath = "/etc/containerd/firecracker-devmapper-snapshotter.json"
+	// See https://www.kernel.org/doc/Documentation/device-mapper/thin-provisioning.txt for details
+	sectorSize       = 512
+	dataBlockMinSize = 128
+	dataBlockMaxSize = 2097152
 )
 
 // Config represents device mapper configuration loaded from file.
-// Size units might be specified in human-readable string format (like "32KIB", "32GB", "32Tb")
+// Size units can be specified in human-readable string format (like "32KIB", "32GB", "32Tb")
 type Config struct {
 	// Device snapshotter root directory for metadata and mounts
 	RootPath string `json:"root_path"`
@@ -44,7 +45,7 @@ type Config struct {
 	MetadataDevice string `json:"meta_device"`
 
 	// The size of allocation chunks in data file.
-	// Must be between 128 sectors (64KB) and 2097152 sectors (1GB) and a mutlipole of 128 sectors (64KB)
+	// Must be between 128 sectors (64KB) and 2097152 sectors (1GB) and a multiple of 128 sectors (64KB)
 	// Block size can't be changed after pool created.
 	// See https://www.kernel.org/doc/Documentation/device-mapper/thin-provisioning.txt
 	DataBlockSize        string `json:"data_block_size"`
@@ -57,14 +58,6 @@ type Config struct {
 
 // LoadConfig reads devmapper configuration file JSON format from disk
 func LoadConfig(path string) (*Config, error) {
-	if path == "" {
-		path = os.Getenv(configPathEnvName)
-	}
-
-	if path == "" {
-		path = defaultConfigPath
-	}
-
 	data, err := ioutil.ReadFile(path)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to read file")
@@ -72,7 +65,11 @@ func LoadConfig(path string) (*Config, error) {
 
 	config := Config{}
 	if err := json.Unmarshal(data, &config); err != nil {
-		return nil, errors.Wrap(err, "failed to unmarshal data")
+		return nil, errors.Wrapf(err, "failed to unmarshal data at '%s'", path)
+	}
+
+	if err := config.parse(); err != nil {
+		return nil, err
 	}
 
 	if err := config.validate(); err != nil {
@@ -82,6 +79,24 @@ func LoadConfig(path string) (*Config, error) {
 	return &config, nil
 }
 
+func (c *Config) parse() error {
+	var result *multierror.Error
+
+	if blockSize, err := units.RAMInBytes(c.DataBlockSize); err != nil {
+		result = multierror.Append(result, errors.Wrapf(err, "failed to parse data block size: %q", c.DataBlockSize))
+	} else {
+		c.DataBlockSizeSectors = uint32(blockSize / sectorSize)
+	}
+
+	if baseImageSize, err := units.RAMInBytes(c.BaseImageSize); err != nil {
+		result = multierror.Append(result, errors.Wrapf(err, "failed to parse base image size: %q", c.BaseImageSize))
+	} else {
+		c.BaseImageSizeBytes = uint64(baseImageSize)
+	}
+
+	return result.ErrorOrNil()
+}
+
 func (c *Config) validate() error {
 	var result *multierror.Error
 
@@ -89,10 +104,10 @@ func (c *Config) validate() error {
 		field string
 		name  string
 	}{
-		{c.PoolName, "pool name"},
-		{c.RootPath, "root name"},
-		{c.DataDevice, "data device path"},
-		{c.MetadataDevice, "metadata device path"},
+		{c.PoolName, "pool_name"},
+		{c.RootPath, "root_path"},
+		{c.DataDevice, "data_device"},
+		{c.MetadataDevice, "meta_device"},
 	}
 
 	for _, check := range strChecks {
@@ -101,30 +116,12 @@ func (c *Config) validate() error {
 		}
 	}
 
-	const (
-		sectorSize       = 512
-		dataBlockMinSize = 128
-		dataBlockMaxSize = 2097152
-	)
-
-	if blockSize, err := units.RAMInBytes(c.DataBlockSize); err != nil {
-		result = multierror.Append(result, errors.Wrap(err, "failed to parse data block size"))
-	} else {
-		c.DataBlockSizeSectors = uint32(blockSize / sectorSize)
-	}
-
 	if c.DataBlockSizeSectors < dataBlockMinSize || c.DataBlockSizeSectors > dataBlockMaxSize {
 		result = multierror.Append(result, errors.Errorf("block size should be between %d and %d", dataBlockMinSize, dataBlockMaxSize))
 	}
 
 	if c.DataBlockSizeSectors%dataBlockMinSize != 0 {
 		result = multierror.Append(result, errors.Errorf("block size should be mutlipole of %d sectors", dataBlockMinSize))
-	}
-
-	if baseImageSize, err := units.RAMInBytes(c.BaseImageSize); err != nil {
-		result = multierror.Append(result, errors.Wrap(err, "failed to parse base image size"))
-	} else {
-		c.BaseImageSizeBytes = uint64(baseImageSize)
 	}
 
 	return result.ErrorOrNil()

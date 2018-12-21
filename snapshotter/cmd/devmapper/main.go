@@ -16,6 +16,7 @@ package main
 import (
 	"context"
 	"flag"
+	"os"
 
 	"github.com/containerd/containerd/snapshots"
 
@@ -23,11 +24,25 @@ import (
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/devmapper"
 )
 
+const (
+	configPathEnvName = "DEVMAPPER_SNAPSHOTTER_CONFIG_PATH"
+	defaultConfigPath = "/etc/containerd/firecracker-devmapper-snapshotter.json"
+)
+
 func main() {
 	var configPath string
 	flag.StringVar(&configPath, "config", "", "Path to devmapper configuration file")
 
 	snapshotter.Run(func(ctx context.Context) (snapshots.Snapshotter, error) {
+		// Flags parsing happens inside Run, so we can't make this checks earlier.
+		if configPath == "" {
+			configPath = os.Getenv(configPathEnvName)
+		}
+
+		if configPath == "" {
+			configPath = defaultConfigPath
+		}
+
 		return devmapper.NewSnapshotter(ctx, configPath)
 	})
 }

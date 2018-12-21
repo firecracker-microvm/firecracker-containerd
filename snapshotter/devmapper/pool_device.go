@@ -134,8 +134,7 @@ func (p *PoolDevice) CreateSnapshotDevice(deviceName string, snapshotName string
 		return 0, errors.Errorf("device '%s' not found", deviceName)
 	}
 
-	_, ok = p.devices[snapshotName]
-	if ok {
+	if _, ok := p.devices[snapshotName]; ok {
 		return 0, errors.Errorf("snapshot with name '%s' already exists", snapshotName)
 	}
 
@@ -207,9 +206,7 @@ func (p *PoolDevice) getNextDeviceID() int {
 }
 
 func (p *PoolDevice) tryAcquireDeviceID(acquire func(deviceID int) error) (int, error) {
-	attempt := 0
-
-	for {
+	for attempt := 0; attempt < maxDeviceID; attempt++ {
 		deviceID := p.getNextDeviceID()
 		err := acquire(deviceID)
 		if err == nil {
@@ -217,20 +214,15 @@ func (p *PoolDevice) tryAcquireDeviceID(acquire func(deviceID int) error) (int, 
 		}
 
 		if devicemapper.DeviceIDExists(err) {
-			attempt++
-			if attempt >= maxDeviceID {
-				return 0, errors.Errorf("thin-pool error: all device ids are taken")
-			}
-
 			// This device ID already taken, try next one
 			continue
 		}
 
 		// If errored for any other reason, just exit
-		if err != nil {
-			return 0, err
-		}
+		return 0, err
 	}
+
+	return 0, errors.Errorf("thin-pool error: all device ids are taken")
 }
 
 func (p *PoolDevice) removeDevice(name string, deferred bool) error {

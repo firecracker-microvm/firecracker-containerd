@@ -12,6 +12,7 @@
 # permissions and limitations under the License.
 
 SUBDIRS:=agent runtime snapshotter
+export INSTALLROOT?=/usr/local
 
 all: $(SUBDIRS)
 
@@ -31,4 +32,7 @@ deps:
 lint:
 	golangci-lint run
 
-.PHONY: all $(SUBDIRS) clean proto deps lint
+install:
+	for d in $(SUBDIRS); do $(MAKE) -C $$d install; done
+
+.PHONY: all $(SUBDIRS) clean proto deps lint install

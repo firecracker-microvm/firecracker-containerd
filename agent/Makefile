@@ -19,4 +19,7 @@ agent: *.go
 clean:
 	- rm -f agent
 
-.PHONY: clean all
+# Install is a noop here, for now.
+install:
+
+.PHONY: clean all install

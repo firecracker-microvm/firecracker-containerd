@@ -11,9 +11,9 @@
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
-all: devmapper
+all: devmapper_snapshotter
 
-devmapper: *.go
+devmapper_snapshotter: *.go
 	go build -o devmapper_snapshotter -tags libdm_dlsym_deferred_remove
 
 clean:

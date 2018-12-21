@@ -36,7 +36,8 @@ const (
 	fsTypeExt4       = "ext4"
 )
 
-// devmapper implements containerd's snapshotter based on Linux device-mapper targets.
+// devmapper implements containerd's snapshotter (https://godoc.org/github.com/containerd/containerd/snapshots#Snapshotter)
+// based on Linux device-mapper targets.
 type Snapshotter struct {
 	store  *storage.MetaStore
 	pool   *PoolDevice
@@ -44,7 +45,7 @@ type Snapshotter struct {
 }
 
 func NewSnapshotter(ctx context.Context, configPath string) (*Snapshotter, error) {
-	log.G(ctx).WithField("cfg_path", configPath).Info("creating devmapper snapshotter")
+	log.G(ctx).WithField("config-path", configPath).Info("creating devmapper snapshotter")
 
 	config, err := LoadConfig(configPath)
 	if err != nil {
@@ -247,7 +248,7 @@ func (dm *Snapshotter) createSnapshot(ctx context.Context, kind snapshots.Kind, 
 
 	mounts := dm.buildMounts(snap)
 
-	// This is needed only to pass containerd's snapshotter suite tests
+	// Remove default directories not expected by the container image
 	_ = mount.WithTempMount(ctx, mounts, func(root string) error {
 		return os.Remove(filepath.Join(root, "lost+found"))
 	})
@@ -258,6 +259,7 @@ func (dm *Snapshotter) createSnapshot(ctx context.Context, kind snapshots.Kind, 
 func (dm *Snapshotter) mkfs(ctx context.Context, deviceName string) error {
 	args := []string{
 		"-E",
+		// We don't want any zeroing in advance when running mkfs on thin devices (see "man mkfs.ext4")
 		"nodiscard,lazy_itable_init=0,lazy_journal_init=0",
 		dm.pool.GetDevicePath(deviceName),
 	}
@@ -305,13 +307,13 @@ func (dm *Snapshotter) buildMounts(snap storage.Snapshot) []mount.Mount {
 }
 
 func complete(ctx context.Context, trans storage.Transactor, err error) error {
-	if err != nil {
-		if terr := trans.Rollback(); terr != nil {
-			log.G(ctx).WithError(terr).Error("failed to rollback transaction")
-		}
-	} else {
+	if err == nil {
 		if terr := trans.Commit(); terr != nil {
 			log.G(ctx).WithError(terr).Error("failed to commit transaction")
+		}
+	} else {
+		if terr := trans.Rollback(); terr != nil {
+			log.G(ctx).WithError(terr).Error("failed to rollback transaction")
 		}
 	}
 

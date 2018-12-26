@@ -6,10 +6,6 @@ go:
 env:
   - GO111MODULE=on
 
-before_install:
-  - sudo apt-get update
-  - sudo apt-get install -y lvm2 liblvm2-dev libdevmapper-dev
-
 install:
   - make deps
 

@@ -18,7 +18,6 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
@@ -45,10 +44,15 @@ type DeviceInfo struct {
 	EventNumber     uint32 // Last event sequence number (used by wait)
 }
 
-var (
-	errTable     map[string]unix.Errno
-	errTableInit sync.Once
-)
+var errTable map[string]unix.Errno
+
+func init() {
+	// Precompute map of <text>=<errno> for optimal lookup
+	errTable = make(map[string]unix.Errno)
+	for errno := unix.EPERM; errno <= unix.EHWPOISON; errno++ {
+		errTable[errno.Error()] = errno
+	}
+}
 
 // CreatePool creates a device with the given name, data and metadata file and block size (see "dmsetup create")
 func CreatePool(poolName, dataFile, metaFile string, blockSizeSectors uint32) error {
@@ -285,16 +289,6 @@ func dmsetup(args ...string) (string, error) {
 	return output, nil
 }
 
-func initErrTable() {
-	errTableInit.Do(func() {
-		// Precompute map of <text>=<errno> for optimal lookup
-		errTable = make(map[string]unix.Errno)
-		for errno := unix.EPERM; errno <= unix.EHWPOISON; errno++ {
-			errTable[errno.Error()] = errno
-		}
-	})
-}
-
 // tryGetUnixError tries to find Linux error code from dmsetup output
 func tryGetUnixError(output string) (unix.Errno, bool) {
 	// It's useful to have Linux error codes like EBUSY, EPERM, ..., instead of just text.
@@ -303,8 +297,6 @@ func tryGetUnixError(output string) (unix.Errno, bool) {
 	if text == "" {
 		return 0, false
 	}
-
-	initErrTable()
 
 	err, ok := errTable[text]
 	return err, ok

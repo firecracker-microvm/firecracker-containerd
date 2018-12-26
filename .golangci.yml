@@ -19,6 +19,3 @@ linters:
     - prealloc
     - scopelint
     - gocritic
-run:
-  build-tags:
-    - libdm_dlsym_deferred_remove

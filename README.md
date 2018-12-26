@@ -70,9 +70,9 @@ channel on the [Firecracker Slack](https://tinyurl.com/firecracker-microvm)
 Each of the components requires Go 1.11 and utilizes Go modules.  You must have
 a properly set up Go toolchain capable of building the components.
 
-The devicemapper snapshotter requires the C-language libdevmapper headers to be
-installed and available on your computer.  On Ubuntu, these headers can be
-installed from the `libdevmapper-dev` package.
+The devicemapper snapshotter requires `dmsetup` command line tool to be
+installed and available on your computer. On Ubuntu, it can be installed
+with `apt-get install dmsetup` command.
 
 ### Running
 

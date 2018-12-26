@@ -80,7 +80,7 @@ func TestDMSetup(t *testing.T) {
 	t.Run("RemoveDevice", testRemoveDevice)
 
 	t.Run("RemovePool", func(t *testing.T) {
-		err = RemoveDevice(testPoolName, true, true, false)
+		err = RemoveDevice(testPoolName, RemoveWithForce, RemoveWithRetries)
 		require.NoErrorf(t, err, "failed to remove thin-pool")
 	})
 
@@ -154,10 +154,10 @@ func testSuspendResumeDevice(t *testing.T) {
 }
 
 func testRemoveDevice(t *testing.T) {
-	err := RemoveDevice(testPoolName, false, false, false)
+	err := RemoveDevice(testPoolName)
 	assert.EqualValues(t, unix.EBUSY, err, "removing thin-pool with dependencies shouldn't be allowed")
 
-	err = RemoveDevice(testDeviceName, false, true, false)
+	err = RemoveDevice(testDeviceName, RemoveWithRetries)
 	assert.NoErrorf(t, err, "failed to remove thin-device")
 }
 

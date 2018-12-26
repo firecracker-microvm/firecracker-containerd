@@ -44,9 +44,10 @@ func NewPoolDevice(ctx context.Context, poolName, dataVolume, metaVolume string,
 	version, err := dmsetup.Version()
 	if err != nil {
 		log.G(ctx).Errorf("dmsetup not available")
-	} else {
-		log.G(ctx).Debugf("using dmsetup: %s", version)
+		return nil, err
 	}
+
+	log.G(ctx).Infof("using dmsetup: %s", version)
 
 	poolPath := dmsetup.GetFullDevicePath(poolName)
 	if _, err := os.Stat(poolPath); err == nil {
@@ -130,7 +131,12 @@ func (p *PoolDevice) CreateSnapshotDevice(deviceName string, snapshotName string
 }
 
 func (p *PoolDevice) RemoveDevice(deviceName string, deferred bool) error {
-	if err := dmsetup.RemoveDevice(deviceName, true, true, deferred); err != nil {
+	opts := []dmsetup.RemoveDeviceOpt{dmsetup.RemoveWithForce, dmsetup.RemoveWithRetries}
+	if deferred {
+		opts = append(opts, dmsetup.RemoveDeferred)
+	}
+
+	if err := dmsetup.RemoveDevice(deviceName, opts...); err != nil {
 		return errors.Wrapf(err, "failed to remove device '%s'", deviceName)
 	}
 
@@ -147,7 +153,7 @@ func (p *PoolDevice) RemovePool() error {
 		}
 	}
 
-	if err := dmsetup.RemoveDevice(p.poolName, true, true, true); err != nil {
+	if err := dmsetup.RemoveDevice(p.poolName, dmsetup.RemoveWithForce, dmsetup.RemoveWithRetries, dmsetup.RemoveDeferred); err != nil {
 		result = multierror.Append(result, errors.Wrapf(err, "failed to remove pool %q", p.poolName))
 	}
 

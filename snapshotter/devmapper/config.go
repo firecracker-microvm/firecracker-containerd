@@ -32,7 +32,7 @@ const (
 // Config represents device mapper configuration loaded from file.
 // Size units can be specified in human-readable string format (like "32KIB", "32GB", "32Tb")
 type Config struct {
-	// Device snapshotter root directory for metadata and mounts
+	// Device snapshotter root directory for metadata
 	RootPath string `json:"root_path"`
 
 	// Name for 'thin-pool' device to be used by snapshotter (without /dev/mapper/ prefix)

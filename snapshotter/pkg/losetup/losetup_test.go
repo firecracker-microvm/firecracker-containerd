@@ -44,11 +44,13 @@ func TestLosetup(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotEqualf(t, dev2, dev1, "should attach different loop device")
 
-		_, err = AttachLoopDevice("")
-		assert.Error(t, err, "shouldn't attach empty path")
-
 		loopDevice1 = dev1
 		loopDevice2 = dev2
+	})
+
+	t.Run("AttachEmptyLoopDevice", func(t *testing.T) {
+		_, err := AttachLoopDevice("")
+		assert.Error(t, err, "shouldn't attach empty path")
 	})
 
 	t.Run("FindAssociatedLoopDevices", func(t *testing.T) {
@@ -56,8 +58,10 @@ func TestLosetup(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Lenf(t, devices, 2, "unexpected number of attached devices")
 		assert.ElementsMatch(t, devices, []string{loopDevice1, loopDevice2})
+	})
 
-		devices, err = FindAssociatedLoopDevices("")
+	t.Run("FindAssociatedLoopDevicesForInvalidImage", func(t *testing.T) {
+		devices, err := FindAssociatedLoopDevices("")
 		assert.NoError(t, err)
 		assert.Empty(t, devices)
 	})
@@ -65,8 +69,10 @@ func TestLosetup(t *testing.T) {
 	t.Run("DetachLoopDevice", func(t *testing.T) {
 		err := DetachLoopDevice(loopDevice2)
 		require.NoErrorf(t, err, "failed to detach %q", loopDevice2)
+	})
 
-		err = DetachLoopDevice("")
+	t.Run("DetachEmptyDevice", func(t *testing.T) {
+		err := DetachLoopDevice("")
 		assert.Error(t, err, "shouldn't detach empty path")
 	})
 
@@ -77,8 +83,10 @@ func TestLosetup(t *testing.T) {
 		devices, err := FindAssociatedLoopDevices(imagePath)
 		assert.NoError(t, err)
 		assert.Empty(t, devices)
+	})
 
-		err = RemoveLoopDevicesAssociatedWithImage("")
+	t.Run("RemoveLoopDevicesAssociatedWithInvalidImage", func(t *testing.T) {
+		err := RemoveLoopDevicesAssociatedWithImage("")
 		assert.NoError(t, err)
 	})
 }

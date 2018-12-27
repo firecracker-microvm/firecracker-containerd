@@ -20,13 +20,19 @@ import (
 	"github.com/docker/go-units"
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
+
+	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/pkg/dmsetup"
 )
 
 const (
 	// See https://www.kernel.org/doc/Documentation/device-mapper/thin-provisioning.txt for details
-	sectorSize       = 512
 	dataBlockMinSize = 128
 	dataBlockMaxSize = 2097152
+)
+
+var (
+	errInvalidBlockSize      = errors.Errorf("block size should be between %d and %d", dataBlockMinSize, dataBlockMaxSize)
+	errInvalidBlockAlignment = errors.Errorf("block size should be multiple of %d sectors", dataBlockMinSize)
 )
 
 // Config represents device mapper configuration loaded from file.
@@ -85,7 +91,7 @@ func (c *Config) parse() error {
 	if blockSize, err := units.RAMInBytes(c.DataBlockSize); err != nil {
 		result = multierror.Append(result, errors.Wrapf(err, "failed to parse data block size: %q", c.DataBlockSize))
 	} else {
-		c.DataBlockSizeSectors = uint32(blockSize / sectorSize)
+		c.DataBlockSizeSectors = uint32(blockSize / dmsetup.SectorSize)
 	}
 
 	if baseImageSize, err := units.RAMInBytes(c.BaseImageSize); err != nil {
@@ -117,11 +123,11 @@ func (c *Config) validate() error {
 	}
 
 	if c.DataBlockSizeSectors < dataBlockMinSize || c.DataBlockSizeSectors > dataBlockMaxSize {
-		result = multierror.Append(result, errors.Errorf("block size should be between %d and %d", dataBlockMinSize, dataBlockMaxSize))
+		result = multierror.Append(result, errInvalidBlockSize)
 	}
 
 	if c.DataBlockSizeSectors%dataBlockMinSize != 0 {
-		result = multierror.Append(result, errors.Errorf("block size should be mutlipole of %d sectors", dataBlockMinSize))
+		result = multierror.Append(result, errInvalidBlockAlignment)
 	}
 
 	return result.ErrorOrNil()

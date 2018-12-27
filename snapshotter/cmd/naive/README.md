@@ -1,4 +1,4 @@
-# containerd-firecracker-snapshotter
+# Naive device snapshotter for containerd and Firecracker
 
 This component is a
 [snapshotter](https://github.com/containerd/containerd/blob/master/design/snapshots.md)
@@ -14,11 +14,6 @@ sacrifices efficiency in order to achieve this compatibility. Each layer in a
 container image is represented as a unique filesystem image. Each container is
 given a complete private copy of it's root filesystem image upon creation. Thus,
 container creation is expensive in terms IO and disk space.
-
-We should consider writing a more efficient snapshotter plugin. Linux's
-device-mapper subsystem would allow us to build something based on copy-on-write
-snapshots that is performant and space-efficient, with the tradeoff being that
-it would require some additional setup on the host. 
 
 ## Installation
 

@@ -58,7 +58,7 @@ var (
 	ErrAlreadyExists = errors.New("object already exists")
 )
 
-// PoolMetadata keeps device info for the given thin-pool device, it also reponsible for
+// PoolMetadata keeps device info for the given thin-pool device, it also responsible for
 // generating next available device ids and tracking devmapper transaction numbers
 type PoolMetadata struct {
 	db *bolt.DB
@@ -93,7 +93,7 @@ func (m *PoolMetadata) ensureDatabaseInitialized() error {
 }
 
 // AddDevice saves device info to database.
-// Callback should be used to aquire device ID or to rollback transaction in case of error.
+// Callback should be used to acquire device ID or to rollback transaction in case of error.
 func (m *PoolMetadata) AddDevice(ctx context.Context, info *DeviceInfo, fn DeviceIDCallback) error {
 	return m.db.Update(func(tx *bolt.Tx) error {
 		devicesBucket := tx.Bucket(devicesBucketName)

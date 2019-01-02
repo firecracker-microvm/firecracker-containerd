@@ -26,7 +26,7 @@ require (
 	github.com/pkg/errors v0.8.0
 	github.com/sirupsen/logrus v1.2.0
 	github.com/stretchr/testify v1.2.2
-	go.etcd.io/bbolt v1.3.0 // indirect
+	go.etcd.io/bbolt v1.3.0
 	golang.org/x/sync v0.0.0-20181108010431-42b317875d0f
 	golang.org/x/sys v0.0.0-20181107165924-66b7b1311ac8
 	google.golang.org/genproto v0.0.0-20181109154231-b5d43981345b // indirect

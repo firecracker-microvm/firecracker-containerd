@@ -37,16 +37,21 @@ const (
 	fsTypeExt4       = "ext4"
 )
 
+type closeFunc func() error
+
 // devmapper implements containerd's snapshotter (https://godoc.org/github.com/containerd/containerd/snapshots#Snapshotter)
 // based on Linux device-mapper targets.
 type Snapshotter struct {
-	store  *storage.MetaStore
-	pool   *PoolDevice
-	config *Config
+	store     *storage.MetaStore
+	pool      *PoolDevice
+	config    *Config
+	cleanupFn []closeFunc
 }
 
 func NewSnapshotter(ctx context.Context, configPath string) (*Snapshotter, error) {
 	log.G(ctx).WithField("config-path", configPath).Info("creating devmapper snapshotter")
+
+	var cleanupFn []closeFunc
 
 	config, err := LoadConfig(configPath)
 	if err != nil {
@@ -62,15 +67,20 @@ func NewSnapshotter(ctx context.Context, configPath string) (*Snapshotter, error
 		return nil, errors.Wrap(err, "failed to create metastore")
 	}
 
-	poolDevice, err := NewPoolDevice(ctx, config.PoolName, config.DataDevice, config.MetadataDevice, config.DataBlockSizeSectors)
+	cleanupFn = append(cleanupFn, store.Close)
+
+	poolDevice, err := NewPoolDevice(ctx, config)
 	if err != nil {
 		return nil, err
 	}
 
+	cleanupFn = append(cleanupFn, poolDevice.Close)
+
 	return &Snapshotter{
-		store:  store,
-		config: config,
-		pool:   poolDevice,
+		store:     store,
+		config:    config,
+		pool:      poolDevice,
+		cleanupFn: cleanupFn,
 	}, nil
 }
 
@@ -172,7 +182,7 @@ func (dm *Snapshotter) Remove(ctx context.Context, key string) error {
 	}
 
 	deviceName := dm.getDeviceName(snapID)
-	if err := dm.pool.RemoveDevice(deviceName, true); err != nil {
+	if err := dm.pool.RemoveDevice(ctx, deviceName, true); err != nil {
 		log.G(ctx).WithError(err).Errorf("failed to remove device")
 		return complete(ctx, trans, err)
 	}
@@ -196,9 +206,10 @@ func (dm *Snapshotter) Close() error {
 	log.L.Debug("close")
 
 	var result *multierror.Error
-
-	if err := dm.store.Close(); err != nil {
-		result = multierror.Append(result, err)
+	for _, fn := range dm.cleanupFn {
+		if err := fn(); err != nil {
+			result = multierror.Append(result, err)
+		}
 	}
 
 	return result.ErrorOrNil()
@@ -219,13 +230,12 @@ func (dm *Snapshotter) createSnapshot(ctx context.Context, kind snapshots.Kind, 
 		deviceName := dm.getDeviceName(snap.ID)
 		log.G(ctx).Debugf("creating new thin device '%s'", deviceName)
 
-		deviceID, err := dm.pool.CreateThinDevice(deviceName, dm.config.BaseImageSizeBytes)
+		err := dm.pool.CreateThinDevice(ctx, deviceName, dm.config.BaseImageSizeBytes)
 		if err != nil {
 			log.G(ctx).WithError(err).Errorf("failed to create thin device for snapshot %s", snap.ID)
 			return nil, complete(ctx, trans, err)
 		}
 
-		log.G(ctx).Debugf("created thin device with id %d", deviceID)
 		if err := dm.mkfs(ctx, deviceName); err != nil {
 			return nil, complete(ctx, trans, err)
 		}
@@ -234,13 +244,11 @@ func (dm *Snapshotter) createSnapshot(ctx context.Context, kind snapshots.Kind, 
 		snapDeviceName := dm.getDeviceName(snap.ID)
 		log.G(ctx).Debugf("creating snapshot device '%s' from '%s'", snapDeviceName, parentDeviceName)
 
-		snapDeviceID, err := dm.pool.CreateSnapshotDevice(parentDeviceName, snapDeviceName, dm.config.BaseImageSizeBytes)
+		err := dm.pool.CreateSnapshotDevice(ctx, parentDeviceName, snapDeviceName, dm.config.BaseImageSizeBytes)
 		if err != nil {
 			log.G(ctx).WithError(err).Errorf("failed to create snapshot device from parent %s", parentDeviceName)
 			return nil, complete(ctx, trans, err)
 		}
-
-		log.G(ctx).Debugf("created snapshot device with id %d", snapDeviceID)
 	}
 
 	mounts := dm.buildMounts(snap)
@@ -306,6 +314,8 @@ func complete(ctx context.Context, trans storage.Transactor, err error) error {
 			log.G(ctx).WithError(terr).Error("failed to commit transaction")
 		}
 	} else {
+		log.G(ctx).WithError(err).Debug("snapshotter error")
+
 		if terr := trans.Rollback(); terr != nil {
 			log.G(ctx).WithError(terr).Error("failed to rollback transaction")
 		}

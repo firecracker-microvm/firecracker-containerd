@@ -27,7 +27,7 @@ import (
 
 var (
 	testCtx             = context.Background()
-	testDevIDCallback   = func(int) error { return nil }
+	testDevIDCallback   = func(uint32) error { return nil }
 	testDevInfoCallback = func(*DeviceInfo) error { return nil }
 )
 
@@ -61,7 +61,7 @@ func TestPoolMetadata_AddDeviceRollback(t *testing.T) {
 	defer cleanupStore(t, tempDir, store)
 
 	expectedErr := errors.New("add failed")
-	err := store.AddDevice(testCtx, &DeviceInfo{Name: "test2"}, func(int) error { return expectedErr })
+	err := store.AddDevice(testCtx, &DeviceInfo{Name: "test2"}, func(uint32) error { return expectedErr })
 	assert.Equal(t, expectedErr, err)
 
 	_, err = store.GetDevice(testCtx, "test2")
@@ -136,7 +136,6 @@ func TestPoolMetadata_UpdateDevice(t *testing.T) {
 		info.ParentName = "test5"
 		info.Size = 6
 		info.IsActivated = false
-		info.Name = "test4"
 		return nil
 	})
 

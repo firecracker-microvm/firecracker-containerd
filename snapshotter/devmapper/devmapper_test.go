@@ -58,6 +58,7 @@ func TestSnapshotterSuite(t *testing.T) {
 			return nil, nil, err
 		}
 
+		// Remove device mapper pool after test completes
 		removePool := func() error {
 			if err := snap.pool.RemovePool(ctx); err != nil {
 				// Some tests call 'Close' twice, so ignore ErrDatabaseNotOpen

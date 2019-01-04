@@ -110,20 +110,20 @@ func makeThinPoolMapping(dataFile, metaFile string, blockSizeSectors uint32) (st
 }
 
 // CreateDevice sends "create_thin <deviceID>" message to the given thin-pool
-func CreateDevice(poolName string, deviceID int) error {
+func CreateDevice(poolName string, deviceID uint32) error {
 	_, err := dmsetup("message", poolName, "0", fmt.Sprintf("create_thin %d", deviceID))
 	return err
 }
 
 // ActivateDevice activates the given thin-device using the 'thin' target
-func ActivateDevice(poolName string, deviceName string, deviceID int, size uint64, external string) error {
+func ActivateDevice(poolName string, deviceName string, deviceID uint32, size uint64, external string) error {
 	mapping := makeThinMapping(poolName, deviceID, size, external)
 	_, err := dmsetup("create", deviceName, "--table", mapping)
 	return err
 }
 
 // makeThinMapping makes thin target table entry
-func makeThinMapping(poolName string, deviceID int, sizeBytes uint64, externalOriginDevice string) string {
+func makeThinMapping(poolName string, deviceID uint32, sizeBytes uint64, externalOriginDevice string) string {
 	lengthSectors := sizeBytes / SectorSize
 
 	// Thin target has the following format:
@@ -155,7 +155,7 @@ func Table(deviceName string) (string, error) {
 
 // CreateSnapshot sends "create_snap" message to the given thin-pool.
 // Caller needs to suspend and resume device if it is active.
-func CreateSnapshot(poolName string, deviceID int, baseDeviceID int) error {
+func CreateSnapshot(poolName string, deviceID uint32, baseDeviceID uint32) error {
 	_, err := dmsetup("message", poolName, "0", fmt.Sprintf("create_snap %d %d", deviceID, baseDeviceID))
 	return err
 }

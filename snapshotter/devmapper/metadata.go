@@ -16,6 +16,7 @@ package devmapper
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strconv"
 
 	"github.com/pkg/errors"
@@ -24,27 +25,32 @@ import (
 
 // DeviceInfo represents metadata for thin device within thin-pool
 type DeviceInfo struct {
-	// 24-bit number assigned to a device within thin-pool device
-	DeviceID int `json:"device_id"`
-	// thin device size
+	// DeviceID is a 24-bit number assigned to a device within thin-pool device
+	DeviceID uint32 `json:"device_id"`
+	// Size is a thin device size
 	Size uint64 `json:"size"`
-	// Device name to be used in /dev/mapper/
+	// Name is a device name to be used in /dev/mapper/
 	Name string `json:"name"`
-	// Name of parent device (if snapshot)
+	// ParentName is a name of parent device (if snapshot)
 	ParentName string `json:"parent_name"`
-	// true if thin device was actived
+	// IsActivated indicates whether thin device was actived
 	IsActivated bool `json:"is_active"`
 }
 
 type (
-	DeviceIDCallback   func(deviceID int) error
+	DeviceIDCallback   func(deviceID uint32) error
 	DeviceInfoCallback func(deviceInfo *DeviceInfo) error
 )
 
 const (
 	maxDeviceID = 0xffffff // Device IDs are 24-bit numbers
-	deviceFree  = byte(0)
-	deviceTaken = byte(1)
+)
+
+type deviceState byte
+
+const (
+	deviceFree deviceState = iota
+	deviceTaken
 )
 
 // Bucket names
@@ -123,7 +129,11 @@ func (m *PoolMetadata) AddDevice(ctx context.Context, info *DeviceInfo, fn Devic
 	})
 }
 
-func getNextDeviceID(tx *bolt.Tx) (int, error) {
+// getNextDeviceID finds the next free device ID by taking a cursor
+// through the deviceIDBucketName bucket and finding the next sequentially
+// unassigned ID.  Device ID state is marked by a byte deviceFree or
+// deviceTaken.  Low device IDs will be reused sooner.
+func getNextDeviceID(tx *bolt.Tx) (uint32, error) {
 	bucket := tx.Bucket(deviceIDBucketName)
 	cursor := bucket.Cursor()
 
@@ -131,19 +141,22 @@ func getNextDeviceID(tx *bolt.Tx) (int, error) {
 	// Bolt stores its keys in byte-sorted order within a bucket.
 	// This makes sequential iteration extremely fast.
 	for key, taken := cursor.First(); key != nil; key, taken = cursor.Next() {
-		isFree := taken[0] == deviceFree
-		if isFree {
-			id, err := strconv.Atoi(string(key))
-			if err != nil {
-				return 0, err
-			}
-
-			if err := markDeviceID(tx, id, deviceTaken); err != nil {
-				return 0, err
-			}
-
-			return id, nil
+		isFree := taken[0] == byte(deviceFree)
+		if !isFree {
+			continue
 		}
+
+		parsedID, err := strconv.ParseUint(string(key), 10, 32)
+		if err != nil {
+			return 0, err
+		}
+
+		id := uint32(parsedID)
+		if err := markDeviceID(tx, id, deviceTaken); err != nil {
+			return 0, err
+		}
+
+		return id, nil
 	}
 
 	// Try allocate new device ID
@@ -153,10 +166,10 @@ func getNextDeviceID(tx *bolt.Tx) (int, error) {
 	}
 
 	if seq >= maxDeviceID {
-		return 0, errors.Errorf("couldn't find free device key")
+		return 0, errors.Errorf("dm-meta: couldn't find free device key")
 	}
 
-	id := int(seq)
+	id := uint32(seq)
 	if err := markDeviceID(tx, id, deviceTaken); err != nil {
 		return 0, err
 	}
@@ -164,11 +177,12 @@ func getNextDeviceID(tx *bolt.Tx) (int, error) {
 	return id, nil
 }
 
-func markDeviceID(tx *bolt.Tx, deviceID int, state byte) error {
+// markDeviceID marks a device as deviceFree or deviceTaken
+func markDeviceID(tx *bolt.Tx, deviceID uint32, state deviceState) error {
 	var (
 		bucket = tx.Bucket(deviceIDBucketName)
-		key    = strconv.Itoa(deviceID)
-		value  = []byte{state}
+		key    = strconv.FormatUint(uint64(deviceID), 10)
+		value  = []byte{byte(state)}
 	)
 
 	if err := bucket.Put([]byte(key), value); err != nil {
@@ -180,7 +194,7 @@ func markDeviceID(tx *bolt.Tx, deviceID int, state byte) error {
 
 // UpdateDevice updates device info in metadata store.
 // Callback should be used to modify device properties or to rollback update transaction.
-// Name and Device ID couldn't be changed and will be ignored.
+// Name and Device ID are not allowed to change.
 func (m *PoolMetadata) UpdateDevice(ctx context.Context, name string, fn DeviceInfoCallback) error {
 	return m.db.Update(func(tx *bolt.Tx) error {
 		var (
@@ -200,8 +214,13 @@ func (m *PoolMetadata) UpdateDevice(ctx context.Context, name string, fn DeviceI
 			return err
 		}
 
-		device.Name = name
-		device.DeviceID = devID
+		if name != device.Name {
+			return fmt.Errorf("failed to update device info, name didn't match: %q %q", name, device.Name)
+		}
+
+		if devID != device.DeviceID {
+			return fmt.Errorf("failed to update device info, device id didn't match: %d %d", devID, device.DeviceID)
+		}
 
 		return putObject(bucket, name, device, true)
 	})

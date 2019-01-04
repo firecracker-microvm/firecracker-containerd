@@ -80,7 +80,7 @@ func (p *PoolDevice) CreateThinDevice(ctx context.Context, deviceName string, vi
 	}
 
 	// Create thin device and save metadata
-	err := p.metadata.AddDevice(ctx, deviceInfo, func(devID int) error {
+	err := p.metadata.AddDevice(ctx, deviceInfo, func(devID uint32) error {
 		return dmsetup.CreateDevice(p.poolName, devID)
 	})
 
@@ -117,7 +117,7 @@ func (p *PoolDevice) CreateSnapshotDevice(ctx context.Context, deviceName string
 		ParentName: deviceName,
 	}
 
-	err = p.metadata.AddDevice(ctx, snapshotDeviceInfo, func(devID int) error {
+	err = p.metadata.AddDevice(ctx, snapshotDeviceInfo, func(devID uint32) error {
 		return dmsetup.CreateSnapshot(p.poolName, devID, baseDeviceInfo.DeviceID)
 	})
 

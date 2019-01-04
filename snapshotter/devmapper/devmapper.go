@@ -20,6 +20,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/mount"
@@ -46,6 +47,7 @@ type Snapshotter struct {
 	pool      *PoolDevice
 	config    *Config
 	cleanupFn []closeFunc
+	closeOnce sync.Once
 }
 
 func NewSnapshotter(ctx context.Context, configPath string) (*Snapshotter, error) {
@@ -206,11 +208,13 @@ func (dm *Snapshotter) Close() error {
 	log.L.Debug("close")
 
 	var result *multierror.Error
-	for _, fn := range dm.cleanupFn {
-		if err := fn(); err != nil {
-			result = multierror.Append(result, err)
+	dm.closeOnce.Do(func() {
+		for _, fn := range dm.cleanupFn {
+			if err := fn(); err != nil {
+				result = multierror.Append(result, err)
+			}
 		}
-	}
+	})
 
 	return result.ErrorOrNil()
 }

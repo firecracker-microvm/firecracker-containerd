@@ -24,11 +24,9 @@ import (
 
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/containerd/snapshots/testsuite"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/bbolt"
 
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/pkg/losetup"
 )
@@ -60,16 +58,7 @@ func TestSnapshotterSuite(t *testing.T) {
 
 		// Remove device mapper pool after test completes
 		removePool := func() error {
-			if err := snap.pool.RemovePool(ctx); err != nil {
-				// Some tests call 'Close' twice, so ignore ErrDatabaseNotOpen
-				if errors.Cause(err) == bolt.ErrDatabaseNotOpen {
-					return nil
-				}
-
-				return err
-			}
-
-			return nil
+			return snap.pool.RemovePool(ctx)
 		}
 
 		// Pool cleanup should be called before closing metadata store (as we need to retrieve device names)

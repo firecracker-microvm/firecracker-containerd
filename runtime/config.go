@@ -33,7 +33,6 @@ type Config struct {
 	CPUCount              int               `json:"cpu_count"`
 	CPUTemplate           string            `json:"cpu_template"`
 	AdditionalDrives      map[string]string `json:"additional_drives"`
-	Console               string            `json:"console"`
 	LogFifo               string            `json:"log_fifo"`
 	LogLevel              string            `json:"log_level"`
 	MetricsFifo           string            `json:"metrics_fifo"`

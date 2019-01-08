@@ -22,6 +22,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"time"
 	"unsafe"
@@ -37,6 +38,7 @@ import (
 	"github.com/containerd/fifo"
 	"github.com/containerd/ttrpc"
 	"github.com/firecracker-microvm/firecracker-go-sdk"
+	models "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 	ptypes "github.com/gogo/protobuf/types"
 	"github.com/mdlayher/vsock"
 	"github.com/pkg/errors"
@@ -598,44 +600,63 @@ func (s *service) startVM(ctx context.Context, request *taskAPI.CreateTaskReques
 	}
 
 	cfg := firecracker.Config{
-		BinPath:         s.config.FirecrackerBinaryPath,
 		SocketPath:      s.config.SocketPath,
 		VsockDevices:    []firecracker.VsockDevice{{Path: "root", CID: cid}},
 		KernelImagePath: s.config.KernelImagePath,
 		KernelArgs:      s.config.KernelArgs,
-		RootDrive:       firecracker.BlockDevice{HostPath: s.config.RootDrive, Mode: "rw"},
-		CPUCount:        int64(s.config.CPUCount),
-		CPUTemplate:     firecracker.CPUTemplate(s.config.CPUTemplate),
-		MemInMiB:        256,
-		Console:         s.config.Console,
-		LogFifo:         s.config.LogFifo,
-		LogLevel:        s.config.LogLevel,
-		MetricsFifo:     s.config.MetricsFifo,
-		Debug:           s.config.Debug,
+		MachineCfg: models.MachineConfiguration{
+			VcpuCount:   int64(s.config.CPUCount),
+			CPUTemplate: models.CPUTemplate(s.config.CPUTemplate),
+			MemSizeMib:  256,
+		},
+		LogFifo:     s.config.LogFifo,
+		LogLevel:    s.config.LogLevel,
+		MetricsFifo: s.config.MetricsFifo,
+		Debug:       s.config.Debug,
 	}
 
+	idx := strconv.Itoa(1)
+	cfg.Drives = append(cfg.Drives,
+		models.Drive{
+			DriveID:      &idx,
+			PathOnHost:   &s.config.RootDrive,
+			IsRootDevice: firecracker.Bool(true),
+			IsReadOnly:   firecracker.Bool(false),
+		})
+
 	// Attach block devices passed from snapshotter
-	for _, mnt := range request.Rootfs {
+	for i, mnt := range request.Rootfs {
 		if mnt.Type != supportedMountFSType {
 			return nil, errors.Errorf("unsupported mount type '%s', expected '%s'", mnt.Type, supportedMountFSType)
 		}
-
-		cfg.AdditionalDrives = append(cfg.AdditionalDrives, firecracker.BlockDevice{HostPath: mnt.Source, Mode: "rw"})
+		idx := strconv.Itoa(i + 2)
+		cfg.Drives = append(cfg.Drives,
+			models.Drive{
+				DriveID:      &idx,
+				PathOnHost:   firecracker.String(mnt.Source),
+				IsRootDevice: firecracker.Bool(false),
+				IsReadOnly:   firecracker.Bool(false),
+			})
 	}
 
-	s.machine = firecracker.NewMachine(cfg, firecracker.WithLogger(log.G(ctx)))
-	s.machineCID = cid
+	cmd := firecracker.VMCommandBuilder{}.
+		WithBin(s.config.FirecrackerBinaryPath).
+		WithSocketPath(s.config.SocketPath).
+		Build(ctx)
+	machineOpts := []firecracker.Opt{
+		firecracker.WithProcessRunner(cmd),
+	}
 
-	log.G(ctx).Println("initializing machine")
-	if _, err := s.machine.Init(ctx); err != nil {
-		log.G(ctx).WithError(err).Error("machine init failed")
+	vmmCtx, vmmCancel := context.WithCancel(context.Background())
+	defer vmmCancel()
+	s.machine, err = firecracker.NewMachine(vmmCtx, cfg, machineOpts...)
+	if err != nil {
 		return nil, err
 	}
+	s.machineCID = cid
 
 	log.G(ctx).Info("starting instance")
-	if err := s.machine.StartInstance(ctx); err != nil {
-		log.G(ctx).WithError(err).Error("failed to start instance")
-		s.stopVM()
+	if err := s.machine.Start(vmmCtx); err != nil {
 		return nil, err
 	}
 

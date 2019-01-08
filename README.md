@@ -29,7 +29,9 @@ to use Firecracker microVMs to run containers:
 * A [snapshotter](snapshotter) that creates files used as block-devices for
   pass-through into the microVM.  This snapshotter is used for providing the
   container image to the microVM.  The snapshotter runs as an out-of-process
-  gRPC proxy plugin.
+  gRPC proxy plugin.  We currently have two implementations of a snapshotter: a
+  [naive](snapshotter/cmd/naive) copy-ahead implementation and a
+  [devmapper-based] copy-on-write implementation.
 * A [runtime](runtime) linking containerd (outside the microVM) to the
   Firecracker virtual machine manager (VMM).  The runtime is implemented as an
   out-of-process
@@ -69,6 +71,10 @@ channel on the [Firecracker Slack](https://tinyurl.com/firecracker-microvm)
 
 Each of the components requires Go 1.11 and utilizes Go modules.  You must have
 a properly set up Go toolchain capable of building the components.
+
+The devicemapper snapshotter requires `dmsetup` command line tool to be
+installed and available on your computer. On Ubuntu, it can be installed
+with `apt-get install dmsetup` command.
 
 ### Running
 

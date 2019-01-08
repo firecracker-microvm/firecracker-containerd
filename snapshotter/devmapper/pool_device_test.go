@@ -19,13 +19,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/docker/go-units"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/pkg/dmsetup"
+	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/pkg/losetup"
 )
 
 const (
@@ -51,27 +53,35 @@ func TestPoolDevice(t *testing.T) {
 	logrus.SetLevel(logrus.DebugLevel)
 	ctx := context.Background()
 
-	dataImagePath, loopDataDevice := createLoopbackDevice(t, "")
-	metaImagePath, loopMetaDevice := createLoopbackDevice(t, "")
+	tempDir, err := ioutil.TempDir("", "pool-device-test-")
+	require.NoErrorf(t, err, "couldn't get temp directory for testing")
+
+	_, loopDataDevice := createLoopbackDevice(t, tempDir)
+	_, loopMetaDevice := createLoopbackDevice(t, tempDir)
 
 	defer func() {
 		// Detach loop devices and remove images
-		err := exec.Command("losetup", "--detach", loopDataDevice, loopMetaDevice).Run()
+		err := losetup.DetachLoopDevice(loopDataDevice, loopMetaDevice)
 		assert.NoError(t, err)
 
-		err = os.Remove(metaImagePath)
-		assert.NoErrorf(t, err, "failed to remove metadata file: %s", metaImagePath)
-
-		err = os.Remove(dataImagePath)
-		assert.NoErrorf(t, err, "failed to remove data file: %s", dataImagePath)
+		err = os.RemoveAll(tempDir)
+		assert.NoErrorf(t, err, "couldn't cleanup temp directory")
 	}()
 
-	pool, err := NewPoolDevice(ctx, "test-pool-device", loopDataDevice, loopMetaDevice, 128)
+	config := &Config{
+		PoolName:             "test-pool-device-1",
+		RootPath:             tempDir,
+		DataDevice:           loopDataDevice,
+		MetadataDevice:       loopMetaDevice,
+		DataBlockSizeSectors: 128,
+	}
+
+	pool, err := NewPoolDevice(ctx, config)
 	require.NoError(t, err, "can't create device pool")
 	require.NotNil(t, pool)
 
 	defer func() {
-		err := pool.Close(ctx, true, true)
+		err := pool.RemovePool(ctx)
 		require.NoError(t, err, "can't close device pool")
 	}()
 
@@ -87,7 +97,7 @@ func TestPoolDevice(t *testing.T) {
 
 	// Mount 'thin-1'
 	thin1MountPath := tempMountPath(t)
-	output, err := exec.Command("mount", pool.GetDevicePath(thinDevice1), thin1MountPath).CombinedOutput()
+	output, err := exec.Command("mount", dmsetup.GetFullDevicePath(thinDevice1), thin1MountPath).CombinedOutput()
 	require.NoErrorf(t, err, "failed to mount '%s': %s", thinDevice1, string(output))
 
 	// Write v1 test file on 'thin-1' device
@@ -106,7 +116,7 @@ func TestPoolDevice(t *testing.T) {
 
 	// Mount 'snap-1' and make sure TEST file is v1
 	snap1MountPath := tempMountPath(t)
-	output, err = exec.Command("mount", pool.GetDevicePath(snapDevice1), snap1MountPath).CombinedOutput()
+	output, err = exec.Command("mount", dmsetup.GetFullDevicePath(snapDevice1), snap1MountPath).CombinedOutput()
 	require.NoErrorf(t, err, "failed to mount '%s' device: %s", snapDevice1, string(output))
 
 	// Read test file from snapshot device and make sure it's v1
@@ -124,20 +134,28 @@ func TestPoolDevice(t *testing.T) {
 }
 
 func testCreateThinDevice(t *testing.T, pool *PoolDevice) {
-	deviceID1, err := pool.CreateThinDevice(thinDevice1, device1Size)
+	ctx := context.Background()
+
+	err := pool.CreateThinDevice(ctx, thinDevice1, device1Size)
 	require.NoError(t, err, "can't create first thin device")
 
-	_, err = pool.CreateThinDevice(thinDevice1, device1Size)
+	err = pool.CreateThinDevice(ctx, thinDevice1, device1Size)
 	require.Error(t, err, "device pool allows duplicated device names")
 
-	deviceID2, err := pool.CreateThinDevice(thinDevice2, device2Size)
+	err = pool.CreateThinDevice(ctx, thinDevice2, device2Size)
 	require.NoError(t, err, "can't create second thin device")
 
-	require.NotEqual(t, deviceID1, deviceID2, "device id not incremented properly")
+	deviceInfo1, err := pool.metadata.GetDevice(ctx, thinDevice1)
+	assert.NoError(t, err)
+
+	deviceInfo2, err := pool.metadata.GetDevice(ctx, thinDevice2)
+	assert.NoError(t, err)
+
+	assert.NotEqual(t, deviceInfo1.DeviceID, deviceInfo2.DeviceID, "assigned device ids should be different")
 }
 
 func testMakeFileSystem(t *testing.T, pool *PoolDevice) {
-	devicePath := pool.GetDevicePath(thinDevice1)
+	devicePath := dmsetup.GetFullDevicePath(thinDevice1)
 	args := []string{
 		devicePath,
 		"-E",
@@ -149,7 +167,7 @@ func testMakeFileSystem(t *testing.T, pool *PoolDevice) {
 }
 
 func testCreateSnapshot(t *testing.T, pool *PoolDevice) {
-	_, err := pool.CreateSnapshotDevice(thinDevice1, snapDevice1, device1Size)
+	err := pool.CreateSnapshotDevice(context.Background(), thinDevice1, snapDevice1, device1Size)
 	assert.NoErrorf(t, err, "failed to create snapshot from '%s' volume", thinDevice1)
 }
 
@@ -161,11 +179,11 @@ func testRemoveThinDevice(t *testing.T, pool *PoolDevice) {
 	}
 
 	for _, deviceName := range deviceList {
-		err := pool.RemoveDevice(deviceName)
+		err := pool.RemoveDevice(context.Background(), deviceName, false)
 		assert.NoErrorf(t, err, "failed to remove '%s'", deviceName)
 	}
 
-	err := pool.RemoveDevice("not-existing-device")
+	err := pool.RemoveDevice(context.Background(), "not-existing-device", false)
 	assert.Error(t, err, "should return an error if trying to remove not existing device")
 }
 
@@ -191,8 +209,8 @@ func createLoopbackDevice(t *testing.T, dir string) (string, string) {
 
 	imagePath := file.Name()
 
-	output, err := exec.Command("losetup", "--find", "--show", imagePath).CombinedOutput()
-	require.NoErrorf(t, err, "losetup error: %s", string(output))
+	loopDevice, err := losetup.AttachLoopDevice(imagePath)
+	require.NoError(t, err)
 
-	return imagePath, strings.TrimRight(string(output), "\n")
+	return imagePath, loopDevice
 }

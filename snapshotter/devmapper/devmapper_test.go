@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -28,6 +27,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/pkg/losetup"
 )
 
 func TestSnapshotterSuite(t *testing.T) {
@@ -55,14 +56,19 @@ func TestSnapshotterSuite(t *testing.T) {
 			return nil, nil, err
 		}
 
+		// Remove device mapper pool after test completes
+		removePool := func() error {
+			return snap.pool.RemovePool(ctx)
+		}
+
+		// Pool cleanup should be called before closing metadata store (as we need to retrieve device names)
+		snap.cleanupFn = append([]closeFunc{removePool}, snap.cleanupFn...)
+
 		return snap, func() error {
 			err := snap.Close()
 			assert.NoErrorf(t, err, "failed to close snapshotter")
 
-			err = snap.pool.Close(context.Background(), true, true)
-			assert.NoErrorf(t, err, "failed to cleanup thin-pool")
-
-			err = exec.Command("losetup", "--detach", loopDataDevice, loopMetaDevice).Run()
+			err = losetup.DetachLoopDevice(loopDataDevice, loopMetaDevice)
 			assert.NoErrorf(t, err, "failed to detach loop devices")
 
 			return err

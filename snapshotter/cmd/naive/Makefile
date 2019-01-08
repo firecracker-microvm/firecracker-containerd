@@ -16,7 +16,10 @@ all: naive_snapshotter
 naive_snapshotter: *.go
 	go build -o naive_snapshotter
 
+install: naive_snapshotter
+	install -D -o root -g root -m755 -t $(INSTALLROOT)/bin naive_snapshotter
+
 clean:
 	- rm -f naive_snapshotter
 
-.PHONY: all clean
+.PHONY: all clean install

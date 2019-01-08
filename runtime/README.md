@@ -26,6 +26,41 @@ shim:
 	* If the runtime is invoked as aws.firecracker
 	* Then the binary name needs to be containerd-shim-aws-firecracker
 
+## Configuration
+
+The runtime expects a JSON-formatted configuration file to be located either in
+`/etc/containerd/firecracker-runtime.json` or in a location defined by the
+`FIRECRACKER_CONTAINERD_RUNTIME_CONFIG_PATH` environment variable.  The
+configuration file has the following fields:
+
+* `firecracker_binary_path` (optional) - A path to locate the `firecracker`
+  executable.  If left undefined, the runtime looks for an executable named
+  `firecracker` located in its working directory.  A fully-qualified path to the
+  `firecracker` binary is recommended, as the working directory typically
+  changes every execution when run by containerd.
+* `socket_path` (required) - A path where a socket file should be created for
+  communicating with the Firecracker API.  A relative path like
+  `./firecracker.sock` is recommended so that the socket is created in the
+  temporary working directory allocated by containerd.
+* `kernel_image_path` (required) - A path where the kernel image file is
+  located.  A fully-qualified path is recommended.
+* `kernel_args` (required) - Arguments for the kernel command line.
+* `root_drive` (required) - A path where the root drive image file is located. A
+  fully-qualified path is recommended.
+* `cpu_count` (required) - The number of vCPUs to make available to a microVM.
+* `cpu_template` (required) - The Firecracker CPU emulation template.  Supported
+  values are "C3" and "T2".
+* `additional_drives` (unused)
+* `console` (optional) - How the console device should be handled.  Supported
+  values are "" (blank), "stdio", and "xterm".  Setting "xterm" will launch a
+  new xterm instance and requires a running X server.
+* `log_fifo` (optional) - Named pipe where Firecracker logs should be delivered.
+* `log_level` (optional) - Log level for the Firecracker logs
+* `metrics_fifo` (optional) - Named pipe where Firecracker metrics should be
+  delivered.
+* `ht_enabled` (unused) - Reserved for future use.
+* `debug` (optional) - Enable debug-level logging from the runtime.
+
 ## Usage
 
 Can invoke by downloading an image and doing 

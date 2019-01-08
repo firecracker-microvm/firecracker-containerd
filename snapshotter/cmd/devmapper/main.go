@@ -26,7 +26,7 @@ import (
 
 const (
 	configPathEnvName = "DEVMAPPER_SNAPSHOTTER_CONFIG_PATH"
-	defaultConfigPath = "/etc/containerd/firecracker-devmapper-snapshotter.json"
+	defaultConfigPath = "/etc/containerd/devmapper-snapshotter.json"
 )
 
 func main() {

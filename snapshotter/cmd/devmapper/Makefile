@@ -14,9 +14,12 @@
 all: devmapper_snapshotter
 
 devmapper_snapshotter: *.go
-	go build -o devmapper_snapshotter -tags libdm_dlsym_deferred_remove
+	go build -o devmapper_snapshotter
+
+install: devmapper_snapshotter
+	install -D -o root -g root -m755 -t $(INSTALLROOT)/bin devmapper_snapshotter
 
 clean:
 	- rm -f devmapper_snapshotter
 
-.PHONY: all clean
+.PHONY: all clean install

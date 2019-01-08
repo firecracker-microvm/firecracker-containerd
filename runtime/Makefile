@@ -18,7 +18,10 @@ runtime: containerd-shim-aws-firecracker
 containerd-shim-aws-firecracker: *.go
 	go build -o containerd-shim-aws-firecracker
 
+install: containerd-shim-aws-firecracker
+	install -D -o root -g root -m755 -t $(INSTALLROOT)/bin containerd-shim-aws-firecracker
+
 clean:
 	- rm -f containerd-shim-aws-firecracker
 
-.PHONY: all runtime clean
+.PHONY: all runtime clean install

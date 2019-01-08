@@ -89,35 +89,29 @@ func NewSnapshotter(ctx context.Context, configPath string) (*Snapshotter, error
 func (dm *Snapshotter) Stat(ctx context.Context, key string) (snapshots.Info, error) {
 	log.G(ctx).WithField("key", key).Debug("stat")
 
-	ctx, trans, err := dm.store.TransactionContext(ctx, false)
-	if err != nil {
-		return snapshots.Info{}, err
-	}
+	var (
+		info snapshots.Info
+		err  error
+	)
 
-	defer trans.Rollback()
+	err = dm.withTransaction(ctx, false, func(ctx context.Context) error {
+		_, info, _, err = storage.GetInfo(ctx, key)
+		return err
+	})
 
-	_, info, _, err := storage.GetInfo(ctx, key)
-	if err != nil {
-		return snapshots.Info{}, err
-	}
-
-	return info, nil
+	return info, err
 }
 
 func (dm *Snapshotter) Update(ctx context.Context, info snapshots.Info, fieldpaths ...string) (snapshots.Info, error) {
 	log.G(ctx).Debugf("update: %s", strings.Join(fieldpaths, ", "))
 
-	ctx, trans, err := dm.store.TransactionContext(ctx, true)
-	if err != nil {
-		return snapshots.Info{}, err
-	}
+	var err error
+	err = dm.withTransaction(ctx, true, func(ctx context.Context) error {
+		info, err = storage.UpdateInfo(ctx, info, fieldpaths...)
+		return err
+	})
 
-	info, err = storage.UpdateInfo(ctx, info, fieldpaths...)
-	if err != nil {
-		return snapshots.Info{}, complete(ctx, trans, err)
-	}
-
-	return info, complete(ctx, trans, nil)
+	return info, err
 }
 
 func (dm *Snapshotter) Usage(ctx context.Context, key string) (snapshots.Usage, error) {
@@ -129,79 +123,88 @@ func (dm *Snapshotter) Usage(ctx context.Context, key string) (snapshots.Usage, 
 func (dm *Snapshotter) Mounts(ctx context.Context, key string) ([]mount.Mount, error) {
 	log.G(ctx).WithField("key", key).Debug("mounts")
 
-	ctx, trans, err := dm.store.TransactionContext(ctx, false)
-	if err != nil {
-		return nil, err
-	}
+	var (
+		snap storage.Snapshot
+		err  error
+	)
 
-	defer trans.Rollback()
-
-	snap, err := storage.GetSnapshot(ctx, key)
-	if err != nil {
-		return nil, err
-	}
+	err = dm.withTransaction(ctx, false, func(ctx context.Context) error {
+		snap, err = storage.GetSnapshot(ctx, key)
+		return err
+	})
 
 	return dm.buildMounts(snap), nil
 }
 
 func (dm *Snapshotter) Prepare(ctx context.Context, key, parent string, opts ...snapshots.Opt) ([]mount.Mount, error) {
 	log.G(ctx).WithFields(logrus.Fields{"key": key, "parent": parent}).Debug("prepare")
-	return dm.createSnapshot(ctx, snapshots.KindActive, key, parent, opts...)
+
+	var (
+		mounts []mount.Mount
+		err    error
+	)
+
+	err = dm.withTransaction(ctx, true, func(ctx context.Context) error {
+		mounts, err = dm.createSnapshot(ctx, snapshots.KindActive, key, parent, opts...)
+		return err
+	})
+
+	return mounts, err
 }
 
 func (dm *Snapshotter) View(ctx context.Context, key, parent string, opts ...snapshots.Opt) ([]mount.Mount, error) {
 	log.G(ctx).WithFields(logrus.Fields{"key": key, "parent": parent}).Debug("prepare")
-	return dm.createSnapshot(ctx, snapshots.KindView, key, parent, opts...)
+
+	var (
+		mounts []mount.Mount
+		err    error
+	)
+
+	err = dm.withTransaction(ctx, true, func(ctx context.Context) error {
+		mounts, err = dm.createSnapshot(ctx, snapshots.KindView, key, parent, opts...)
+		return err
+	})
+
+	return mounts, err
 }
 
 func (dm *Snapshotter) Commit(ctx context.Context, name, key string, opts ...snapshots.Opt) error {
 	log.G(ctx).WithFields(logrus.Fields{"name": name, "key": key}).Debug("commit")
 
-	ctx, trans, err := dm.store.TransactionContext(ctx, true)
-	if err != nil {
+	return dm.withTransaction(ctx, true, func(ctx context.Context) error {
+		_, err := storage.CommitActive(ctx, key, name, snapshots.Usage{}, opts...)
 		return err
-	}
-
-	usage := snapshots.Usage{}
-	if _, err := storage.CommitActive(ctx, key, name, usage, opts...); err != nil {
-		return complete(ctx, trans, err)
-	}
-
-	return complete(ctx, trans, nil)
+	})
 }
 
 func (dm *Snapshotter) Remove(ctx context.Context, key string) error {
 	log.G(ctx).WithField("key", key).Debug("remove")
 
-	ctx, trans, err := dm.store.TransactionContext(ctx, true)
-	if err != nil {
-		return err
-	}
+	return dm.withTransaction(ctx, true, func(ctx context.Context) error {
+		return dm.removeDevice(ctx, key)
+	})
+}
 
+func (dm *Snapshotter) removeDevice(ctx context.Context, key string) error {
 	snapID, _, err := storage.Remove(ctx, key)
 	if err != nil {
-		return complete(ctx, trans, err)
+		return err
 	}
 
 	deviceName := dm.getDeviceName(snapID)
 	if err := dm.pool.RemoveDevice(ctx, deviceName, true); err != nil {
 		log.G(ctx).WithError(err).Errorf("failed to remove device")
-		return complete(ctx, trans, err)
+		return err
 	}
 
-	return complete(ctx, trans, nil)
+	return nil
 }
 
 func (dm *Snapshotter) Walk(ctx context.Context, fn func(context.Context, snapshots.Info) error) error {
 	log.G(ctx).Debug("walk")
-
-	ctx, trans, err := dm.store.TransactionContext(ctx, false)
-	if err != nil {
-		return err
-	}
-
-	defer trans.Rollback()
-	return storage.WalkInfo(ctx, fn)
+	return dm.withTransaction(ctx, false, func(ctx context.Context) error {
+		return storage.WalkInfo(ctx, fn)
+	})
 }
 
 func (dm *Snapshotter) Close() error {
@@ -220,14 +223,9 @@ func (dm *Snapshotter) Close() error {
 }
 
 func (dm *Snapshotter) createSnapshot(ctx context.Context, kind snapshots.Kind, key, parent string, opts ...snapshots.Opt) ([]mount.Mount, error) {
-	ctx, trans, err := dm.store.TransactionContext(ctx, true)
-	if err != nil {
-		return nil, err
-	}
-
 	snap, err := storage.CreateSnapshot(ctx, kind, key, parent, opts...)
 	if err != nil {
-		return nil, complete(ctx, trans, err)
+		return nil, err
 	}
 
 	if len(snap.ParentIDs) == 0 {
@@ -237,11 +235,11 @@ func (dm *Snapshotter) createSnapshot(ctx context.Context, kind snapshots.Kind, 
 		err := dm.pool.CreateThinDevice(ctx, deviceName, dm.config.BaseImageSizeBytes)
 		if err != nil {
 			log.G(ctx).WithError(err).Errorf("failed to create thin device for snapshot %s", snap.ID)
-			return nil, complete(ctx, trans, err)
+			return nil, err
 		}
 
 		if err := dm.mkfs(ctx, deviceName); err != nil {
-			return nil, complete(ctx, trans, err)
+			return nil, err
 		}
 	} else {
 		parentDeviceName := dm.getDeviceName(snap.ParentIDs[0])
@@ -251,7 +249,7 @@ func (dm *Snapshotter) createSnapshot(ctx context.Context, kind snapshots.Kind, 
 		err := dm.pool.CreateSnapshotDevice(ctx, parentDeviceName, snapDeviceName, dm.config.BaseImageSizeBytes)
 		if err != nil {
 			log.G(ctx).WithError(err).Errorf("failed to create snapshot device from parent %s", parentDeviceName)
-			return nil, complete(ctx, trans, err)
+			return nil, err
 		}
 	}
 
@@ -262,7 +260,7 @@ func (dm *Snapshotter) createSnapshot(ctx context.Context, kind snapshots.Kind, 
 		return os.Remove(filepath.Join(root, "lost+found"))
 	})
 
-	return mounts, complete(ctx, trans, nil)
+	return mounts, nil
 }
 
 func (dm *Snapshotter) mkfs(ctx context.Context, deviceName string) error {
@@ -312,18 +310,44 @@ func (dm *Snapshotter) buildMounts(snap storage.Snapshot) []mount.Mount {
 	return mounts
 }
 
-func complete(ctx context.Context, trans storage.Transactor, err error) error {
-	if err == nil {
-		if terr := trans.Commit(); terr != nil {
-			log.G(ctx).WithError(terr).Error("failed to commit transaction")
-		}
-	} else {
-		log.G(ctx).WithError(err).Debug("snapshotter error")
+// withTransaction wraps fn callback with containerd's meta store transaction.
+// If callback returns an error or transaction is not writable, database transaction will be discarded.
+func (dm *Snapshotter) withTransaction(ctx context.Context, writable bool, fn func(ctx context.Context) error) error {
+	ctx, trans, err := dm.store.TransactionContext(ctx, writable)
+	if err != nil {
+		return err
+	}
 
+	var result *multierror.Error
+
+	err = fn(ctx)
+	if err != nil {
+		result = multierror.Append(result, err)
+	}
+
+	// Always rollback if transaction is not writable
+	if err != nil || !writable {
 		if terr := trans.Rollback(); terr != nil {
 			log.G(ctx).WithError(terr).Error("failed to rollback transaction")
+			result = multierror.Append(result, errors.Wrap(terr, "rollback failed"))
+		}
+	} else {
+		if terr := trans.Commit(); terr != nil {
+			log.G(ctx).WithError(terr).Error("failed to commit transaction")
+			result = multierror.Append(result, errors.Wrap(terr, "commit failed"))
 		}
 	}
 
-	return err
+	if err := result.ErrorOrNil(); err != nil {
+		log.G(ctx).WithError(err).Debug("snapshotter error")
+
+		// Unwrap if just one error
+		if result.Len() == 1 {
+			return result.Errors[0]
+		}
+
+		return err
+	}
+
+	return nil
 }

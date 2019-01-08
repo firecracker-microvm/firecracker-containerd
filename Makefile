@@ -13,6 +13,7 @@
 
 SUBDIRS:=agent runtime snapshotter
 export INSTALLROOT?=/usr/local
+export STATIC_AGENT
 
 all: $(SUBDIRS)
 

@@ -14,7 +14,11 @@
 all: agent
 
 agent: *.go
+ifneq ($(STATIC_AGENT),)
+	CGO_ENABLED=0 go build -installsuffix cgo -a -ldflags "-s" -o agent
+else
 	go build -o agent
+endif
 
 clean:
 	- rm -f agent

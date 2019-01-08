@@ -99,7 +99,9 @@ func (m *PoolMetadata) ensureDatabaseInitialized() error {
 }
 
 // AddDevice saves device info to database.
-// Callback should be used to acquire device ID or to rollback transaction in case of error.
+// The callback should be used to indicate whether device allocation was successful or not.
+// An error returned from the callback will rollback the ID assignment transaction in the database and
+// free it for future use.
 func (m *PoolMetadata) AddDevice(ctx context.Context, info *DeviceInfo, fn DeviceIDCallback) error {
 	return m.db.Update(func(tx *bolt.Tx) error {
 		devicesBucket := tx.Bucket(devicesBucketName)
@@ -121,11 +123,7 @@ func (m *PoolMetadata) AddDevice(ctx context.Context, info *DeviceInfo, fn Devic
 
 		info.DeviceID = deviceID
 
-		if err := putObject(devicesBucket, info.Name, info, false); err != nil {
-			return err
-		}
-
-		return nil
+		return putObject(devicesBucket, info.Name, info, false)
 	})
 }
 
@@ -193,7 +191,8 @@ func markDeviceID(tx *bolt.Tx, deviceID uint32, state deviceState) error {
 }
 
 // UpdateDevice updates device info in metadata store.
-// Callback should be used to modify device properties or to rollback update transaction.
+// The callback should be used to indicate whether device info update was successful or not.
+// An error returned from the callback will rollback the update transaction in the database.
 // Name and Device ID are not allowed to change.
 func (m *PoolMetadata) UpdateDevice(ctx context.Context, name string, fn DeviceInfoCallback) error {
 	return m.db.Update(func(tx *bolt.Tx) error {
@@ -241,7 +240,9 @@ func (m *PoolMetadata) GetDevice(ctx context.Context, name string) (*DeviceInfo,
 	return &dev, err
 }
 
-// RemoveDevice removes device info from store
+// RemoveDevice removes device info from store.
+// The callback should be used to indicate whether device removal was successful or not.
+// An error returned from the callback will rollback the remove transaction in the database.
 func (m *PoolMetadata) RemoveDevice(ctx context.Context, name string, fn DeviceInfoCallback) error {
 	return m.db.Update(func(tx *bolt.Tx) error {
 		var (

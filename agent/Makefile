@@ -14,7 +14,7 @@
 all: agent
 
 agent: *.go
-	go build -o agent
+	CGO_ENABLED=0 go build -installsuffix cgo -a -ldflags "-s" -o agent
 
 clean:
 	- rm -f agent

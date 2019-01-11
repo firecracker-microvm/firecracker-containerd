@@ -57,6 +57,12 @@ software is conformant or compatible where necessary.
 
 Details of specific roadmap items are tracked in [GitHub issues](https://github.com/firecracker-microvm/firecracker-containerd/issues).
 
+## Usage
+
+For help using firecracker-containerd, see the
+[getting started guide](docs/getting-started.md) and the
+[quickstart guide](docs/quickstart.md).
+
 ## Questions?
 
 Please use [GitHub issues](https://github.com/firecracker-microvm/firecracker-containerd/issues) to report problems, discuss roadmap items,

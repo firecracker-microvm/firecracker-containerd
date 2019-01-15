@@ -30,6 +30,7 @@ import (
 	"google.golang.org/grpc"
 )
 
+// CreateFunc represents a callback to be used for creating concrete snapshotter implementation
 type CreateFunc func(ctx context.Context) (snapshots.Snapshotter, error)
 
 // Run runs snapshotter ttrpc server for containerd (somewhat similar to shim.Run).

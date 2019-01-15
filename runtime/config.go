@@ -24,6 +24,7 @@ const (
 	defaultConfigPath = "/etc/containerd/firecracker-runtime.json"
 )
 
+// Config represents runtime configuration parameters
 type Config struct {
 	FirecrackerBinaryPath string            `json:"firecracker_binary_path"`
 	SocketPath            string            `json:"socket_path"`
@@ -40,6 +41,7 @@ type Config struct {
 	Debug                 bool              `json:"debug"`
 }
 
+// LoadConfig loads configuration from JSON file at 'path'
 func LoadConfig(path string) (*Config, error) {
 	if path == "" {
 		path = os.Getenv(configPathEnvName)

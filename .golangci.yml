@@ -19,3 +19,11 @@ linters:
     - prealloc
     - scopelint
     - gocritic
+
+issues:
+  exclude-use-default: false
+  exclude:
+    - G104 # Errors unhandled
+    - G103 # Use of unsafe calls should be audited
+    - G204 # Subprocess launched with variable
+    - G304 # Potential file inclusion via variable

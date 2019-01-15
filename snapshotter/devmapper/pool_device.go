@@ -73,6 +73,9 @@ func NewPoolDevice(ctx context.Context, config *Config) (*PoolDevice, error) {
 	}, nil
 }
 
+// CreateThinDevice creates new devmapper thin-device with given name and size.
+// Device ID for thin-device will be allocated from metadata store.
+// If allocation successful, device will be activated with /dev/mapper/<deviceName>
 func (p *PoolDevice) CreateThinDevice(ctx context.Context, deviceName string, virtualSizeBytes uint64) error {
 	deviceInfo := &DeviceInfo{
 		Name: deviceName,
@@ -97,6 +100,7 @@ func (p *PoolDevice) CreateThinDevice(ctx context.Context, deviceName string, vi
 	return err
 }
 
+// CreateSnapshotDevice creates and activates new thin-device from parent thin-device (makes snapshot)
 func (p *PoolDevice) CreateSnapshotDevice(ctx context.Context, deviceName string, snapshotName string, virtualSizeBytes uint64) error {
 	baseDeviceInfo, err := p.metadata.GetDevice(ctx, deviceName)
 	if err != nil {
@@ -139,6 +143,7 @@ func (p *PoolDevice) CreateSnapshotDevice(ctx context.Context, deviceName string
 	return err
 }
 
+// RemoveDevice removes thin device and metadata from store
 func (p *PoolDevice) RemoveDevice(ctx context.Context, deviceName string, deferred bool) error {
 	opts := []dmsetup.RemoveDeviceOpt{dmsetup.RemoveWithForce, dmsetup.RemoveWithRetries}
 	if deferred {
@@ -151,6 +156,7 @@ func (p *PoolDevice) RemoveDevice(ctx context.Context, deviceName string, deferr
 	})
 }
 
+// RemovePool deactivates all child thin-devices and removes thin-pool device
 func (p *PoolDevice) RemovePool(ctx context.Context) error {
 	deviceNames, err := p.metadata.GetDeviceNames(ctx)
 	if err != nil {
@@ -180,6 +186,7 @@ func (p *PoolDevice) RemovePool(ctx context.Context) error {
 	return result.ErrorOrNil()
 }
 
+// Close closes pool device (thin-pool will not be removed)
 func (p *PoolDevice) Close() error {
 	return p.metadata.Close()
 }

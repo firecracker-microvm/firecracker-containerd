@@ -74,6 +74,7 @@ var (
 	sysCall = syscall.Syscall
 )
 
+// NewService creates new runtime shim.
 // Matches type Init func(..).. defined https://github.com/containerd/containerd/blob/master/runtime/v2/shim/shim.go#L47
 func NewService(ctx context.Context, id string, publisher events.Publisher) (shim.Shim, error) {
 	server, err := newServer()
@@ -556,7 +557,7 @@ func findNextAvailableVsockCID(ctx context.Context) (uint32, error) {
 		vsockDevicePath = "/dev/vhost-vsock"
 	)
 
-	file, err := os.OpenFile(vsockDevicePath, syscall.O_RDWR, 0666)
+	file, err := os.OpenFile(vsockDevicePath, syscall.O_RDWR, 0600)
 	if err != nil {
 		return 0, errors.Wrap(err, "failed to open vsock device")
 	}

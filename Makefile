@@ -29,9 +29,11 @@ clean:
 deps:
 	test -n "$(GOPATH)" # Make sure GOPATH defined
 	curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b ${GOPATH}/bin v1.12.3
+	go get -u github.com/vbatts/git-validation
 
 lint:
 	golangci-lint run
+	git-validation -run DCO,dangling-whitespace,short-subject -range dd78e4f0182dfff8ef33e5eb7dc925d5f6e84301..HEAD
 
 install:
 	for d in $(SUBDIRS); do $(MAKE) -C $$d install; done

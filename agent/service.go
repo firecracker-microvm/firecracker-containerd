@@ -52,6 +52,7 @@ type TaskService struct {
 	io      *cio.FIFOSet
 }
 
+// NewTaskService creates new runc shim wrapper
 func NewTaskService(runc shim.Shim, cancel context.CancelFunc) shimapi.TaskService {
 	return &TaskService{
 		runc:    runc,
@@ -59,6 +60,7 @@ func NewTaskService(runc shim.Shim, cancel context.CancelFunc) shimapi.TaskServi
 	}
 }
 
+// Create creates a new initial process and container using runc
 func (ts *TaskService) Create(ctx context.Context, req *shimapi.CreateTaskRequest) (*shimapi.CreateTaskResponse, error) {
 	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "bundle": req.Bundle}).Info("create")
 
@@ -168,6 +170,7 @@ func unpackBundle(path string, bundle *types.Any) (*types.Any, error) {
 	return extraData.RuncOptions, nil
 }
 
+// State returns process state information
 func (ts *TaskService) State(ctx context.Context, req *shimapi.StateRequest) (*shimapi.StateResponse, error) {
 	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("state")
 
@@ -187,6 +190,7 @@ func (ts *TaskService) State(ctx context.Context, req *shimapi.StateRequest) (*s
 	return resp, nil
 }
 
+// Start starts a process
 func (ts *TaskService) Start(ctx context.Context, req *shimapi.StartRequest) (*shimapi.StartResponse, error) {
 	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("start")
 
@@ -201,6 +205,7 @@ func (ts *TaskService) Start(ctx context.Context, req *shimapi.StartRequest) (*s
 	return resp, nil
 }
 
+// Delete deletes the initial process and container
 func (ts *TaskService) Delete(ctx context.Context, req *shimapi.DeleteRequest) (*shimapi.DeleteResponse, error) {
 	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("delete")
 
@@ -218,6 +223,7 @@ func (ts *TaskService) Delete(ctx context.Context, req *shimapi.DeleteRequest) (
 	return resp, nil
 }
 
+// Pids returns all pids inside the container
 func (ts *TaskService) Pids(ctx context.Context, req *shimapi.PidsRequest) (*shimapi.PidsResponse, error) {
 	log.G(ctx).WithField("id", req.ID).Debug("pids")
 
@@ -232,6 +238,7 @@ func (ts *TaskService) Pids(ctx context.Context, req *shimapi.PidsRequest) (*shi
 	return resp, nil
 }
 
+// Pause pauses the container
 func (ts *TaskService) Pause(ctx context.Context, req *shimapi.PauseRequest) (*types.Empty, error) {
 	log.G(ctx).WithField("id", req.ID).Debug("pause")
 
@@ -246,6 +253,7 @@ func (ts *TaskService) Pause(ctx context.Context, req *shimapi.PauseRequest) (*t
 	return resp, nil
 }
 
+// Resume resumes the container
 func (ts *TaskService) Resume(ctx context.Context, req *shimapi.ResumeRequest) (*types.Empty, error) {
 	log.G(ctx).WithField("id", req.ID).Debug("resume")
 
@@ -260,6 +268,7 @@ func (ts *TaskService) Resume(ctx context.Context, req *shimapi.ResumeRequest) (
 	return resp, nil
 }
 
+// Checkpoint saves the state of the container instance
 func (ts *TaskService) Checkpoint(ctx context.Context, req *shimapi.CheckpointTaskRequest) (*types.Empty, error) {
 	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "path": req.Path}).Info("checkpoint")
 
@@ -274,6 +283,7 @@ func (ts *TaskService) Checkpoint(ctx context.Context, req *shimapi.CheckpointTa
 	return resp, nil
 }
 
+// Kill kills a process with the provided signal
 func (ts *TaskService) Kill(ctx context.Context, req *shimapi.KillRequest) (*types.Empty, error) {
 	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("kill")
 
@@ -288,6 +298,7 @@ func (ts *TaskService) Kill(ctx context.Context, req *shimapi.KillRequest) (*typ
 	return resp, nil
 }
 
+// Exec runs an additional process inside the container
 func (ts *TaskService) Exec(ctx context.Context, req *shimapi.ExecProcessRequest) (*types.Empty, error) {
 	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("exec")
 
@@ -302,6 +313,7 @@ func (ts *TaskService) Exec(ctx context.Context, req *shimapi.ExecProcessRequest
 	return resp, nil
 }
 
+// ResizePty resizes pty
 func (ts *TaskService) ResizePty(ctx context.Context, req *shimapi.ResizePtyRequest) (*types.Empty, error) {
 	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("resize_pty")
 
@@ -316,6 +328,7 @@ func (ts *TaskService) ResizePty(ctx context.Context, req *shimapi.ResizePtyRequ
 	return resp, nil
 }
 
+// CloseIO closes all IO inside container
 func (ts *TaskService) CloseIO(ctx context.Context, req *shimapi.CloseIORequest) (*types.Empty, error) {
 	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("close_io")
 
@@ -330,6 +343,7 @@ func (ts *TaskService) CloseIO(ctx context.Context, req *shimapi.CloseIORequest)
 	return resp, nil
 }
 
+// Update updates running container
 func (ts *TaskService) Update(ctx context.Context, req *shimapi.UpdateTaskRequest) (*types.Empty, error) {
 	log.G(ctx).WithField("id", req.ID).Debug("update")
 
@@ -344,6 +358,7 @@ func (ts *TaskService) Update(ctx context.Context, req *shimapi.UpdateTaskReques
 	return resp, nil
 }
 
+// Wait waits for a process to exit
 func (ts *TaskService) Wait(ctx context.Context, req *shimapi.WaitRequest) (*shimapi.WaitResponse, error) {
 	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("wait")
 
@@ -358,6 +373,7 @@ func (ts *TaskService) Wait(ctx context.Context, req *shimapi.WaitRequest) (*shi
 	return resp, nil
 }
 
+// Stats returns a process stats
 func (ts *TaskService) Stats(ctx context.Context, req *shimapi.StatsRequest) (*shimapi.StatsResponse, error) {
 	log.G(ctx).WithField("id", req.ID).Debug("stats")
 
@@ -372,6 +388,7 @@ func (ts *TaskService) Stats(ctx context.Context, req *shimapi.StatsRequest) (*s
 	return resp, nil
 }
 
+// Connect returns shim information such as the shim's pid
 func (ts *TaskService) Connect(ctx context.Context, req *shimapi.ConnectRequest) (*shimapi.ConnectResponse, error) {
 	log.G(ctx).WithField("id", req.ID).Debug("connect")
 
@@ -390,6 +407,7 @@ func (ts *TaskService) Connect(ctx context.Context, req *shimapi.ConnectRequest)
 	return resp, nil
 }
 
+// Shutdown cleanups runc resources ans gracefully shutdowns ttrpc server
 func (ts *TaskService) Shutdown(ctx context.Context, req *shimapi.ShutdownRequest) (*types.Empty, error) {
 	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "now": req.Now}).Debug("shutdown")
 	ctx = namespaces.WithNamespace(ctx, defaultNamespace)

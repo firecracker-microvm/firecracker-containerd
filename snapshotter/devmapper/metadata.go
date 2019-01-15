@@ -38,7 +38,9 @@ type DeviceInfo struct {
 }
 
 type (
-	DeviceIDCallback   func(deviceID uint32) error
+	// DeviceIDCallback is a callback used for device ID acquisition
+	DeviceIDCallback func(deviceID uint32) error
+	// DeviceInfoCallback is a callback used for device updates
 	DeviceInfoCallback func(deviceInfo *DeviceInfo) error
 )
 
@@ -60,7 +62,9 @@ var (
 )
 
 var (
-	ErrNotFound      = errors.New("not found")
+	// ErrNotFound represents an error returned when object not found in meta store
+	ErrNotFound = errors.New("not found")
+	// ErrAlreadyExists represents an error returned when object can't be duplicated in meta store
 	ErrAlreadyExists = errors.New("object already exists")
 )
 
@@ -70,6 +74,7 @@ type PoolMetadata struct {
 	db *bolt.DB
 }
 
+// NewPoolMetadata creates new or open existing pool metadata database
 func NewPoolMetadata(dbfile string) (*PoolMetadata, error) {
 	db, err := bolt.Open(dbfile, 0600, nil)
 	if err != nil {
@@ -84,6 +89,8 @@ func NewPoolMetadata(dbfile string) (*PoolMetadata, error) {
 	return metadata, nil
 }
 
+// ensureDatabaseInitialized creates buckets required for metadata store in order
+// to avoid bucket existence checks across the code
 func (m *PoolMetadata) ensureDatabaseInitialized() error {
 	return m.db.Update(func(tx *bolt.Tx) error {
 		if _, err := tx.CreateBucketIfNotExists(devicesBucketName); err != nil {

@@ -38,12 +38,13 @@ const (
 	sparseImageSizeMB = 1024
 )
 
+// Snapshotter implements naive snapshotter for containerd
 type Snapshotter struct {
 	root  string
 	store *storage.MetaStore
 }
 
-// NewSnapshotter creates a snapshotter for Firecracker.
+// NewSnapshotter creates naive snapshotter for Firecracker.
 // Each layer is represented by separate Linux image and corresponding containerd's snapshot ID.
 // Snapshotter has the following file structure:
 // 	{root}/images/{ID} - keeps filesystem images
@@ -61,7 +62,7 @@ func NewSnapshotter(ctx context.Context, root string) (snapshots.Snapshotter, er
 		root,
 		filepath.Join(root, imageDirName),
 	} {
-		if err := os.Mkdir(path, 0755); err != nil && !os.IsExist(err) {
+		if err := os.Mkdir(path, 0750); err != nil && !os.IsExist(err) {
 			log.G(ctx).WithError(err).Errorf("mkdir failed for '%s'", path)
 			return nil, err
 		}
@@ -78,6 +79,7 @@ func NewSnapshotter(ctx context.Context, root string) (snapshots.Snapshotter, er
 	}, nil
 }
 
+// Stat returns the info for an active or committed snapshot by name or key.
 func (s *Snapshotter) Stat(ctx context.Context, key string) (snapshots.Info, error) {
 	log.G(ctx).WithField("key", key).Debug("stat")
 
@@ -96,6 +98,7 @@ func (s *Snapshotter) Stat(ctx context.Context, key string) (snapshots.Info, err
 	return info, nil
 }
 
+// Update updates the info for a snapshot.
 func (s *Snapshotter) Update(ctx context.Context, info snapshots.Info, fieldpaths ...string) (snapshots.Info, error) {
 	log.G(ctx).Debugf("update: %s", strings.Join(fieldpaths, ", "))
 
@@ -112,12 +115,14 @@ func (s *Snapshotter) Update(ctx context.Context, info snapshots.Info, fieldpath
 	return info, complete(ctx, trans, nil)
 }
 
+// Usage not yet implemented
 func (s *Snapshotter) Usage(ctx context.Context, key string) (snapshots.Usage, error) {
 	log.G(ctx).WithField("key", key).Debug("usage")
 
 	return snapshots.Usage{}, errors.New("not implemented")
 }
 
+// Mounts returns loop device mount by snapshot key
 func (s *Snapshotter) Mounts(ctx context.Context, key string) ([]mount.Mount, error) {
 	log.G(ctx).WithField("key", key).Debug("mounts")
 
@@ -136,16 +141,20 @@ func (s *Snapshotter) Mounts(ctx context.Context, key string) ([]mount.Mount, er
 	return s.buildMounts(snap)
 }
 
+// Prepare creates block device (sparse image with attached loop device) for an active snapshot identified by key
 func (s *Snapshotter) Prepare(ctx context.Context, key, parent string, opts ...snapshots.Opt) ([]mount.Mount, error) {
 	log.G(ctx).WithFields(logrus.Fields{"key": key, "parent": parent}).Debug("prepare")
 	return s.createSnapshot(ctx, snapshots.KindActive, key, parent, opts...)
 }
 
+// View creates readonly block device for the given snapshot
 func (s *Snapshotter) View(ctx context.Context, key, parent string, opts ...snapshots.Opt) ([]mount.Mount, error) {
 	log.G(ctx).WithFields(logrus.Fields{"key": key, "parent": parent}).Debug("view")
 	return s.createSnapshot(ctx, snapshots.KindView, key, parent, opts...)
 }
 
+// Commit detaches loop devices from sparse image if any and updates meta store info.
+// Snapshot changes are captured when unmounting block device with 'sync' flag.
 func (s *Snapshotter) Commit(ctx context.Context, name, key string, opts ...snapshots.Opt) error {
 	log.G(ctx).WithFields(logrus.Fields{"name": name, "key": key}).Debug("commit")
 
@@ -200,6 +209,7 @@ func (s *Snapshotter) Remove(ctx context.Context, key string) error {
 	return complete(ctx, trans, nil)
 }
 
+// Walk walks all snapshots in the snapshotter. For each snapshot in the snapshotter, the function will be called.
 func (s *Snapshotter) Walk(ctx context.Context, fn func(context.Context, snapshots.Info) error) error {
 	log.G(ctx).Debug("walk")
 
@@ -212,6 +222,7 @@ func (s *Snapshotter) Walk(ctx context.Context, fn func(context.Context, snapsho
 	return storage.WalkInfo(ctx, fn)
 }
 
+// Close releases snapshotter resources and detaches loop devices from all images
 func (s *Snapshotter) Close() error {
 	log.L.Debug("close")
 
@@ -312,7 +323,11 @@ func (s *Snapshotter) getImagePath(id string) string {
 	return filepath.Join(s.root, imageDirName, id)
 }
 
+// buildMounts returns a mount for the given snapshot.
+// Block device represented as an attached loop device to a sparse image.
+// buildMounts attaches new loop device to an image unless there is an existing association.
 func (s *Snapshotter) buildMounts(snap storage.Snapshot) ([]mount.Mount, error) {
+	// Snapshot changes need to be flushed to disk immediately when unmounting.
 	options := []string{"sync", "dirsync"}
 
 	if snap.Kind != snapshots.KindActive {

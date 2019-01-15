@@ -40,7 +40,7 @@ const (
 
 type closeFunc func() error
 
-// devmapper implements containerd's snapshotter (https://godoc.org/github.com/containerd/containerd/snapshots#Snapshotter)
+// Snapshotter implements containerd's snapshotter (https://godoc.org/github.com/containerd/containerd/snapshots#Snapshotter)
 // based on Linux device-mapper targets.
 type Snapshotter struct {
 	store     *storage.MetaStore
@@ -50,6 +50,9 @@ type Snapshotter struct {
 	closeOnce sync.Once
 }
 
+// NewSnapshotter creates new device mapper snapshotter.
+// Internally it creates thin-pool device (or reloads if it's already exists) and
+// initializes a database file for metadata.
 func NewSnapshotter(ctx context.Context, configPath string) (*Snapshotter, error) {
 	log.G(ctx).WithField("config-path", configPath).Info("creating devmapper snapshotter")
 
@@ -60,7 +63,7 @@ func NewSnapshotter(ctx context.Context, configPath string) (*Snapshotter, error
 		return nil, err
 	}
 
-	if err := os.MkdirAll(config.RootPath, 0755); err != nil && !os.IsExist(err) {
+	if err := os.MkdirAll(config.RootPath, 0750); err != nil && !os.IsExist(err) {
 		return nil, errors.Wrapf(err, "failed to create root directory: %s", config.RootPath)
 	}
 
@@ -86,6 +89,7 @@ func NewSnapshotter(ctx context.Context, configPath string) (*Snapshotter, error
 	}, nil
 }
 
+// Stat returns the info for an active or committed snapshot from store
 func (s *Snapshotter) Stat(ctx context.Context, key string) (snapshots.Info, error) {
 	log.G(ctx).WithField("key", key).Debug("stat")
 
@@ -102,6 +106,7 @@ func (s *Snapshotter) Stat(ctx context.Context, key string) (snapshots.Info, err
 	return info, err
 }
 
+// Update updates an existing snapshot info's data
 func (s *Snapshotter) Update(ctx context.Context, info snapshots.Info, fieldpaths ...string) (snapshots.Info, error) {
 	log.G(ctx).Debugf("update: %s", strings.Join(fieldpaths, ", "))
 
@@ -114,12 +119,14 @@ func (s *Snapshotter) Update(ctx context.Context, info snapshots.Info, fieldpath
 	return info, err
 }
 
+// Usage not yet implemented
 func (s *Snapshotter) Usage(ctx context.Context, key string) (snapshots.Usage, error) {
 	log.G(ctx).WithField("key", key).Debug("usage")
 
 	return snapshots.Usage{}, errors.New("usage not implemented")
 }
 
+// Mounts return the list of mounts for the active or view snapshot
 func (s *Snapshotter) Mounts(ctx context.Context, key string) ([]mount.Mount, error) {
 	log.G(ctx).WithField("key", key).Debug("mounts")
 
@@ -136,6 +143,7 @@ func (s *Snapshotter) Mounts(ctx context.Context, key string) ([]mount.Mount, er
 	return s.buildMounts(snap), nil
 }
 
+// Prepare creates thin device for an active snapshot identified by key
 func (s *Snapshotter) Prepare(ctx context.Context, key, parent string, opts ...snapshots.Opt) ([]mount.Mount, error) {
 	log.G(ctx).WithFields(logrus.Fields{"key": key, "parent": parent}).Debug("prepare")
 
@@ -152,6 +160,7 @@ func (s *Snapshotter) Prepare(ctx context.Context, key, parent string, opts ...s
 	return mounts, err
 }
 
+// View creates readonly thin device for the given snapshot key
 func (s *Snapshotter) View(ctx context.Context, key, parent string, opts ...snapshots.Opt) ([]mount.Mount, error) {
 	log.G(ctx).WithFields(logrus.Fields{"key": key, "parent": parent}).Debug("prepare")
 
@@ -168,6 +177,9 @@ func (s *Snapshotter) View(ctx context.Context, key, parent string, opts ...snap
 	return mounts, err
 }
 
+// Commit marks an active snapshot as committed in meta store.
+// Block device unmount operation captures snapshot changes by itself, so no
+// additional actions needed within Commit operation.
 func (s *Snapshotter) Commit(ctx context.Context, name, key string, opts ...snapshots.Opt) error {
 	log.G(ctx).WithFields(logrus.Fields{"name": name, "key": key}).Debug("commit")
 
@@ -177,6 +189,7 @@ func (s *Snapshotter) Commit(ctx context.Context, name, key string, opts ...snap
 	})
 }
 
+// Remove removes thin device and snapshot metadata by key
 func (s *Snapshotter) Remove(ctx context.Context, key string) error {
 	log.G(ctx).WithField("key", key).Debug("remove")
 
@@ -200,6 +213,7 @@ func (s *Snapshotter) removeDevice(ctx context.Context, key string) error {
 	return nil
 }
 
+// Walk iterates through all metadata Info for the stored snapshots and calls the provided function for each.
 func (s *Snapshotter) Walk(ctx context.Context, fn func(context.Context, snapshots.Info) error) error {
 	log.G(ctx).Debug("walk")
 	return s.withTransaction(ctx, false, func(ctx context.Context) error {
@@ -207,6 +221,8 @@ func (s *Snapshotter) Walk(ctx context.Context, fn func(context.Context, snapsho
 	})
 }
 
+// Close releases devmapper snapshotter resources.
+// All subsequent Close calls will be ignored.
 func (s *Snapshotter) Close() error {
 	log.L.Debug("close")
 
@@ -263,6 +279,7 @@ func (s *Snapshotter) createSnapshot(ctx context.Context, kind snapshots.Kind, k
 	return mounts, nil
 }
 
+// mkfs creates ext4 filesystem on the given devmapper device
 func (s *Snapshotter) mkfs(ctx context.Context, deviceName string) error {
 	args := []string{
 		"-E",

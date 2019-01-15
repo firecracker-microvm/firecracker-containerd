@@ -24,8 +24,9 @@ import (
 )
 
 const (
-	DevMapperDir = "/dev/mapper/"
-	SectorSize   = 512
+	devMapperDir = "/dev/mapper/"
+	// SectorSize represents the number of bytes in one sector on devmapper devices
+	SectorSize = 512
 )
 
 // DeviceInfo represents device info returned by "dmsetup info".
@@ -170,9 +171,15 @@ func DeleteDevice(poolName string, deviceID int) error {
 type RemoveDeviceOpt string
 
 const (
-	RemoveWithForce   RemoveDeviceOpt = "--force"
+	// RemoveWithForce flag replaces the table with one that fails all I/O if
+	// open device can't be removed
+	RemoveWithForce RemoveDeviceOpt = "--force"
+	// RemoveWithRetries option will cause the operation to be retried
+	// for a few seconds before failing
 	RemoveWithRetries RemoveDeviceOpt = "--retry"
-	RemoveDeferred    RemoveDeviceOpt = "--deferred"
+	// RemoveDeferred flag will enable deferred removal of open devices,
+	// the device will be removed when the last user closes it
+	RemoveDeferred RemoveDeviceOpt = "--deferred"
 )
 
 // RemoveDevice removes a device (see "dmsetup remove")
@@ -252,11 +259,11 @@ func Version() (string, error) {
 
 // GetFullDevicePath returns full path for the given device name (like "/dev/mapper/name")
 func GetFullDevicePath(deviceName string) string {
-	if strings.HasPrefix(deviceName, DevMapperDir) {
+	if strings.HasPrefix(deviceName, devMapperDir) {
 		return deviceName
 	}
 
-	return DevMapperDir + deviceName
+	return devMapperDir + deviceName
 }
 
 // BlockDeviceSize returns size of block device in bytes

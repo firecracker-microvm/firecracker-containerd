@@ -14,11 +14,12 @@
 package internal
 
 const (
-	// vsock ports to use for stdio
-	StdinPort  = 11000
+	// StdinPort represents vsock port to be used for stdin
+	StdinPort = 11000
+	// StdoutPort represents vsock port to be used for stdout
 	StdoutPort = 11001
+	// StderrPort represents vsock port to be used for stderr
 	StderrPort = 11002
-
-	// Default buffer size for io in bytes
+	// DefaultBufferSize represents buffer size in bytes to used for IO between runtime and agent
 	DefaultBufferSize = 1024
 )

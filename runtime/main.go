@@ -17,8 +17,8 @@ import (
 	"github.com/containerd/containerd/runtime/v2/shim"
 )
 
-const ShimID = "aws.firecracker"
+const shimID = "aws.firecracker"
 
 func main() {
-	shim.Run(ShimID, NewService)
+	shim.Run(shimID, NewService)
 }

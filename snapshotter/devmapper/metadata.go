@@ -23,20 +23,6 @@ import (
 	"go.etcd.io/bbolt"
 )
 
-// DeviceInfo represents metadata for thin device within thin-pool
-type DeviceInfo struct {
-	// DeviceID is a 24-bit number assigned to a device within thin-pool device
-	DeviceID uint32 `json:"device_id"`
-	// Size is a thin device size
-	Size uint64 `json:"size"`
-	// Name is a device name to be used in /dev/mapper/
-	Name string `json:"name"`
-	// ParentName is a name of parent device (if snapshot)
-	ParentName string `json:"parent_name"`
-	// IsActivated indicates whether thin device was actived
-	IsActivated bool `json:"is_active"`
-}
-
 type (
 	// DeviceIDCallback is a callback used for device ID acquisition
 	DeviceIDCallback func(deviceID uint32) error
@@ -44,14 +30,10 @@ type (
 	DeviceInfoCallback func(deviceInfo *DeviceInfo) error
 )
 
-const (
-	maxDeviceID = 0xffffff // Device IDs are 24-bit numbers
-)
-
-type deviceState byte
+type deviceIDState byte
 
 const (
-	deviceFree deviceState = iota
+	deviceFree deviceIDState = iota
 	deviceTaken
 )
 
@@ -183,7 +165,7 @@ func getNextDeviceID(tx *bolt.Tx) (uint32, error) {
 }
 
 // markDeviceID marks a device as deviceFree or deviceTaken
-func markDeviceID(tx *bolt.Tx, deviceID uint32, state deviceState) error {
+func markDeviceID(tx *bolt.Tx, deviceID uint32, state deviceIDState) error {
 	var (
 		bucket = tx.Bucket(deviceIDBucketName)
 		key    = strconv.FormatUint(uint64(deviceID), 10)

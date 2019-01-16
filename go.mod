@@ -1,7 +1,6 @@
 module github.com/firecracker-microvm/firecracker-containerd
 
 require (
-	github.com/BurntSushi/toml v0.3.1 // indirect
 	github.com/Microsoft/go-winio v0.4.11 // indirect
 	github.com/Microsoft/hcsshim v0.8.1 // indirect
 	github.com/boltdb/bolt v1.3.1 // indirect

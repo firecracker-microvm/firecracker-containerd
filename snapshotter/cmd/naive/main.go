@@ -26,6 +26,7 @@ import (
 func main() {
 	var rootPath string
 	flag.StringVar(&rootPath, "path", "./images", "Path to snapshotter data (default: ./images)")
+	flag.Parse()
 
 	snapshotter.Run(func(ctx context.Context) (snapshots.Snapshotter, error) {
 		return naive.NewSnapshotter(ctx, rootPath)

@@ -32,17 +32,17 @@ const (
 func main() {
 	var configPath string
 	flag.StringVar(&configPath, "config", "", "Path to devmapper configuration file")
+	flag.Parse()
+
+	if configPath == "" {
+		configPath = os.Getenv(configPathEnvName)
+	}
+
+	if configPath == "" {
+		configPath = defaultConfigPath
+	}
 
 	snapshotter.Run(func(ctx context.Context) (snapshots.Snapshotter, error) {
-		// Flags parsing happens inside Run, so we can't make this checks earlier.
-		if configPath == "" {
-			configPath = os.Getenv(configPathEnvName)
-		}
-
-		if configPath == "" {
-			configPath = defaultConfigPath
-		}
-
 		return devmapper.NewSnapshotter(ctx, configPath)
 	})
 }

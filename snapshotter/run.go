@@ -30,6 +30,23 @@ import (
 	"google.golang.org/grpc"
 )
 
+var (
+	unixAddr string
+	debug    bool
+)
+
+func init() {
+	flag.StringVar(&unixAddr,
+		"address",
+		"./firecracker-snapshotter.sock",
+		"RPC server unix address (default: ./firecracker-snapshotter.sock)")
+
+	flag.BoolVar(&debug,
+		"debug",
+		false,
+		"Debug mode")
+}
+
 // CreateFunc represents a callback to be used for creating concrete snapshotter implementation
 type CreateFunc func(ctx context.Context) (snapshots.Snapshotter, error)
 
@@ -41,14 +58,9 @@ type CreateFunc func(ctx context.Context) (snapshots.Snapshotter, error)
 // Any extra flags might me specified if additional configuration needed, flags.Parse will
 // be called prior snapshot create callback (see naive example).
 func Run(snapInit CreateFunc) {
-	var (
-		unixAddr string
-		debug    bool
-	)
-
-	flag.StringVar(&unixAddr, "address", "./firecracker-snapshotter.sock", "RPC server unix address (default: ./firecracker-snapshotter.sock)")
-	flag.BoolVar(&debug, "debug", false, "Debug mode")
-	flag.Parse()
+	if !flag.Parsed() {
+		flag.Parse()
+	}
 
 	if debug {
 		logrus.SetLevel(logrus.DebugLevel)

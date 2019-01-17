@@ -22,7 +22,7 @@ import (
 
 // FindAssociatedLoopDevices returns a list of loop devices attached to a given image
 func FindAssociatedLoopDevices(imagePath string) ([]string, error) {
-	output, err := losetup("--list", "--output", "NAME", "--noheadings", "--associated", imagePath)
+	output, err := losetup("--list", "--output", "NAME", "--associated", imagePath)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to get loop devices: '%s'", output)
 	}
@@ -31,7 +31,13 @@ func FindAssociatedLoopDevices(imagePath string) ([]string, error) {
 		return []string{}, nil
 	}
 
-	return strings.Split(output, "\n"), nil
+	items := strings.Split(output, "\n")
+	if len(items) <= 1 {
+		return []string{}, nil
+	}
+
+	// Skip header with column names
+	return items[1:], nil
 }
 
 // AttachLoopDevice finds first available loop device and associates it with an image.

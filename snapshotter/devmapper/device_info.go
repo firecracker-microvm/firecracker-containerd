@@ -13,9 +13,68 @@
 
 package devmapper
 
+import (
+	"fmt"
+)
+
 const (
 	maxDeviceID = 0xffffff // Device IDs are 24-bit numbers
 )
+
+// DeviceState represents current devmapper device state reflected in meta store
+type DeviceState int
+
+const (
+	// Unknown means that device just created and no operations were performed
+	Unknown DeviceState = iota
+	// Creating means that device is going to be created
+	Creating
+	// Created means that devices successfully created
+	Created
+	// Activating means that device is going to be activated
+	Activating
+	// Activated means that device successfully activated
+	Activated
+	// Suspending means that device is going to be suspended
+	Suspending
+	// Suspended means that device successfully suspended
+	Suspended
+	// Resuming means that device is going to be resumed from suspended state
+	Resuming
+	// Resumed means that device successfully resumed
+	Resumed
+	// Deactivating means that device is going to be deactivated
+	Deactivating
+	// Deactivated means that device successfully deactivated
+	Deactivated
+)
+
+func (s DeviceState) String() string {
+	switch s {
+	case Creating:
+		return "Creating"
+	case Created:
+		return "Created"
+	case Activating:
+		return "Activating"
+	case Activated:
+		return "Activated"
+	case Suspending:
+		return "Suspending"
+	case Suspended:
+		return "Suspended"
+	case Resuming:
+		return "Resuming"
+	case Resumed:
+		return "Resumed"
+	case Deactivating:
+		return "Deactivating"
+	case Deactivated:
+		return "Deactivated"
+	default:
+		return fmt.Sprintf("unknown %d", s)
+	}
+}
 
 // DeviceInfo represents metadata for thin device within thin-pool
 type DeviceInfo struct {
@@ -27,6 +86,8 @@ type DeviceInfo struct {
 	Name string `json:"name"`
 	// ParentName is a name of parent device (if snapshot)
 	ParentName string `json:"parent_name"`
-	// IsActivated indicates whether thin device was actived
-	IsActivated bool `json:"is_active"`
+	// State represents current device state
+	State DeviceState `json:"state"`
+	// Error details if device state change failed
+	Error string `json:"error"`
 }

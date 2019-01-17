@@ -91,7 +91,7 @@ func (m *PoolMetadata) ensureDatabaseInitialized() error {
 // The callback should be used to indicate whether device allocation was successful or not.
 // An error returned from the callback will rollback the ID assignment transaction in the database and
 // free it for future use.
-func (m *PoolMetadata) AddDevice(ctx context.Context, info *DeviceInfo, fn DeviceIDCallback) error {
+func (m *PoolMetadata) AddDevice(ctx context.Context, info *DeviceInfo) error {
 	return m.db.Update(func(tx *bolt.Tx) error {
 		devicesBucket := tx.Bucket(devicesBucketName)
 
@@ -103,10 +103,6 @@ func (m *PoolMetadata) AddDevice(ctx context.Context, info *DeviceInfo, fn Devic
 		// Find next available device ID
 		deviceID, err := getNextDeviceID(tx)
 		if err != nil {
-			return err
-		}
-
-		if err := fn(deviceID); err != nil {
 			return err
 		}
 

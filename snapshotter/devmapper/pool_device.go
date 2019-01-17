@@ -73,87 +73,164 @@ func NewPoolDevice(ctx context.Context, config *Config) (*PoolDevice, error) {
 	}, nil
 }
 
+// transition invokes 'fn' callback to perform devmapper operation and reflects device state changes/errors in meta store.
+// 'tryingState' will be set before invoking callback. If callback succeeded 'successState' will be set, otherwise
+// error details will be recorded in meta store.
+func (p *PoolDevice) transition(ctx context.Context, deviceName string, tryingState DeviceState, successState DeviceState, fn func() error) error {
+	// Set device to trying state
+	uerr := p.metadata.UpdateDevice(ctx, deviceName, func(deviceInfo *DeviceInfo) error {
+		deviceInfo.State = tryingState
+		return nil
+	})
+
+	if uerr != nil {
+		return errors.Wrapf(uerr, "failed to set device %q state to %q", deviceName, tryingState)
+	}
+
+	var result *multierror.Error
+
+	// Invoke devmapper operation
+	err := fn()
+
+	if err != nil {
+		result = multierror.Append(result, err)
+	}
+
+	// If operation succeeded transition to success state, otherwise save error details
+	uerr = p.metadata.UpdateDevice(ctx, deviceName, func(deviceInfo *DeviceInfo) error {
+		if err == nil {
+			deviceInfo.State = successState
+			deviceInfo.Error = ""
+		} else {
+			deviceInfo.Error = err.Error()
+		}
+		return nil
+	})
+
+	if uerr != nil {
+		result = multierror.Append(result, uerr)
+	}
+
+	return result.ErrorOrNil()
+}
+
 // CreateThinDevice creates new devmapper thin-device with given name and size.
 // Device ID for thin-device will be allocated from metadata store.
 // If allocation successful, device will be activated with /dev/mapper/<deviceName>
 func (p *PoolDevice) CreateThinDevice(ctx context.Context, deviceName string, virtualSizeBytes uint64) error {
-	deviceInfo := &DeviceInfo{
-		Name: deviceName,
-		Size: virtualSizeBytes,
+	info := &DeviceInfo{
+		Name:  deviceName,
+		Size:  virtualSizeBytes,
+		State: Unknown,
 	}
 
-	// Create thin device and save metadata
-	err := p.metadata.AddDevice(ctx, deviceInfo, func(devID uint32) error {
-		return dmsetup.CreateDevice(p.poolName, devID)
-	})
+	// Save initial device metadata and allocate new device ID from store
+	if err := p.metadata.AddDevice(ctx, info); err != nil {
+		return errors.Wrapf(err, "failed to save initial metadata for new thin device %q", deviceName)
+	}
 
-	if err != nil {
-		return err
+	// Create thin device
+	if err := p.transition(ctx, deviceName, Creating, Created, func() error {
+		return dmsetup.CreateDevice(p.poolName, info.DeviceID)
+	}); err != nil {
+		return errors.Wrapf(err, "failed to create new thin device %q (dev: %d)", info.Name, info.DeviceID)
 	}
 
 	// Activate thin device
-	err = p.metadata.UpdateDevice(ctx, deviceName, func(info *DeviceInfo) error {
-		info.IsActivated = true
+	if err := p.transition(ctx, deviceName, Activating, Activated, func() error {
 		return dmsetup.ActivateDevice(p.poolName, info.Name, info.DeviceID, info.Size, "")
-	})
+	}); err != nil {
+		return errors.Wrapf(err, "failed to activate new thin device %q (dev: %d)", info.Name, info.DeviceID)
+	}
 
-	return err
+	return nil
 }
 
 // CreateSnapshotDevice creates and activates new thin-device from parent thin-device (makes snapshot)
 func (p *PoolDevice) CreateSnapshotDevice(ctx context.Context, deviceName string, snapshotName string, virtualSizeBytes uint64) error {
-	baseDeviceInfo, err := p.metadata.GetDevice(ctx, deviceName)
+	baseInfo, err := p.metadata.GetDevice(ctx, deviceName)
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "failed to query device metadata for %q", deviceName)
 	}
 
+	isActivated := baseInfo.State == Activated
+
 	// Suspend thin device if it was activated previously
-	isActivated := baseDeviceInfo.IsActivated
 	if isActivated {
-		if err := dmsetup.SuspendDevice(deviceName); err != nil {
-			return errors.Wrapf(err, "failed to suspend device %q", deviceName)
+		if err := p.transition(ctx, baseInfo.Name, Suspending, Suspended, func() error {
+			return dmsetup.SuspendDevice(baseInfo.Name)
+		}); err != nil {
+			return errors.Wrapf(err, "failed to suspend device %q", baseInfo.Name)
 		}
 	}
 
-	snapshotDeviceInfo := &DeviceInfo{
+	snapInfo := &DeviceInfo{
 		Name:       snapshotName,
 		Size:       virtualSizeBytes,
 		ParentName: deviceName,
+		State:      Unknown,
 	}
 
-	err = p.metadata.AddDevice(ctx, snapshotDeviceInfo, func(devID uint32) error {
-		return dmsetup.CreateSnapshot(p.poolName, devID, baseDeviceInfo.DeviceID)
-	})
+	// Save snapshot metadata and allocated new device ID
+	if err := p.metadata.AddDevice(ctx, snapInfo); err != nil {
+		return errors.Wrapf(err, "failed to save initial metadata for snapshot %q", snapshotName)
+	}
 
-	if err != nil {
-		return err
+	// Create thin device snapshot
+	if err := p.transition(ctx, snapInfo.Name, Creating, Created, func() error {
+		return dmsetup.CreateSnapshot(p.poolName, snapInfo.DeviceID, baseInfo.DeviceID)
+	}); err != nil {
+		return errors.Wrapf(err,
+			"failed to create snapshot %q (dev: %d) from %q (dev: %d, activated: %t)",
+			snapInfo.Name,
+			snapInfo.DeviceID,
+			baseInfo.Name,
+			baseInfo.DeviceID,
+			isActivated)
 	}
 
 	if isActivated {
-		if err := dmsetup.ResumeDevice(deviceName); err != nil {
+		// Resume base thin-device
+		if err := p.transition(ctx, baseInfo.Name, Resuming, Resumed, func() error {
+			return dmsetup.ResumeDevice(baseInfo.Name)
+		}); err != nil {
 			return errors.Wrapf(err, "failed to resume device %q", deviceName)
 		}
 	}
 
-	err = p.metadata.UpdateDevice(ctx, snapshotName, func(info *DeviceInfo) error {
-		info.IsActivated = true
-		return dmsetup.ActivateDevice(p.poolName, info.Name, info.DeviceID, info.Size, "")
-	})
+	// Activate snapshot
+	if err := p.transition(ctx, snapInfo.Name, Activating, Activated, func() error {
+		return dmsetup.ActivateDevice(p.poolName, snapInfo.Name, snapInfo.DeviceID, snapInfo.Size, "")
+	}); err != nil {
+		return errors.Wrapf(err, "failed to activate snapshot device %q (dev: %d)", snapInfo.Name, snapInfo.DeviceID)
+	}
 
-	return err
+	return nil
 }
 
-// RemoveDevice removes thin device and metadata from store
-func (p *PoolDevice) RemoveDevice(ctx context.Context, deviceName string, deferred bool) error {
+// DeactivateDevice deactivates thin device
+func (p *PoolDevice) DeactivateDevice(ctx context.Context, deviceName string, deferred bool) error {
+	info, err := p.metadata.GetDevice(ctx, deviceName)
+	if err != nil {
+		return errors.Wrapf(err, "failed to query device %q for deactivation", deviceName)
+	}
+
+	if info.State != Activated {
+		return nil
+	}
+
 	opts := []dmsetup.RemoveDeviceOpt{dmsetup.RemoveWithForce, dmsetup.RemoveWithRetries}
 	if deferred {
 		opts = append(opts, dmsetup.RemoveDeferred)
 	}
 
-	return p.metadata.UpdateDevice(ctx, deviceName, func(info *DeviceInfo) error {
-		info.IsActivated = false
+	if err := p.transition(ctx, deviceName, Deactivating, Deactivated, func() error {
 		return dmsetup.RemoveDevice(deviceName, opts...)
-	})
+	}); err != nil {
+		return errors.Wrapf(err, "failed to remove device %q (dev: %d)", deviceName, info.DeviceID)
+	}
+
+	return nil
 }
 
 // RemovePool deactivates all child thin-devices and removes thin-pool device
@@ -166,16 +243,8 @@ func (p *PoolDevice) RemovePool(ctx context.Context) error {
 	var result *multierror.Error
 
 	for _, name := range deviceNames {
-		info, err := p.metadata.GetDevice(ctx, name)
-		if err != nil {
-			result = multierror.Append(result, errors.Wrapf(err, "failed to get device info %q", name))
-			continue
-		}
-
-		if info.IsActivated {
-			if err := p.RemoveDevice(ctx, name, true); err != nil {
-				result = multierror.Append(result, errors.Wrapf(err, "failed to remove %q", name))
-			}
+		if err := p.DeactivateDevice(ctx, name, true); err != nil {
+			result = multierror.Append(result, errors.Wrapf(err, "failed to remove %q", name))
 		}
 	}
 

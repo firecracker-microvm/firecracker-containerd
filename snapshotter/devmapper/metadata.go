@@ -24,8 +24,6 @@ import (
 )
 
 type (
-	// DeviceIDCallback is a callback used for device ID acquisition
-	DeviceIDCallback func(deviceID uint32) error
 	// DeviceInfoCallback is a callback used for device updates
 	DeviceInfoCallback func(deviceInfo *DeviceInfo) error
 )
@@ -88,9 +86,6 @@ func (m *PoolMetadata) ensureDatabaseInitialized() error {
 }
 
 // AddDevice saves device info to database.
-// The callback should be used to indicate whether device allocation was successful or not.
-// An error returned from the callback will rollback the ID assignment transaction in the database and
-// free it for future use.
 func (m *PoolMetadata) AddDevice(ctx context.Context, info *DeviceInfo) error {
 	return m.db.Update(func(tx *bolt.Tx) error {
 		devicesBucket := tx.Bucket(devicesBucketName)
@@ -114,8 +109,8 @@ func (m *PoolMetadata) AddDevice(ctx context.Context, info *DeviceInfo) error {
 
 // getNextDeviceID finds the next free device ID by taking a cursor
 // through the deviceIDBucketName bucket and finding the next sequentially
-// unassigned ID.  Device ID state is marked by a byte deviceFree or
-// deviceTaken.  Low device IDs will be reused sooner.
+// unassigned ID. Device ID state is marked by a byte deviceFree or
+// deviceTaken. Low device IDs will be reused sooner.
 func getNextDeviceID(tx *bolt.Tx) (uint32, error) {
 	bucket := tx.Bucket(deviceIDBucketName)
 	cursor := bucket.Cursor()
@@ -226,8 +221,6 @@ func (m *PoolMetadata) GetDevice(ctx context.Context, name string) (*DeviceInfo,
 }
 
 // RemoveDevice removes device info from store.
-// The callback should be used to indicate whether device removal was successful or not.
-// An error returned from the callback will rollback the remove transaction in the database.
 func (m *PoolMetadata) RemoveDevice(ctx context.Context, name string) error {
 	return m.db.Update(func(tx *bolt.Tx) error {
 		var (

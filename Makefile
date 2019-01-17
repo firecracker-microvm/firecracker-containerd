@@ -29,8 +29,8 @@ clean:
 deps:
 	test -n "$(GOPATH)" # Make sure GOPATH defined
 	curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b ${GOPATH}/bin v1.12.3
-	go get -u github.com/vbatts/git-validation
-	go get -u github.com/kunalkushwaha/ltag
+	GO111MODULE=off go get -u github.com/vbatts/git-validation
+	GO111MODULE=off go get -u github.com/kunalkushwaha/ltag
 
 lint:
 	ltag -t ./.headers -check -v

@@ -22,7 +22,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"syscall"
 	"time"
 	"unsafe"
@@ -616,29 +615,16 @@ func (s *service) startVM(ctx context.Context, request *taskAPI.CreateTaskReques
 		Debug:       s.config.Debug,
 	}
 
-	idx := strconv.Itoa(1)
-	cfg.Drives = append(cfg.Drives,
-		models.Drive{
-			DriveID:      &idx,
-			PathOnHost:   &s.config.RootDrive,
-			IsRootDevice: firecracker.Bool(true),
-			IsReadOnly:   firecracker.Bool(false),
-		})
-
+	driveBuilder := firecracker.NewDrivesBuilder(s.config.RootDrive)
 	// Attach block devices passed from snapshotter
-	for i, mnt := range request.Rootfs {
+	for _, mnt := range request.Rootfs {
 		if mnt.Type != supportedMountFSType {
 			return nil, errors.Errorf("unsupported mount type '%s', expected '%s'", mnt.Type, supportedMountFSType)
 		}
-		idx := strconv.Itoa(i + 2)
-		cfg.Drives = append(cfg.Drives,
-			models.Drive{
-				DriveID:      &idx,
-				PathOnHost:   firecracker.String(mnt.Source),
-				IsRootDevice: firecracker.Bool(false),
-				IsReadOnly:   firecracker.Bool(false),
-			})
+
+		driveBuilder = driveBuilder.AddDrive(mnt.Source, false)
 	}
+	cfg.Drives = driveBuilder.Build()
 
 	cmd := firecracker.VMCommandBuilder{}.
 		WithBin(s.config.FirecrackerBinaryPath).

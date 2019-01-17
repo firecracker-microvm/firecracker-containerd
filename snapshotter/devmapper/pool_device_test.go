@@ -128,7 +128,7 @@ func TestPoolDevice(t *testing.T) {
 	output, err = exec.Command("umount", thin1MountPath, snap1MountPath).CombinedOutput()
 	assert.NoErrorf(t, err, "failed to unmount devices: %s", string(output))
 
-	t.Run("RemoveDevice", func(t *testing.T) {
+	t.Run("DeactivateDevice", func(t *testing.T) {
 		testRemoveThinDevice(t, pool)
 	})
 }
@@ -179,11 +179,11 @@ func testRemoveThinDevice(t *testing.T, pool *PoolDevice) {
 	}
 
 	for _, deviceName := range deviceList {
-		err := pool.RemoveDevice(context.Background(), deviceName, false)
+		err := pool.DeactivateDevice(context.Background(), deviceName, false)
 		assert.NoErrorf(t, err, "failed to remove '%s'", deviceName)
 	}
 
-	err := pool.RemoveDevice(context.Background(), "not-existing-device", false)
+	err := pool.DeactivateDevice(context.Background(), "not-existing-device", false)
 	assert.Error(t, err, "should return an error if trying to remove not existing device")
 }
 

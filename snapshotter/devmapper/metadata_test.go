@@ -15,7 +15,6 @@ package devmapper
 
 import (
 	"context"
-	"errors"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -27,7 +26,6 @@ import (
 
 var (
 	testCtx             = context.Background()
-	testDevIDCallback   = func(uint32) error { return nil }
 	testDevInfoCallback = func(*DeviceInfo) error { return nil }
 )
 
@@ -36,13 +34,13 @@ func TestPoolMetadata_AddDevice(t *testing.T) {
 	defer cleanupStore(t, tempDir, store)
 
 	expected := &DeviceInfo{
-		Name:        "test2",
-		ParentName:  "test1",
-		Size:        1,
-		IsActivated: true,
+		Name:       "test2",
+		ParentName: "test1",
+		Size:       1,
+		State:      Activated,
 	}
 
-	err := store.AddDevice(testCtx, expected, testDevIDCallback)
+	err := store.AddDevice(testCtx, expected)
 	assert.NoError(t, err)
 
 	result, err := store.GetDevice(testCtx, "test2")
@@ -51,7 +49,7 @@ func TestPoolMetadata_AddDevice(t *testing.T) {
 	assert.Equal(t, expected.Name, result.Name)
 	assert.Equal(t, expected.ParentName, result.ParentName)
 	assert.Equal(t, expected.Size, result.Size)
-	assert.Equal(t, expected.IsActivated, result.IsActivated)
+	assert.Equal(t, expected.State, result.State)
 	assert.NotZero(t, result.DeviceID)
 	assert.Equal(t, expected.DeviceID, result.DeviceID)
 }
@@ -60,9 +58,8 @@ func TestPoolMetadata_AddDeviceRollback(t *testing.T) {
 	tempDir, store := createStore(t)
 	defer cleanupStore(t, tempDir, store)
 
-	expectedErr := errors.New("add failed")
-	err := store.AddDevice(testCtx, &DeviceInfo{Name: "test2"}, func(uint32) error { return expectedErr })
-	assert.Equal(t, expectedErr, err)
+	err := store.AddDevice(testCtx, &DeviceInfo{Name: "test2"})
+	assert.Error(t, err)
 
 	_, err = store.GetDevice(testCtx, "test2")
 	assert.Equal(t, ErrNotFound, err)
@@ -72,10 +69,10 @@ func TestPoolMetadata_AddDeviceDuplicate(t *testing.T) {
 	tempDir, store := createStore(t)
 	defer cleanupStore(t, tempDir, store)
 
-	err := store.AddDevice(testCtx, &DeviceInfo{Name: "test"}, testDevIDCallback)
+	err := store.AddDevice(testCtx, &DeviceInfo{Name: "test"})
 	assert.NoError(t, err)
 
-	err = store.AddDevice(testCtx, &DeviceInfo{Name: "test"}, testDevIDCallback)
+	err = store.AddDevice(testCtx, &DeviceInfo{Name: "test"})
 	assert.Equal(t, ErrAlreadyExists, err)
 }
 
@@ -84,11 +81,11 @@ func TestPoolMetadata_ReuseDeviceID(t *testing.T) {
 	defer cleanupStore(t, tempDir, store)
 
 	info1 := &DeviceInfo{Name: "test1"}
-	err := store.AddDevice(testCtx, info1, testDevIDCallback)
+	err := store.AddDevice(testCtx, info1)
 	assert.NoError(t, err)
 
 	info2 := &DeviceInfo{Name: "test2"}
-	err = store.AddDevice(testCtx, info2, testDevIDCallback)
+	err = store.AddDevice(testCtx, info2)
 	assert.NoError(t, err)
 
 	assert.NotEqual(t, info1.DeviceID, info2.DeviceID)
@@ -98,7 +95,7 @@ func TestPoolMetadata_ReuseDeviceID(t *testing.T) {
 	assert.NoError(t, err)
 
 	info3 := &DeviceInfo{Name: "test3"}
-	err = store.AddDevice(testCtx, info3, testDevIDCallback)
+	err = store.AddDevice(testCtx, info3)
 	assert.NoError(t, err)
 
 	assert.Equal(t, info2.DeviceID, info3.DeviceID)
@@ -108,7 +105,7 @@ func TestPoolMetadata_RemoveDevice(t *testing.T) {
 	tempDir, store := createStore(t)
 	defer cleanupStore(t, tempDir, store)
 
-	err := store.AddDevice(testCtx, &DeviceInfo{Name: "test"}, testDevIDCallback)
+	err := store.AddDevice(testCtx, &DeviceInfo{Name: "test"})
 	assert.NoError(t, err)
 
 	err = store.RemoveDevice(testCtx, "test", testDevInfoCallback)
@@ -123,19 +120,19 @@ func TestPoolMetadata_UpdateDevice(t *testing.T) {
 	defer cleanupStore(t, tempDir, store)
 
 	oldInfo := &DeviceInfo{
-		Name:        "test1",
-		ParentName:  "test2",
-		Size:        3,
-		IsActivated: true,
+		Name:       "test1",
+		ParentName: "test2",
+		Size:       3,
+		State:      Activated,
 	}
 
-	err := store.AddDevice(testCtx, oldInfo, testDevIDCallback)
+	err := store.AddDevice(testCtx, oldInfo)
 	assert.NoError(t, err)
 
 	err = store.UpdateDevice(testCtx, oldInfo.Name, func(info *DeviceInfo) error {
 		info.ParentName = "test5"
 		info.Size = 6
-		info.IsActivated = false
+		info.State = Created
 		return nil
 	})
 
@@ -147,17 +144,17 @@ func TestPoolMetadata_UpdateDevice(t *testing.T) {
 	assert.Equal(t, "test1", newInfo.Name)
 	assert.Equal(t, "test5", newInfo.ParentName)
 	assert.EqualValues(t, 6, newInfo.Size)
-	assert.False(t, newInfo.IsActivated)
+	assert.Equal(t, Created, newInfo.State)
 }
 
 func TestPoolMetadata_GetDeviceNames(t *testing.T) {
 	tempDir, store := createStore(t)
 	defer cleanupStore(t, tempDir, store)
 
-	err := store.AddDevice(testCtx, &DeviceInfo{Name: "test1"}, testDevIDCallback)
+	err := store.AddDevice(testCtx, &DeviceInfo{Name: "test1"})
 	assert.NoError(t, err)
 
-	err = store.AddDevice(testCtx, &DeviceInfo{Name: "test2"}, testDevIDCallback)
+	err = store.AddDevice(testCtx, &DeviceInfo{Name: "test2"})
 	assert.NoError(t, err)
 
 	names, err := store.GetDeviceNames(testCtx)

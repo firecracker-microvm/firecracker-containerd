@@ -25,8 +25,7 @@ import (
 )
 
 var (
-	testCtx             = context.Background()
-	testDevInfoCallback = func(*DeviceInfo) error { return nil }
+	testCtx = context.Background()
 )
 
 func TestPoolMetadata_AddDevice(t *testing.T) {
@@ -58,10 +57,10 @@ func TestPoolMetadata_AddDeviceRollback(t *testing.T) {
 	tempDir, store := createStore(t)
 	defer cleanupStore(t, tempDir, store)
 
-	err := store.AddDevice(testCtx, &DeviceInfo{Name: "test2"})
+	err := store.AddDevice(testCtx, &DeviceInfo{Name: ""})
 	assert.Error(t, err)
 
-	_, err = store.GetDevice(testCtx, "test2")
+	_, err = store.GetDevice(testCtx, "")
 	assert.Equal(t, ErrNotFound, err)
 }
 
@@ -91,7 +90,7 @@ func TestPoolMetadata_ReuseDeviceID(t *testing.T) {
 	assert.NotEqual(t, info1.DeviceID, info2.DeviceID)
 	assert.NotZero(t, info1.DeviceID)
 
-	err = store.RemoveDevice(testCtx, info2.Name, testDevInfoCallback)
+	err = store.RemoveDevice(testCtx, info2.Name)
 	assert.NoError(t, err)
 
 	info3 := &DeviceInfo{Name: "test3"}
@@ -108,7 +107,7 @@ func TestPoolMetadata_RemoveDevice(t *testing.T) {
 	err := store.AddDevice(testCtx, &DeviceInfo{Name: "test"})
 	assert.NoError(t, err)
 
-	err = store.RemoveDevice(testCtx, "test", testDevInfoCallback)
+	err = store.RemoveDevice(testCtx, "test")
 	assert.NoError(t, err)
 
 	_, err = store.GetDevice(testCtx, "test")

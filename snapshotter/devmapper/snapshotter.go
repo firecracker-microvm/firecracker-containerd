@@ -205,7 +205,7 @@ func (s *Snapshotter) removeDevice(ctx context.Context, key string) error {
 	}
 
 	deviceName := s.getDeviceName(snapID)
-	if err := s.pool.DeactivateDevice(ctx, deviceName, true); err != nil {
+	if err := s.pool.RemoveDevice(ctx, deviceName); err != nil {
 		log.G(ctx).WithError(err).Errorf("failed to remove device")
 		return err
 	}

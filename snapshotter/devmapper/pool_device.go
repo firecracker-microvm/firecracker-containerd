@@ -210,13 +210,13 @@ func (p *PoolDevice) CreateSnapshotDevice(ctx context.Context, deviceName string
 
 // DeactivateDevice deactivates thin device
 func (p *PoolDevice) DeactivateDevice(ctx context.Context, deviceName string, deferred bool) error {
-	info, err := p.metadata.GetDevice(ctx, deviceName)
-	if err != nil {
-		return errors.Wrapf(err, "failed to query device %q for deactivation", deviceName)
-	}
+	devicePath := dmsetup.GetFullDevicePath(deviceName)
+	if _, err := os.Stat(devicePath); err != nil {
+		if os.IsNotExist(err) {
+			return ErrNotFound
+		}
 
-	if info.State != Activated {
-		return nil
+		return err
 	}
 
 	opts := []dmsetup.RemoveDeviceOpt{dmsetup.RemoveWithForce, dmsetup.RemoveWithRetries}
@@ -227,7 +227,33 @@ func (p *PoolDevice) DeactivateDevice(ctx context.Context, deviceName string, de
 	if err := p.transition(ctx, deviceName, Deactivating, Deactivated, func() error {
 		return dmsetup.RemoveDevice(deviceName, opts...)
 	}); err != nil {
-		return errors.Wrapf(err, "failed to remove device %q (dev: %d)", deviceName, info.DeviceID)
+		return errors.Wrapf(err, "failed to deactivate device %q", deviceName)
+	}
+
+	return nil
+}
+
+// RemoveDevice completely wipes out thin device from thin-pool and frees it's device ID
+func (p *PoolDevice) RemoveDevice(ctx context.Context, deviceName string) error {
+	info, err := p.metadata.GetDevice(ctx, deviceName)
+	if err != nil {
+		return errors.Wrapf(err, "can't query metadata for device %q", deviceName)
+	}
+
+	if err := p.DeactivateDevice(ctx, deviceName, true); err != nil && err != ErrNotFound {
+		return err
+	}
+
+	if err := p.transition(ctx, deviceName, Removing, Removed, func() error {
+		// Send 'delete' message to thin-pool
+		return dmsetup.DeleteDevice(p.poolName, info.DeviceID)
+	}); err != nil {
+		return errors.Wrapf(err, "failed to delete device %q (dev id: %d)", info.Name, info.DeviceID)
+	}
+
+	// Remove record from meta store and free device ID
+	if err := p.metadata.RemoveDevice(ctx, deviceName); err != nil {
+		return errors.Wrapf(err, "can't remove device %q metadata from store after removal", deviceName)
 	}
 
 	return nil
@@ -242,8 +268,9 @@ func (p *PoolDevice) RemovePool(ctx context.Context) error {
 
 	var result *multierror.Error
 
+	// Deactivate devices if any
 	for _, name := range deviceNames {
-		if err := p.DeactivateDevice(ctx, name, true); err != nil {
+		if err := p.DeactivateDevice(ctx, name, true); err != nil && err != ErrNotFound {
 			result = multierror.Append(result, errors.Wrapf(err, "failed to remove %q", name))
 		}
 	}

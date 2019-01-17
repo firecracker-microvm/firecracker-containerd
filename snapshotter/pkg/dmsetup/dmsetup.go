@@ -162,7 +162,7 @@ func CreateSnapshot(poolName string, deviceID uint32, baseDeviceID uint32) error
 }
 
 // DeleteDevice sends "delete <deviceID>" message to the given thin-pool
-func DeleteDevice(poolName string, deviceID int) error {
+func DeleteDevice(poolName string, deviceID uint32) error {
 	_, err := dmsetup("message", poolName, "0", fmt.Sprintf("delete %d", deviceID))
 	return err
 }

@@ -228,7 +228,7 @@ func (m *PoolMetadata) GetDevice(ctx context.Context, name string) (*DeviceInfo,
 // RemoveDevice removes device info from store.
 // The callback should be used to indicate whether device removal was successful or not.
 // An error returned from the callback will rollback the remove transaction in the database.
-func (m *PoolMetadata) RemoveDevice(ctx context.Context, name string, fn DeviceInfoCallback) error {
+func (m *PoolMetadata) RemoveDevice(ctx context.Context, name string) error {
 	return m.db.Update(func(tx *bolt.Tx) error {
 		var (
 			device = &DeviceInfo{}
@@ -247,7 +247,7 @@ func (m *PoolMetadata) RemoveDevice(ctx context.Context, name string, fn DeviceI
 			return err
 		}
 
-		return fn(device)
+		return nil
 	})
 }
 

@@ -25,7 +25,7 @@ const (
 type DeviceState int
 
 const (
-	// Unknown means that device just created and no operations were performed
+	// Unknown means that device just allocated and no operations were performed
 	Unknown DeviceState = iota
 	// Creating means that device is going to be created
 	Creating
@@ -47,6 +47,10 @@ const (
 	Deactivating
 	// Deactivated means that device successfully deactivated
 	Deactivated
+	// Removing means that device is going to be removed
+	Removing
+	// Removed means that device successfully removed but not yet deleted from meta store
+	Removed
 )
 
 func (s DeviceState) String() string {
@@ -71,6 +75,10 @@ func (s DeviceState) String() string {
 		return "Deactivating"
 	case Deactivated:
 		return "Deactivated"
+	case Removing:
+		return "Removing"
+	case Removed:
+		return "Removed"
 	default:
 		return fmt.Sprintf("unknown %d", s)
 	}

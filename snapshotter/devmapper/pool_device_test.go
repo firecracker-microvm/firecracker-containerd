@@ -129,6 +129,10 @@ func TestPoolDevice(t *testing.T) {
 	assert.NoErrorf(t, err, "failed to unmount devices: %s", string(output))
 
 	t.Run("DeactivateDevice", func(t *testing.T) {
+		testDeactivateThinDevice(t, pool)
+	})
+
+	t.Run("RemoveDevice", func(t *testing.T) {
 		testRemoveThinDevice(t, pool)
 	})
 }
@@ -171,9 +175,8 @@ func testCreateSnapshot(t *testing.T, pool *PoolDevice) {
 	assert.NoErrorf(t, err, "failed to create snapshot from '%s' volume", thinDevice1)
 }
 
-func testRemoveThinDevice(t *testing.T, pool *PoolDevice) {
+func testDeactivateThinDevice(t *testing.T, pool *PoolDevice) {
 	deviceList := []string{
-		thinDevice1,
 		thinDevice2,
 		snapDevice1,
 	}
@@ -185,6 +188,11 @@ func testRemoveThinDevice(t *testing.T, pool *PoolDevice) {
 
 	err := pool.DeactivateDevice(context.Background(), "not-existing-device", false)
 	assert.Error(t, err, "should return an error if trying to remove not existing device")
+}
+
+func testRemoveThinDevice(t *testing.T, pool *PoolDevice) {
+	err := pool.RemoveDevice(testCtx, thinDevice1)
+	assert.NoErrorf(t, err, "should delete thin device from pool")
 }
 
 func tempMountPath(t *testing.T) string {

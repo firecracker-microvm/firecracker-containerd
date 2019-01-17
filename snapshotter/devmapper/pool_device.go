@@ -73,10 +73,10 @@ func NewPoolDevice(ctx context.Context, config *Config) (*PoolDevice, error) {
 	}, nil
 }
 
-// transition invokes 'fn' callback to perform devmapper operation and reflects device state changes/errors in meta store.
+// transition invokes 'updateStateFn' callback to perform devmapper operation and reflects device state changes/errors in meta store.
 // 'tryingState' will be set before invoking callback. If callback succeeded 'successState' will be set, otherwise
 // error details will be recorded in meta store.
-func (p *PoolDevice) transition(ctx context.Context, deviceName string, tryingState DeviceState, successState DeviceState, fn func() error) error {
+func (p *PoolDevice) transition(ctx context.Context, deviceName string, tryingState DeviceState, successState DeviceState, updateStateFn func() error) error {
 	// Set device to trying state
 	uerr := p.metadata.UpdateDevice(ctx, deviceName, func(deviceInfo *DeviceInfo) error {
 		deviceInfo.State = tryingState
@@ -90,7 +90,7 @@ func (p *PoolDevice) transition(ctx context.Context, deviceName string, tryingSt
 	var result *multierror.Error
 
 	// Invoke devmapper operation
-	err := fn()
+	err := updateStateFn()
 
 	if err != nil {
 		result = multierror.Append(result, err)
@@ -171,7 +171,7 @@ func (p *PoolDevice) CreateSnapshotDevice(ctx context.Context, deviceName string
 		State:      Unknown,
 	}
 
-	// Save snapshot metadata and allocated new device ID
+	// Save snapshot metadata and allocate new device ID
 	if err := p.metadata.AddDevice(ctx, snapInfo); err != nil {
 		return errors.Wrapf(err, "failed to save initial metadata for snapshot %q", snapshotName)
 	}

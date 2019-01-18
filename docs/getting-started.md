@@ -254,7 +254,7 @@ configuration file has the following fields:
 Start the containerd snapshotter
 
 ```bash
-$ ./snapshotter /var/run/firecracker-snapshotter.sock /tmp/fc-snapshot
+$ ./naive-snapshotter -address /var/run/firecracker-containerd/naive-snapshotter.sock -path /tmp/fc-snapshot
 ```
 
 In another terminal, start containerd
@@ -266,7 +266,7 @@ sudo PATH=$PATH /usr/local/bin/containerd
 Pull an image
 
 ```bash
-$ sudo ctr images pull --snapshotter firecracker-snapshotter docker.io/library/busybox:latest
+$ sudo ctr images pull --snapshotter firecracker-naive docker.io/library/busybox:latest
 ```
 
 And start a container!

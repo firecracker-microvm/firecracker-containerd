@@ -53,15 +53,8 @@ type Snapshotter struct {
 // NewSnapshotter creates new device mapper snapshotter.
 // Internally it creates thin-pool device (or reloads if it's already exists) and
 // initializes a database file for metadata.
-func NewSnapshotter(ctx context.Context, configPath string) (*Snapshotter, error) {
-	log.G(ctx).WithField("config-path", configPath).Info("creating devmapper snapshotter")
-
+func NewSnapshotter(ctx context.Context, config *Config) (*Snapshotter, error) {
 	var cleanupFn []closeFunc
-
-	config, err := LoadConfig(configPath)
-	if err != nil {
-		return nil, err
-	}
 
 	if err := os.MkdirAll(config.RootPath, 0750); err != nil && !os.IsExist(err) {
 		return nil, errors.Wrapf(err, "failed to create root directory: %s", config.RootPath)

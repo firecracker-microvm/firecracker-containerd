@@ -24,7 +24,8 @@ import (
 )
 
 const (
-	devMapperDir = "/dev/mapper/"
+	// DevMapperDir represents devmapper devices location
+	DevMapperDir = "/dev/mapper/"
 	// SectorSize represents the number of bytes in one sector on devmapper devices
 	SectorSize = 512
 )
@@ -259,11 +260,11 @@ func Version() (string, error) {
 
 // GetFullDevicePath returns full path for the given device name (like "/dev/mapper/name")
 func GetFullDevicePath(deviceName string) string {
-	if strings.HasPrefix(deviceName, devMapperDir) {
+	if strings.HasPrefix(deviceName, DevMapperDir) {
 		return deviceName
 	}
 
-	return devMapperDir + deviceName
+	return DevMapperDir + deviceName
 }
 
 // BlockDeviceSize returns size of block device in bytes

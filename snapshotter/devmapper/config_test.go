@@ -68,7 +68,7 @@ func TestLoadConfig(t *testing.T) {
 
 func TestLoadConfigInvalidPath(t *testing.T) {
 	_, err := LoadConfig("")
-	require.Error(t, err)
+	require.Equal(t, os.ErrNotExist, err)
 
 	_, err = LoadConfig("/dev/null")
 	require.Error(t, err)
@@ -92,7 +92,7 @@ func TestParseInvalidData(t *testing.T) {
 
 func TestFieldValidation(t *testing.T) {
 	config := Config{DataBlockSizeSectors: 1}
-	err := config.validate()
+	err := config.Validate()
 	require.Error(t, err)
 
 	multErr := (err).(*multierror.Error)

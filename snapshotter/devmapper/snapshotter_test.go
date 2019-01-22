@@ -15,10 +15,7 @@ package devmapper
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -27,7 +24,6 @@ import (
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/pkg/losetup"
 )
@@ -50,10 +46,7 @@ func TestSnapshotterSuite(t *testing.T) {
 			BaseImageSize:  "16Mb",
 		}
 
-		configPath := filepath.Join(root, "config.json")
-		saveConfig(t, configPath, config)
-
-		snap, err := NewSnapshotter(context.Background(), configPath)
+		snap, err := NewSnapshotter(context.Background(), config)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -76,12 +69,4 @@ func TestSnapshotterSuite(t *testing.T) {
 			return err
 		}, nil
 	})
-}
-
-func saveConfig(t *testing.T, path string, config *Config) {
-	data, err := json.Marshal(config)
-	require.NoError(t, err)
-
-	err = ioutil.WriteFile(path, data, 0700)
-	require.NoError(t, err)
 }

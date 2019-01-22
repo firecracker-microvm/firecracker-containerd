@@ -16,6 +16,7 @@ package devmapper
 import (
 	"encoding/json"
 	"io/ioutil"
+	"os"
 
 	"github.com/docker/go-units"
 	"github.com/hashicorp/go-multierror"
@@ -64,6 +65,14 @@ type Config struct {
 
 // LoadConfig reads devmapper configuration file JSON format from disk
 func LoadConfig(path string) (*Config, error) {
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return nil, os.ErrNotExist
+		}
+
+		return nil, err
+	}
+
 	data, err := ioutil.ReadFile(path)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to read file")
@@ -78,7 +87,7 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, err
 	}
 
-	if err := config.validate(); err != nil {
+	if err := config.Validate(); err != nil {
 		return nil, err
 	}
 
@@ -103,7 +112,8 @@ func (c *Config) parse() error {
 	return result.ErrorOrNil()
 }
 
-func (c *Config) validate() error {
+// Validate makes sure configuration fields are valid
+func (c *Config) Validate() error {
 	var result *multierror.Error
 
 	strChecks := []struct {

@@ -91,18 +91,31 @@ func TestParseInvalidData(t *testing.T) {
 }
 
 func TestFieldValidation(t *testing.T) {
-	config := Config{DataBlockSizeSectors: 1}
+	config := &Config{DataBlockSizeSectors: 1}
 	err := config.Validate()
 	require.Error(t, err)
 
 	multErr := (err).(*multierror.Error)
-	require.Len(t, multErr.Errors, 6)
+	require.Len(t, multErr.Errors, 8)
 
 	assert.Error(t, multErr.Errors[0], "pool_name is empty")
 	assert.Error(t, multErr.Errors[1], "root_path is empty")
-	assert.Error(t, multErr.Errors[2], "data_device is empty")
-	assert.Error(t, multErr.Errors[3], "meta_device is empty")
+	assert.Error(t, multErr.Errors[2], "base_image_size is empty")
+	assert.Error(t, multErr.Errors[3], "data_device is empty")
+	assert.Error(t, multErr.Errors[4], "meta_device is empty")
+	assert.Error(t, multErr.Errors[5], "data_block_size is empty")
 
-	assert.Equal(t, multErr.Errors[4], errInvalidBlockSize)
-	assert.Equal(t, multErr.Errors[5], errInvalidBlockAlignment)
+	assert.Equal(t, multErr.Errors[6], errInvalidBlockSize)
+	assert.Equal(t, multErr.Errors[7], errInvalidBlockAlignment)
+}
+
+func TestExistingPoolFieldValidation(t *testing.T) {
+	config := &Config{
+		PoolName:      "test",
+		RootPath:      "test",
+		BaseImageSize: "10mb",
+	}
+
+	err := config.Validate()
+	assert.NoError(t, err)
 }

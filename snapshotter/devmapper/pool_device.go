@@ -50,27 +50,58 @@ func NewPoolDevice(ctx context.Context, config *Config) (*PoolDevice, error) {
 		return nil, err
 	}
 
-	poolPath := dmsetup.GetFullDevicePath(config.PoolName)
-	if _, err := os.Stat(poolPath); err == nil {
-		log.G(ctx).Debugf("reloading existing pool %q", poolPath)
-		if err := dmsetup.ReloadPool(config.PoolName, config.DataDevice, config.MetadataDevice, config.DataBlockSizeSectors); err != nil {
-			return nil, errors.Wrapf(err, "failed to reload pool %q", config.PoolName)
-		}
-	} else {
-		if !os.IsNotExist(err) {
-			return nil, errors.Wrapf(err, "failed to stat for %q", poolPath)
-		}
-
-		log.G(ctx).Debug("creating new pool device")
-		if err := dmsetup.CreatePool(config.PoolName, config.DataDevice, config.MetadataDevice, config.DataBlockSizeSectors); err != nil {
-			return nil, errors.Wrapf(err, "failed to create thin-pool with name %q", config.PoolName)
-		}
+	if err := openPool(ctx, config); err != nil {
+		return nil, err
 	}
 
 	return &PoolDevice{
 		poolName: config.PoolName,
 		metadata: poolMetaStore,
 	}, nil
+}
+
+func openPool(ctx context.Context, config *Config) error {
+	if err := config.Validate(); err != nil {
+		return err
+	}
+
+	var (
+		poolPath   = dmsetup.GetFullDevicePath(config.PoolName)
+		poolExists = false
+	)
+
+	if _, err := os.Stat(poolPath); err != nil && !os.IsNotExist(err) {
+		return errors.Wrapf(err, "failed to stat for %q", poolPath)
+	} else if err == nil {
+		poolExists = true
+	}
+
+	// Create new pool if not exists
+	if !poolExists {
+		log.G(ctx).Debug("creating new pool device")
+		if err := dmsetup.CreatePool(config.PoolName, config.DataDevice, config.MetadataDevice, config.DataBlockSizeSectors); err != nil {
+			return errors.Wrapf(err, "failed to create thin-pool with name %q", config.PoolName)
+		}
+
+		return nil
+	}
+
+	// Pool exists, check if it needs to be reloaded
+	if config.DataDevice != "" && config.MetadataDevice != "" {
+		log.G(ctx).Debugf("reloading existing pool %q", poolPath)
+		if err := dmsetup.ReloadPool(config.PoolName, config.DataDevice, config.MetadataDevice, config.DataBlockSizeSectors); err != nil {
+			return errors.Wrapf(err, "failed to reload pool %q", config.PoolName)
+		}
+
+		return nil
+	}
+
+	// If data and meta devices are not provided, use existing pool. Query info to make sure it's OK.
+	if _, err := dmsetup.Info(poolPath); err != nil {
+		return errors.Wrapf(err, "failed to query info for existing pool %q", poolPath)
+	}
+
+	return nil
 }
 
 // transition invokes 'updateStateFn' callback to perform devmapper operation and reflects device state changes/errors in meta store.

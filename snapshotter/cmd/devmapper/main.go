@@ -120,6 +120,10 @@ func applyStorageOpt(ctx context.Context, key, val string, config *devmapper.Con
 
 		config.DataBlockSize = val
 		config.DataBlockSizeSectors = uint32(size / dmsetup.SectorSize)
+	case "dm.fs":
+		if val != "ext4" {
+			log.G(ctx).Warnf("%q not supported, defaulting to ext4", val)
+		}
 	default:
 		log.G(ctx).Warnf("ignoring unsupported flag %q", key)
 	}

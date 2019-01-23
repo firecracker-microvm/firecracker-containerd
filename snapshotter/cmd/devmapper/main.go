@@ -44,10 +44,15 @@ func main() {
 	flag.StringVar(&configPath, "config", "", "Path to devmapper configuration file")
 	flag.StringVar(&rootPath, "path", "", "Path to snapshotter data")
 
+	// These flags are needed for compatibility with container-storage-setup tool as there is no way to
+	// ignore unknown flags in `flag` package. Storage options are parsed using visitKeyValueOpts func.
+	flag.String("storage-driver", "devicemapper", "Storage driver to use. Always devicemapper.")
+	flag.Bool("storage-opt", false, "Storage configuration options (compatible with Docker dm.* flags)")
+
 	flag.Parse()
 
 	// Try load file from disk
-	if cfg, err := loadConfig(configPath); err == nil {
+	if cfg, err := loadConfig(ctx, configPath); err == nil {
 		config = cfg
 	} else if err != os.ErrNotExist {
 		log.G(ctx).WithError(err).Fatal("failed to load config file")
@@ -67,7 +72,7 @@ func main() {
 	}
 
 	if err := config.Validate(); err != nil {
-		log.G(ctx).Fatal("invalid configuration")
+		log.G(ctx).WithError(err).Fatal("invalid configuration")
 		return
 	}
 
@@ -76,9 +81,8 @@ func main() {
 	})
 }
 
-// loadConfig loads configuration file from disk.
-// If file not exists, empty Config struct will be returned
-func loadConfig(configPath string) (*devmapper.Config, error) {
+// loadConfig loads configuration file from disk
+func loadConfig(ctx context.Context, configPath string) (*devmapper.Config, error) {
 	if configPath == "" {
 		configPath = os.Getenv(configPathEnvName)
 	}
@@ -92,11 +96,14 @@ func loadConfig(configPath string) (*devmapper.Config, error) {
 		return nil, err
 	}
 
+	log.G(ctx).Infof("loaded configuration file %q", configPath)
 	return config, nil
 }
 
 // applyStorageOpt overwrites configuration with --storage-opt command line flags
 func applyStorageOpt(ctx context.Context, key, value string, config *devmapper.Config) error {
+	log.G(ctx).Infof("applying storage opt: %s=%s", key, value)
+
 	switch key {
 	case "dm.basesize":
 		size, err := units.RAMInBytes(value)

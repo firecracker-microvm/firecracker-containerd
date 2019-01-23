@@ -42,7 +42,7 @@ func NewPoolDevice(ctx context.Context, config *Config) (*PoolDevice, error) {
 		return nil, err
 	}
 
-	log.G(ctx).Infof("using dmsetup: %s", version)
+	log.G(ctx).Infof("using dmsetup:\n%s", version)
 
 	dbpath := filepath.Join(config.RootPath, config.PoolName+".db")
 	poolMetaStore, err := NewPoolMetadata(dbpath)

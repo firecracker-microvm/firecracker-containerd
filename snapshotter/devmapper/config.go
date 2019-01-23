@@ -15,6 +15,7 @@ package devmapper
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"os"
 
@@ -97,10 +98,12 @@ func LoadConfig(path string) (*Config, error) {
 func (c *Config) parse() error {
 	var result *multierror.Error
 
-	if blockSize, err := units.RAMInBytes(c.DataBlockSize); err != nil {
-		result = multierror.Append(result, errors.Wrapf(err, "failed to parse data block size: %q", c.DataBlockSize))
-	} else {
-		c.DataBlockSizeSectors = uint32(blockSize / dmsetup.SectorSize)
+	if c.DataBlockSize != "" {
+		if blockSize, err := units.RAMInBytes(c.DataBlockSize); err != nil {
+			result = multierror.Append(result, errors.Wrapf(err, "failed to parse data block size: %q", c.DataBlockSize))
+		} else {
+			c.DataBlockSizeSectors = uint32(blockSize / dmsetup.SectorSize)
+		}
 	}
 
 	if baseImageSize, err := units.RAMInBytes(c.BaseImageSize); err != nil {
@@ -116,28 +119,43 @@ func (c *Config) parse() error {
 func (c *Config) Validate() error {
 	var result *multierror.Error
 
-	strChecks := []struct {
-		field string
-		name  string
-	}{
-		{c.PoolName, "pool_name"},
-		{c.RootPath, "root_path"},
-		{c.DataDevice, "data_device"},
-		{c.MetadataDevice, "meta_device"},
+	if c.PoolName == "" {
+		result = multierror.Append(result, fmt.Errorf("pool_name is required"))
 	}
 
-	for _, check := range strChecks {
-		if check.field == "" {
-			result = multierror.Append(result, errors.Errorf("%s is empty", check.name))
+	if c.RootPath == "" {
+		result = multierror.Append(result, fmt.Errorf("root_path is required"))
+	}
+
+	if c.BaseImageSize == "" {
+		result = multierror.Append(result, fmt.Errorf("base_image_size is required"))
+	}
+
+	// The following fields are required only if we want to create or reload pool.
+	// Otherwise existing pool with 'PoolName' (prepared in advance) can be used by snapshotter.
+	if c.DataDevice != "" || c.MetadataDevice != "" || c.DataBlockSize != "" || c.DataBlockSizeSectors != 0 {
+		strChecks := []struct {
+			field string
+			name  string
+		}{
+			{c.DataDevice, "data_device"},
+			{c.MetadataDevice, "meta_device"},
+			{c.DataBlockSize, "data_block_size"},
 		}
-	}
 
-	if c.DataBlockSizeSectors < dataBlockMinSize || c.DataBlockSizeSectors > dataBlockMaxSize {
-		result = multierror.Append(result, errInvalidBlockSize)
-	}
+		for _, check := range strChecks {
+			if check.field == "" {
+				result = multierror.Append(result, errors.Errorf("%s is empty", check.name))
+			}
+		}
 
-	if c.DataBlockSizeSectors%dataBlockMinSize != 0 {
-		result = multierror.Append(result, errInvalidBlockAlignment)
+		if c.DataBlockSizeSectors < dataBlockMinSize || c.DataBlockSizeSectors > dataBlockMaxSize {
+			result = multierror.Append(result, errInvalidBlockSize)
+		}
+
+		if c.DataBlockSizeSectors%dataBlockMinSize != 0 {
+			result = multierror.Append(result, errInvalidBlockAlignment)
+		}
 	}
 
 	return result.ErrorOrNil()

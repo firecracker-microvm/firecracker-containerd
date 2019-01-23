@@ -75,7 +75,10 @@ func TestPoolDevice(t *testing.T) {
 		RootPath:             tempDir,
 		DataDevice:           loopDataDevice,
 		MetadataDevice:       loopMetaDevice,
+		DataBlockSize:        "65536",
 		DataBlockSizeSectors: 128,
+		BaseImageSize:        "16mb",
+		BaseImageSizeBytes:   16 * 1024 * 1024,
 	}
 
 	pool, err := NewPoolDevice(ctx, config)

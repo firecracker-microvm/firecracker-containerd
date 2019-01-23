@@ -24,7 +24,9 @@ import (
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
+	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/pkg/dmsetup"
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/pkg/losetup"
 )
 
@@ -37,13 +39,15 @@ func TestSnapshotterSuite(t *testing.T) {
 		_, loopDataDevice := createLoopbackDevice(t, root)
 		_, loopMetaDevice := createLoopbackDevice(t, root)
 
+		poolName := fmt.Sprintf("containerd-snapshotter-suite-pool-%d", time.Now().Nanosecond())
+		err := dmsetup.CreatePool(poolName, loopDataDevice, loopMetaDevice, 64*1024/dmsetup.SectorSize)
+		require.NoErrorf(t, err, "failed to create pool %q", poolName)
+
 		config := &Config{
-			RootPath:       root,
-			PoolName:       fmt.Sprintf("containerd-snapshotter-suite-pool-%d", time.Now().Nanosecond()),
-			DataDevice:     loopDataDevice,
-			MetadataDevice: loopMetaDevice,
-			DataBlockSize:  "64Kb",
-			BaseImageSize:  "16Mb",
+			RootPath:           root,
+			PoolName:           poolName,
+			BaseImageSize:      "16Mb",
+			BaseImageSizeBytes: 16 * 1024 * 1024,
 		}
 
 		snap, err := NewSnapshotter(context.Background(), config)

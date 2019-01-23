@@ -29,8 +29,8 @@ func parseKeyValueOpt(opt string) (string, string, error) {
 	return strings.TrimSpace(pair[0]), strings.TrimSpace(pair[1]), nil
 }
 
-// visitKVOpts finds all --optName key=value in command line string and invokes callback for each pair
-func visitKVOpts(optName string, cb func(key, value string) error) error {
+// visitKeyValueOpts finds all --optName key=value in command line string and invokes callback for each pair
+func visitKeyValueOpts(optName string, optFn func(key, value string) error) error {
 	// Nothing to visit
 	if len(os.Args) < 3 {
 		return nil
@@ -50,7 +50,7 @@ func visitKVOpts(optName string, cb func(key, value string) error) error {
 			return err
 		}
 
-		if err := cb(key, value); err != nil {
+		if err := optFn(key, value); err != nil {
 			return err
 		}
 	}

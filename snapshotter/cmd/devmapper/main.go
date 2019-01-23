@@ -59,7 +59,7 @@ func main() {
 	}
 
 	// Append and/or overwrite file configuration with --storage-opt dm.XXX=YYY command line flags
-	if err := visitKVOpts("--storage-opt", func(key, value string) error {
+	if err := visitKeyValueOpts("--storage-opt", func(key, value string) error {
 		return applyStorageOpt(ctx, key, value, config)
 	}); err != nil {
 		log.G(ctx).WithError(err).Fatal("failed to apply storage options")
@@ -96,33 +96,34 @@ func loadConfig(configPath string) (*devmapper.Config, error) {
 }
 
 // applyStorageOpt overwrites configuration with --storage-opt command line flags
-func applyStorageOpt(ctx context.Context, key, val string, config *devmapper.Config) error {
+func applyStorageOpt(ctx context.Context, key, value string, config *devmapper.Config) error {
 	switch key {
 	case "dm.basesize":
-		size, err := units.RAMInBytes(val)
+		size, err := units.RAMInBytes(value)
 		if err != nil {
 			return err
 		}
 
-		config.BaseImageSize = val
+		config.BaseImageSize = value
 		config.BaseImageSizeBytes = uint64(size)
 	case "dm.metadatadev":
-		config.MetadataDevice = val
+		config.MetadataDevice = value
 	case "dm.datadev":
-		config.DataDevice = val
+		config.DataDevice = value
 	case "dm.thinpooldev":
-		config.PoolName = strings.TrimPrefix(val, dmsetup.DevMapperDir)
+		config.PoolName = strings.TrimPrefix(value, dmsetup.DevMapperDir)
 	case "dm.blocksize":
-		size, err := units.RAMInBytes(val)
+		size, err := units.RAMInBytes(value)
 		if err != nil {
 			return err
 		}
 
-		config.DataBlockSize = val
+		config.DataBlockSize = value
 		config.DataBlockSizeSectors = uint32(size / dmsetup.SectorSize)
 	case "dm.fs":
-		if val != "ext4" {
-			log.G(ctx).Warnf("%q not supported, defaulting to ext4", val)
+		// TODO: Support alternative file systems (https://github.com/firecracker-microvm/firecracker-containerd/issues/44)
+		if value != "ext4" {
+			log.G(ctx).Warnf("%q not supported, defaulting to ext4", value)
 		}
 	default:
 		log.G(ctx).Warnf("ignoring unsupported flag %q", key)

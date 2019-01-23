@@ -43,14 +43,14 @@ func TestParseInvalidKeyValueOpt(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestVisitKVOpts(t *testing.T) {
+func TestVisitKeyValueOpts(t *testing.T) {
 	var (
 		args   = os.Args
 		called = false
 	)
 
 	os.Args = []string{"exec_path", "--opt", "a=b"}
-	err := visitKVOpts("--opt", func(key, value string) error {
+	err := visitKeyValueOpts("--opt", func(key, value string) error {
 		called = true
 		assert.Equal(t, "a", key)
 		assert.Equal(t, "b", value)
@@ -63,7 +63,7 @@ func TestVisitKVOpts(t *testing.T) {
 	defer func() { os.Args = args }()
 }
 
-func TestVisitKVOptCallbackErr(t *testing.T) {
+func TestVisitKeyValueOptCallbackErr(t *testing.T) {
 	var (
 		args  = os.Args
 		count = 0
@@ -71,7 +71,7 @@ func TestVisitKVOptCallbackErr(t *testing.T) {
 	)
 
 	os.Args = []string{"exec_path", "--opt", "a=b", "--opt", "c=d"}
-	err := visitKVOpts("--opt", func(key, value string) error {
+	err := visitKeyValueOpts("--opt", func(key, value string) error {
 		count++
 		return cbErr
 	})
@@ -110,7 +110,7 @@ func TestVisitInvalidOpts(t *testing.T) {
 
 		t.Run(test.name, func(t *testing.T) {
 			os.Args = append([]string{"exec_path_to_be_skipped"}, args...)
-			err := visitKVOpts("--opt", func(_, _ string) error {
+			err := visitKeyValueOpts("--opt", func(_, _ string) error {
 				assert.Fail(t, "callback should not be called")
 				return nil
 			})

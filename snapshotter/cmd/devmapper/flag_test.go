@@ -41,6 +41,9 @@ func TestParseKeyValueOpt(t *testing.T) {
 func TestParseInvalidKeyValueOpt(t *testing.T) {
 	_, _, err := parseKeyValueOpt("dm.baseSize")
 	assert.Error(t, err)
+
+	_, _, err = parseKeyValueOpt("=value")
+	assert.Error(t, err)
 }
 
 func TestVisitKeyValueOpts(t *testing.T) {

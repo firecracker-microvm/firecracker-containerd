@@ -26,7 +26,14 @@ func parseKeyValueOpt(opt string) (string, string, error) {
 		return "", "", fmt.Errorf("failed to split option: %q", opt)
 	}
 
-	return strings.TrimSpace(pair[0]), strings.TrimSpace(pair[1]), nil
+	key := strings.TrimSpace(pair[0])
+	if key == "" {
+		return "", "", fmt.Errorf("option %q has no key", opt)
+	}
+
+	value := strings.TrimSpace(pair[1])
+
+	return key, value, nil
 }
 
 // visitKeyValueOpts finds all --optName key=value in command line string and invokes callback for each pair

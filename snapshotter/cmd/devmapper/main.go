@@ -56,7 +56,6 @@ func main() {
 		config = cfg
 	} else if err != os.ErrNotExist {
 		log.G(ctx).WithError(err).Fatal("failed to load config file")
-		return
 	}
 
 	if rootPath != "" {
@@ -68,12 +67,10 @@ func main() {
 		return applyStorageOpt(ctx, key, value, config)
 	}); err != nil {
 		log.G(ctx).WithError(err).Fatal("failed to apply storage options")
-		return
 	}
 
 	if err := config.Validate(); err != nil {
 		log.G(ctx).WithError(err).Fatal("invalid configuration")
-		return
 	}
 
 	snapshotter.Run(func(ctx context.Context) (snapshots.Snapshotter, error) {

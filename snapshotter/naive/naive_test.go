@@ -23,9 +23,11 @@ import (
 
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/containerd/snapshots/testsuite"
+	"github.com/firecracker-microvm/firecracker-containerd/internal"
 )
 
 func TestCreateImage(t *testing.T) {
+	internal.RequiresRoot(t)
 	snap := Snapshotter{}
 
 	tempDir, err := ioutil.TempDir("", "fc-snapshotter")
@@ -64,5 +66,6 @@ func createSnapshotter(ctx context.Context, root string) (snapshots.Snapshotter,
 }
 
 func TestSnapshotterSuite(t *testing.T) {
+	internal.RequiresRoot(t)
 	testsuite.SnapshotterSuite(t, "Snapshotter", createSnapshotter)
 }

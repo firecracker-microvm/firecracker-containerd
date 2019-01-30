@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/docker/go-units"
+	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
@@ -35,6 +36,7 @@ const (
 )
 
 func TestDMSetup(t *testing.T) {
+	internal.RequiresRoot(t)
 	tempDir, err := ioutil.TempDir("", "dmsetup-tests-")
 	require.NoErrorf(t, err, "failed to make temp dir for tests")
 

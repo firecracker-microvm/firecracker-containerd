@@ -11,7 +11,11 @@
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
+# Set this to pass additional commandline flags to the go compiler, e.g. "make test EXTRAGOARGS=-v"
+EXTRAGOARGS:=
+
 SUBDIRS:=cmd/devmapper cmd/naive
+SOURCES:=$(shell find . -name '*.go')
 
 all: $(SUBDIRS)
 
@@ -20,6 +24,9 @@ $(SUBDIRS):
 
 install: $(SUBDIRS)
 	for d in $(SUBDIRS); do $(MAKE) -C $$d install; done
+
+test: $(SOURCES)
+	go test ./... $(EXTRAGOARGS)
 
 clean:
 	for d in $(SUBDIRS); do $(MAKE) -C $$d clean; done

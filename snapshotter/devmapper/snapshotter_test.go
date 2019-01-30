@@ -24,6 +24,7 @@ import (
 
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/containerd/snapshots/testsuite"
+	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -32,6 +33,7 @@ import (
 )
 
 func TestSnapshotterSuite(t *testing.T) {
+	internal.RequiresRoot(t)
 	logrus.SetLevel(logrus.DebugLevel)
 
 	testsuite.SnapshotterSuite(t, "devmapper", func(ctx context.Context, root string) (snapshots.Snapshotter, func() error, error) {

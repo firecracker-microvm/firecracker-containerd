@@ -19,11 +19,13 @@ import (
 	"testing"
 
 	"github.com/docker/go-units"
+	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestLosetup(t *testing.T) {
+	internal.RequiresRoot(t)
 	var (
 		imagePath   = createSparseImage(t)
 		loopDevice1 string

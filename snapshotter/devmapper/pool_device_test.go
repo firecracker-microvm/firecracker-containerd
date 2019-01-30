@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/docker/go-units"
+	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -50,6 +51,7 @@ const (
 // - Mount 'snap-1' and make sure test file is v1
 // - Unmount volumes and remove all devices
 func TestPoolDevice(t *testing.T) {
+	internal.RequiresRoot(t)
 	logrus.SetLevel(logrus.DebugLevel)
 	ctx := context.Background()
 

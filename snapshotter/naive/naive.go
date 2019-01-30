@@ -36,6 +36,7 @@ const (
 	imageDirName      = "images"
 	imageFSType       = "ext4"
 	sparseImageSizeMB = 1024
+	mib               = 1048576
 )
 
 // Snapshotter implements naive snapshotter for containerd
@@ -302,7 +303,7 @@ func (s *Snapshotter) createImage(ctx context.Context, imagePath string, fileSiz
 		return err
 	}
 
-	if err := file.Truncate(int64(fileSizeMB) * 1048576); err != nil {
+	if err := file.Truncate(int64(fileSizeMB) * mib); err != nil {
 		return err
 	}
 

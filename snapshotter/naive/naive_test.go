@@ -40,11 +40,11 @@ func TestCreateImage(t *testing.T) {
 	imgPath := filepath.Join(tempDir, "x.img")
 
 	const (
-		sizeMB    = 100
-		sizeBytes = sizeMB * 100000
+		sizeMiB   = 100
+		sizeBytes = sizeMiB * mib
 	)
 
-	err = snap.createImage(context.Background(), imgPath, sizeMB)
+	err = snap.createImage(context.Background(), imgPath, sizeMiB)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -112,11 +112,32 @@ func (s *Snapshotter) Update(ctx context.Context, info snapshots.Info, fieldpath
 	return info, err
 }
 
-// Usage not yet implemented
+// Usage returns the resource usage of an active or committed snapshot excluding the usage of parent snapshots.
 func (s *Snapshotter) Usage(ctx context.Context, key string) (snapshots.Usage, error) {
 	log.G(ctx).WithField("key", key).Debug("usage")
 
-	return snapshots.Usage{}, errors.New("usage not implemented")
+	var (
+		id  string
+		err error
+	)
+
+	err = s.withTransaction(ctx, false, func(ctx context.Context) error {
+		id, _, _, err = storage.GetInfo(ctx, key)
+		return err
+	})
+
+	if err != nil {
+		return snapshots.Usage{}, err
+	}
+
+	deviceName := s.getDeviceName(id)
+	devicePath := dmsetup.GetFullDevicePath(deviceName)
+	blockDeviceSize, err := dmsetup.BlockDeviceSize(devicePath)
+	if err != nil {
+		return snapshots.Usage{}, err
+	}
+
+	return snapshots.Usage{Size: int64(blockDeviceSize)}, nil
 }
 
 // Mounts return the list of mounts for the active or view snapshot
@@ -132,6 +153,10 @@ func (s *Snapshotter) Mounts(ctx context.Context, key string) ([]mount.Mount, er
 		snap, err = storage.GetSnapshot(ctx, key)
 		return err
 	})
+
+	if err != nil {
+		return nil, err
+	}
 
 	return s.buildMounts(snap), nil
 }
@@ -232,8 +257,14 @@ func (s *Snapshotter) Close() error {
 }
 
 func (s *Snapshotter) createSnapshot(ctx context.Context, kind snapshots.Kind, key, parent string, opts ...snapshots.Opt) ([]mount.Mount, error) {
+	logger := log.G(ctx).
+		WithField("kind", kind).
+		WithField("key", key).
+		WithField("parent", parent)
+
 	snap, err := storage.CreateSnapshot(ctx, kind, key, parent, opts...)
 	if err != nil {
+		logger.WithError(err).Error("failed to create snapshot")
 		return nil, err
 	}
 
@@ -243,21 +274,22 @@ func (s *Snapshotter) createSnapshot(ctx context.Context, kind snapshots.Kind, k
 
 		err := s.pool.CreateThinDevice(ctx, deviceName, s.config.BaseImageSizeBytes)
 		if err != nil {
-			log.G(ctx).WithError(err).Errorf("failed to create thin device for snapshot %s", snap.ID)
+			logger.WithError(err).Errorf("failed to create thin device for snapshot %q", snap.ID)
 			return nil, err
 		}
 
 		if err := s.mkfs(ctx, deviceName); err != nil {
+			logger.WithError(err).Error("mkfs failed")
 			return nil, err
 		}
 	} else {
 		parentDeviceName := s.getDeviceName(snap.ParentIDs[0])
 		snapDeviceName := s.getDeviceName(snap.ID)
-		log.G(ctx).Debugf("creating snapshot device '%s' from '%s'", snapDeviceName, parentDeviceName)
+		logger.Debugf("creating snapshot device '%s' from '%s'", snapDeviceName, parentDeviceName)
 
 		err := s.pool.CreateSnapshotDevice(ctx, parentDeviceName, snapDeviceName, s.config.BaseImageSizeBytes)
 		if err != nil {
-			log.G(ctx).WithError(err).Errorf("failed to create snapshot device from parent %s", parentDeviceName)
+			logger.WithError(err).Errorf("failed to create snapshot device from parent %q", parentDeviceName)
 			return nil, err
 		}
 	}

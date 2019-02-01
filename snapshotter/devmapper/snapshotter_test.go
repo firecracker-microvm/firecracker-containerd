@@ -16,61 +16,116 @@ package devmapper
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/containerd/snapshots/testsuite"
-	"github.com/firecracker-microvm/firecracker-containerd/internal"
+	"github.com/containerd/continuity/fs/fstest"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/pkg/dmsetup"
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/pkg/losetup"
 )
 
 func TestSnapshotterSuite(t *testing.T) {
 	internal.RequiresRoot(t)
-	logrus.SetLevel(logrus.DebugLevel)
 
 	testsuite.SnapshotterSuite(t, "devmapper", func(ctx context.Context, root string) (snapshots.Snapshotter, func() error, error) {
-		// Create loopback devices for each test case
-		_, loopDataDevice := createLoopbackDevice(t, root)
-		_, loopMetaDevice := createLoopbackDevice(t, root)
-
-		poolName := fmt.Sprintf("containerd-snapshotter-suite-pool-%d", time.Now().Nanosecond())
-		err := dmsetup.CreatePool(poolName, loopDataDevice, loopMetaDevice, 64*1024/dmsetup.SectorSize)
-		require.NoErrorf(t, err, "failed to create pool %q", poolName)
-
-		config := &Config{
-			RootPath:           root,
-			PoolName:           poolName,
-			BaseImageSize:      "16Mb",
-			BaseImageSizeBytes: 16 * 1024 * 1024,
-		}
-
-		snap, err := NewSnapshotter(context.Background(), config)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		// Remove device mapper pool after test completes
-		removePool := func() error {
-			return snap.pool.RemovePool(ctx)
-		}
-
-		// Pool cleanup should be called before closing metadata store (as we need to retrieve device names)
-		snap.cleanupFn = append([]closeFunc{removePool}, snap.cleanupFn...)
-
-		return snap, func() error {
-			err := snap.Close()
-			assert.NoErrorf(t, err, "failed to close snapshotter")
-
-			err = losetup.DetachLoopDevice(loopDataDevice, loopMetaDevice)
-			assert.NoErrorf(t, err, "failed to detach loop devices")
-
-			return err
-		}, nil
+		snap := createSnapshotter(t, root)
+		return snap, snap.Close, nil
 	})
+}
+
+func TestSnapshotterUsage(t *testing.T) {
+	internal.RequiresRoot(t)
+
+	tempDir, err := ioutil.TempDir("", "devmapper-snapshotter-")
+	require.NoError(t, err)
+
+	snap := createSnapshotter(t, tempDir)
+	defer func() {
+		err := snap.Close()
+		assert.NoError(t, err)
+
+		err = os.RemoveAll(tempDir)
+		assert.NoError(t, err)
+	}()
+
+	preparing := filepath.Join(tempDir, "preparing")
+	err = os.MkdirAll(preparing, 0700)
+	require.NoError(t, err)
+
+	mounts, err := snap.Prepare(context.Background(), preparing, "")
+	require.NoError(t, err)
+
+	initialApplier := fstest.Apply(
+		fstest.CreateFile("/foo", []byte("foo\n"), 0777),
+		fstest.CreateDir("/a", 0755),
+	)
+
+	err = mount.WithTempMount(context.Background(), mounts, initialApplier.Apply)
+	require.NoError(t, err)
+
+	t.Run("ActiveSnapshotUsage", func(t *testing.T) {
+		usage, err := snap.Usage(context.Background(), preparing)
+		assert.NoError(t, err)
+		assert.NotZero(t, usage.Size)
+	})
+
+	committed := filepath.Join(tempDir, "committed")
+	err = snap.Commit(context.Background(), committed, preparing)
+	require.NoError(t, err)
+
+	t.Run("CommittedSnapshotUsage", func(t *testing.T) {
+		usage, err := snap.Usage(context.Background(), committed)
+		assert.NoError(t, err)
+		assert.NotZero(t, usage.Size)
+	})
+}
+
+func createSnapshotter(t *testing.T, root string) *Snapshotter {
+	logrus.SetLevel(logrus.DebugLevel)
+
+	_, loopDataDevice := createLoopbackDevice(t, root)
+	_, loopMetaDevice := createLoopbackDevice(t, root)
+
+	poolName := fmt.Sprintf("containerd-snapshotter-suite-pool-%d", time.Now().Nanosecond())
+	err := dmsetup.CreatePool(poolName, loopDataDevice, loopMetaDevice, 64*1024/dmsetup.SectorSize)
+	require.NoErrorf(t, err, "failed to create pool %q", poolName)
+
+	config := &Config{
+		RootPath:           root,
+		PoolName:           poolName,
+		BaseImageSize:      "16Mb",
+		BaseImageSizeBytes: 16 * 1024 * 1024,
+	}
+
+	snap, err := NewSnapshotter(context.Background(), config)
+	require.NoErrorf(t, err, "unable to create snapshotter %q", config.PoolName)
+
+	// Remove device mapper pool after test completes
+	removePool := func() error {
+		return snap.pool.RemovePool(context.Background())
+	}
+
+	// Detach data/metadata loop devices
+	detachLoop := func() error {
+		return losetup.DetachLoopDevice(loopDataDevice, loopMetaDevice)
+	}
+
+	// Pool cleanup should be called before closing metadata store (as we need to retrieve device names)
+	snap.cleanupFn = append([]closeFunc{removePool}, snap.cleanupFn...)
+
+	// Loop devices need to be detached at the very end
+	snap.cleanupFn = append(snap.cleanupFn, detachLoop)
+
+	return snap
 }

@@ -13,6 +13,7 @@ require (
 	github.com/containerd/ttrpc v0.0.0-20181001154009-f51df4475b76
 	github.com/containerd/typeurl v0.0.0-20181015155603-461401dc8f19 // indirect
 	github.com/coreos/go-systemd v0.0.0-20181031085051-9002847aa142 // indirect
+	github.com/docker/go-events v0.0.0-20170721190031-9461782956ad // indirect
 	github.com/docker/go-units v0.3.3
 	github.com/firecracker-microvm/firecracker-go-sdk v0.0.0-20190111234345-e4d80c16bbb3
 	github.com/godbus/dbus v0.0.0-20181025153459-66d97aec3384 // indirect
@@ -21,6 +22,7 @@ require (
 	github.com/hashicorp/go-multierror v1.0.0
 	github.com/mdlayher/vsock v0.0.0-20181130155850-676f733b747c
 	github.com/opencontainers/go-digest v1.0.0-rc1 // indirect
+	github.com/opencontainers/image-spec v1.0.1 // indirect
 	github.com/opencontainers/runc v0.1.1 // indirect
 	github.com/opencontainers/runtime-spec v0.1.2-0.20181106065543-31e0d16c1cb7 // indirect
 	github.com/pkg/errors v0.8.0

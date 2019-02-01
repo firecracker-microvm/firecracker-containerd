@@ -214,6 +214,24 @@ func (s *Snapshotter) Walk(ctx context.Context, fn func(context.Context, snapsho
 	})
 }
 
+// ResetPool deactivates and deletes all thin devices in thin-pool.
+// Used for cleaning pool after benchmarking.
+func (s *Snapshotter) ResetPool(ctx context.Context) error {
+	names, err := s.pool.metadata.GetDeviceNames(ctx)
+	if err != nil {
+		return err
+	}
+
+	var result *multierror.Error
+	for _, name := range names {
+		if err := s.pool.RemoveDevice(ctx, name); err != nil {
+			result = multierror.Append(result, err)
+		}
+	}
+
+	return result.ErrorOrNil()
+}
+
 // Close releases devmapper snapshotter resources.
 // All subsequent Close calls will be ignored.
 func (s *Snapshotter) Close() error {

@@ -48,6 +48,15 @@ fields:
 * `BaseImageSize` - defines how much space to allocate when creating the base
   device
 
+Here's a sample entry that can be made in the configuration file `/etc/firecracker-dm-snapshotter/config.json`:
+```json
+{
+	"base_image_size" : "20GB",
+	"root_path" : "/tmp/test",
+	"pool_name" : "test"
+}
+```
+
 For example, to run the snapshotter with its domain socket at
 `/var/run/firecracker-dm-snapshotter.sock` and its configuration file at
 `/etc/firecracker-dm-snapshotter/config.json` you would run the snapshotter

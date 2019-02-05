@@ -254,7 +254,7 @@ configuration file has the following fields:
 Start the containerd snapshotter
 
 ```bash
-$ ./naive-snapshotter -address /var/run/firecracker-containerd/naive-snapshotter.sock -path /tmp/fc-snapshot
+$ ./naive_snapshotter -address /var/run/firecracker-containerd/naive-snapshotter.sock -path /tmp/fc-snapshot
 ```
 
 In another terminal, start containerd

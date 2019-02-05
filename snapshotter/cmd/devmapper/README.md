@@ -56,6 +56,7 @@ Here's a sample entry that can be made in the configuration file `/etc/firecrack
 	"pool_name" : "test"
 }
 ```
+Note: The `test` thin-pool needs to be prepared in advance.
 
 For example, to run the snapshotter with its domain socket at
 `/var/run/firecracker-dm-snapshotter.sock` and its configuration file at

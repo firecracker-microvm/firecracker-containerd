@@ -15,9 +15,11 @@ package snapshotter
 
 import (
 	"context"
+	"crypto/rand"
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -26,6 +28,7 @@ import (
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/containerd/snapshots/overlay"
 	"github.com/containerd/continuity/fs/fstest"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -130,13 +133,13 @@ func benchmarkSnapshotter(b *testing.B, snapshotter snapshots.Snapshotter) {
 
 	var (
 		total      = 0
-		layers     = make([]fstest.Applier, layerCount)
+		layers     = make([]fstest.Applier, 0, layerCount)
 		layerIndex = int64(0)
 	)
 
-	for i := 0; i < layerCount; i++ {
+	for i := 1; i <= layerCount; i++ {
 		appliers := makeApplier(i, fileSizeBytes)
-		layers[i] = fstest.Apply(appliers...)
+		layers = append(layers, fstest.Apply(appliers...))
 		total += len(appliers)
 	}
 
@@ -166,28 +169,78 @@ func benchmarkSnapshotter(b *testing.B, snapshotter snapshots.Snapshotter) {
 	})
 }
 
+// applierFn represents helper func that implements fstest.Applier
+type applierFn func(root string) error
+
+func (fn applierFn) Apply(root string) error {
+	return fn(root)
+}
+
+// updateFile modifies a few bytes in the middle in order to demonstrate the difference in performance
+// for block-based snapshotters (like devicemapper) against file-based snapshotters (like overlay, which need to
+// perform a copy-up of the full file any time a single bit is modified).
+func updateFile(name string) applierFn {
+	return func(root string) error {
+		path := filepath.Join(root, name)
+		file, err := os.OpenFile(path, os.O_WRONLY, 0600)
+		if err != nil {
+			return errors.Wrapf(err, "failed to open %q", path)
+		}
+
+		info, err := file.Stat()
+		if err != nil {
+			return err
+		}
+
+		var (
+			offset = info.Size() / 2
+			buf    = make([]byte, 4)
+		)
+
+		if _, err := rand.Read(buf); err != nil {
+			return err
+		}
+
+		if _, err := file.WriteAt(buf, offset); err != nil {
+			return errors.Wrapf(err, "failed to write %q at offset %d", path, offset)
+		}
+
+		return file.Close()
+	}
+}
+
+// makeApplier returns a slice of fstest.Applier where files are written randomly.
+// Depending on layer index, the returned layers will overwrite some files with the
+// same generated names with new contents or deletions.
 func makeApplier(layerIndex int, fileSizeBytes int64) []fstest.Applier {
 	seed := time.Now().UnixNano()
 
 	switch {
 	case layerIndex%3 == 0:
 		return []fstest.Applier{
-			fstest.CreateRandomFile("/e", seed, fileSizeBytes, 0777),
+			updateFile("/a"),
+			updateFile("/b"),
+			fstest.CreateRandomFile("/c", seed, fileSizeBytes, 0777),
+			updateFile("/d"),
 			fstest.CreateRandomFile("/f", seed, fileSizeBytes, 0777),
+			updateFile("/e"),
 			fstest.RemoveAll("/g"),
 			fstest.CreateRandomFile("/h", seed, fileSizeBytes, 0777),
-			fstest.CreateRandomFile("/i", seed, fileSizeBytes, 0777),
+			updateFile("/i"),
 			fstest.CreateRandomFile("/j", seed, fileSizeBytes, 0777),
 		}
 	case layerIndex%2 == 0:
 		return []fstest.Applier{
-			fstest.CreateRandomFile("/a", seed, fileSizeBytes, 0777),
+			updateFile("/a"),
 			fstest.CreateRandomFile("/b", seed, fileSizeBytes, 0777),
 			fstest.RemoveAll("/c"),
 			fstest.CreateRandomFile("/d", seed, fileSizeBytes, 0777),
-			fstest.CreateRandomFile("/e", seed, fileSizeBytes, 0777),
+			updateFile("/e"),
 			fstest.RemoveAll("/f"),
 			fstest.CreateRandomFile("/g", seed, fileSizeBytes, 0777),
+			updateFile("/h"),
+			fstest.CreateRandomFile("/i", seed, fileSizeBytes, 0777),
+			updateFile("/j"),
 		}
 	default:
 		return []fstest.Applier{

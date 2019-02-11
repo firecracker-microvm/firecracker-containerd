@@ -11,3 +11,15 @@ message ExtraData {
 	bytes JsonSpec = 1;
 	google.protobuf.Any RuncOptions = 2;
 }
+
+// Message to specify network config for a Firecracker VM
+message FirecrackerNetworkInterface {
+	string MacAddress = 1;
+	string HostDevName = 2;
+}
+
+// Message to specify the various Firecracker VM configurations for a task
+message FirecrackerConfig {
+	google.protobuf.Any RuncOptions = 1; // Can be used by the CreateTask request needs to relay any Runc options to the agent
+	repeated FirecrackerNetworkInterface NetworkInterfaces = 2; // Can be used to set the networking configuration for a VM
+}

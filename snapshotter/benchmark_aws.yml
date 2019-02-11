@@ -12,8 +12,8 @@ Parameters:
 
   AMI:
     Type: AWS::EC2::Image::Id
-    Description: AMI ID to use for the EC2 instance. Must be RHEL or CentOS
-    Default: "ami-3ecc8f46"
+    Description: AMI ID to use for the EC2 instance. Must be Amazon Linux 2.
+    Default: "ami-032509850cf9ee54e"
 
   SecurityGroups:
     Type: List<AWS::EC2::SecurityGroup::Id>
@@ -55,6 +55,11 @@ Parameters:
     Default: go1.11.5.linux-amd64.tar.gz
     Description: Golang package to install (can be chosen from https://golang.org/dl/)
 
+  ContainerStorageSetup:
+    Type: String
+    Default: https://github.com/projectatomic/container-storage-setup/archive/v0.6.0.tar.gz
+    Description: container-storage-setup tool version to install (more details at https://github.com/projectatomic/container-storage-setup)
+
 Resources:
   Instance:
     Type: AWS::EC2::Instance
@@ -93,13 +98,21 @@ Resources:
 
           yum install -y \
             gcc \
-            git \
-            container-storage-setup
+            git
 
           # Install Go
           curl -Os https://dl.google.com/go/${GoLangPackage}
           tar -C /usr/local -xzf ${GoLangPackage}
           echo 'export PATH=$PATH:/usr/local/go/bin' >> /etc/profile
+
+          # Install container-storage-setup
+          mkdir -p /tmp/container-storage-setup/unpacked/
+          cd /tmp/container-storage-setup/
+          curl -sL ${ContainerStorageSetup} -o archive.tar.gz
+          tar -xzf archive.tar.gz -C unpacked --strip 1
+          cd unpacked/
+          make install-core
+          rm -rf /tmp/container-storage-setup/
 
           # Prepare EBS volumes
           mkdir -p /mnt/{disk1,disk2}

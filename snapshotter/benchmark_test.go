@@ -29,6 +29,7 @@ import (
 	"github.com/containerd/containerd/snapshots/overlay"
 	"github.com/containerd/continuity/fs/fstest"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -48,6 +49,8 @@ func init() {
 	flag.StringVar(&dmRootPath, "dm.rootPath", "", "Root dir for devmapper snapshotter")
 	flag.StringVar(&overlayRootPath, "overlay.rootPath", "", "Root dir for overlay snapshotter")
 	flag.StringVar(&naiveRootPath, "naive.rootPath", "", "Root dir for naive snapshotter")
+	// Avoid mixing benchmark output and INFO messages
+	logrus.SetLevel(logrus.ErrorLevel)
 }
 
 func BenchmarkNaive(b *testing.B) {
@@ -125,6 +128,9 @@ func BenchmarkDeviceMapper(b *testing.B) {
 // benchmarkSnapshotter tests snapshotter performance.
 // It writes 16 layers with randomly created, modified, or removed files.
 // Depending on layer index different sets of files are modified.
+// In addition to total snapshotter execution time, benchmark outputs a few additional
+// details - time taken to Prepare layer, mount, write data and unmount time,
+// and Commit snapshot time.
 func benchmarkSnapshotter(b *testing.B, snapshotter snapshots.Snapshotter) {
 	const (
 		layerCount    = 16
@@ -143,30 +149,72 @@ func benchmarkSnapshotter(b *testing.B, snapshotter snapshots.Snapshotter) {
 		total += len(appliers)
 	}
 
-	b.SetBytes(int64(total) * fileSizeBytes)
-	b.ResetTimer()
+	var (
+		benchN          int
+		prepareDuration time.Duration
+		writeDuration   time.Duration
+		commitDuration  time.Duration
+	)
 
-	b.RunParallel(func(pb *testing.PB) {
-		ctx := context.Background()
+	// Wrap test with Run so additional details output will be added right below the benchmark result
+	b.Run("run", func(b *testing.B) {
+		var (
+			ctx     = context.Background()
+			parent  string
+			current string
+		)
 
-		for pb.Next() {
-			parent := ""
+		// Reset durations since test might be ran multiple times
+		prepareDuration = 0
+		writeDuration = 0
+		commitDuration = 0
+		benchN = b.N
 
+		b.SetBytes(int64(total) * fileSizeBytes)
+
+		var timer time.Time
+		for i := 0; i < b.N; i++ {
 			for l := 0; l < layerCount; l++ {
-				current := fmt.Sprintf("prepare-layer-%d", atomic.AddInt64(&layerIndex, 1))
+				current = fmt.Sprintf("prepare-layer-%d", atomic.AddInt64(&layerIndex, 1))
 
+				timer = time.Now()
 				mounts, err := snapshotter.Prepare(ctx, current, parent)
 				require.NoError(b, err)
+				prepareDuration += time.Since(timer)
 
+				timer = time.Now()
 				err = mount.WithTempMount(ctx, mounts, layers[l].Apply)
 				require.NoError(b, err)
+				writeDuration += time.Since(timer)
 
 				parent = fmt.Sprintf("comitted-%d", atomic.AddInt64(&layerIndex, 1))
+
+				timer = time.Now()
 				err = snapshotter.Commit(ctx, parent, current)
 				require.NoError(b, err)
+				commitDuration += time.Since(timer)
 			}
 		}
 	})
+
+	// Output extra measurements - total time taken to Prepare, mount and write data, and Commit
+	const outputFormat = "%-25s\t%s\n"
+	fmt.Fprintf(os.Stdout,
+		outputFormat,
+		b.Name()+"/prepare",
+		testing.BenchmarkResult{N: benchN, T: prepareDuration})
+
+	fmt.Fprintf(os.Stdout,
+		outputFormat,
+		b.Name()+"/write",
+		testing.BenchmarkResult{N: benchN, T: writeDuration})
+
+	fmt.Fprintf(os.Stdout,
+		outputFormat,
+		b.Name()+"/commit",
+		testing.BenchmarkResult{N: benchN, T: commitDuration})
+
+	fmt.Fprintln(os.Stdout)
 }
 
 // applierFn represents helper func that implements fstest.Applier

@@ -44,10 +44,9 @@ func TestSnapshotterSuite(t *testing.T) {
 		require.NoErrorf(t, err, "failed to create pool %q", poolName)
 
 		config := &Config{
-			RootPath:           root,
-			PoolName:           poolName,
-			BaseImageSize:      "16Mb",
-			BaseImageSizeBytes: 16 * 1024 * 1024,
+			RootPath:      root,
+			PoolName:      poolName,
+			BaseImageSize: "16Mb",
 		}
 
 		snap, err := NewSnapshotter(context.Background(), config)

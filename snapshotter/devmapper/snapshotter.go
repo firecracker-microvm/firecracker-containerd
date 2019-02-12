@@ -54,6 +54,15 @@ type Snapshotter struct {
 // Internally it creates thin-pool device (or reloads if it's already exists) and
 // initializes a database file for metadata.
 func NewSnapshotter(ctx context.Context, config *Config) (*Snapshotter, error) {
+	// Make sure snapshotter configuration valid before running
+	if err := config.parse(); err != nil {
+		return nil, err
+	}
+
+	if err := config.Validate(); err != nil {
+		return nil, err
+	}
+
 	var cleanupFn []closeFunc
 
 	if err := os.MkdirAll(config.RootPath, 0750); err != nil && !os.IsExist(err) {

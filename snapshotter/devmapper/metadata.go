@@ -20,7 +20,7 @@ import (
 	"strconv"
 
 	"github.com/pkg/errors"
-	"go.etcd.io/bbolt"
+	bolt "go.etcd.io/bbolt"
 )
 
 type (

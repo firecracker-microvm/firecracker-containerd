@@ -2,8 +2,8 @@ AWSTemplateFormatVersion: "2010-09-09"
 
 Description: >
   This templates spin ups an EC2 instance with EBS volumes suitable for containerd snapshotters benchmarking.
-  The template will create three EBS volumes (/dev/sdb, /dev/sdc, and /dev/sdd) with same performance characteristics.
-  /dev/sdd volume will be used for device mapper thin-pool device.
+  The template will create EBS volumes for benchmarking (/dev/sdb, /dev/sdc, and /dev/sdd) with same performance characteristics.
+  /dev/sde volume will be created and used for device mapper thin-pool device.
 
 Parameters:
   Key:
@@ -70,6 +70,12 @@ Resources:
       ImageId: !Ref AMI
       SecurityGroupIds: !Ref SecurityGroups
       BlockDeviceMappings:
+        - DeviceName: "/dev/xvda" # Root volume
+          Ebs:
+            VolumeSize: 64
+            VolumeType: io1
+            Iops: 1000
+            DeleteOnTermination: true
         - DeviceName: "/dev/sdb"
           Ebs:
             VolumeSize: !Ref VolumesSize
@@ -83,6 +89,12 @@ Resources:
             Iops: !Ref VolumesIOPS
             DeleteOnTermination: true
         - DeviceName: "/dev/sdd"
+          Ebs:
+            VolumeSize: !Ref VolumesSize
+            VolumeType: !Ref VolumeType
+            Iops: !Ref VolumesIOPS
+            DeleteOnTermination: true
+        - DeviceName: "/dev/sde"
           Ebs:
             VolumeSize: !Ref VolumesSize
             VolumeType: !Ref VolumeType
@@ -115,7 +127,7 @@ Resources:
           rm -rf /tmp/container-storage-setup/
 
           # Prepare EBS volumes
-          mkdir -p /mnt/{disk1,disk2}
+          mkdir -p /mnt/{disk1,disk2,disk3}
 
           mkfs.ext4 /dev/xvdb
           mount /dev/xvdb /mnt/disk1/
@@ -123,12 +135,15 @@ Resources:
           mkfs.ext4 /dev/xvdc
           mount /dev/xvdc /mnt/disk2/
 
-          chgrp -R wheel /mnt/disk1/ /mnt/disk2/
-          chmod -R 2775 /mnt/disk1/ /mnt/disk2/
+          mkfs.ext4 /dev/xvdd
+          mount /dev/xvdd /mnt/disk3
+
+          chgrp -R wheel /mnt/disk1/ /mnt/disk2/ /mnt/disk3/
+          chmod -R 2775 /mnt/disk1/ /mnt/disk2/ /mnt/disk3/
 
           # Prepare thin-pool device
           touch /etc/sysconfig/docker-storage-setup
-          echo DEVS=/dev/xvdd >> /etc/sysconfig/docker-storage-setup
+          echo DEVS=/dev/xvde >> /etc/sysconfig/docker-storage-setup
           echo VG=bench >> /etc/sysconfig/docker-storage-setup
           container-storage-setup
 

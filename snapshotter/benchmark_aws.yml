@@ -50,11 +50,6 @@ Parameters:
       Volume type to use for EBS volumes (io1 is recommended).
       More information on volume types https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/EBSVolumeTypes.html
 
-  GoLangPackage:
-    Type: String
-    Default: go1.11.5.linux-amd64.tar.gz
-    Description: Golang package to install (can be chosen from https://golang.org/dl/)
-
   ContainerStorageSetup:
     Type: String
     Default: https://github.com/projectatomic/container-storage-setup/archive/v0.6.0.tar.gz
@@ -108,14 +103,8 @@ Resources:
 
           set -ex
 
-          yum install -y \
-            gcc \
-            git
-
-          # Install Go
-          curl -Os https://dl.google.com/go/${GoLangPackage}
-          tar -C /usr/local -xzf ${GoLangPackage}
-          echo 'export PATH=$PATH:/usr/local/go/bin' >> /etc/profile
+          yum install -y gcc git
+          amazon-linux-extras install -y golang1.11
 
           # Install container-storage-setup
           mkdir -p /tmp/container-storage-setup/unpacked/

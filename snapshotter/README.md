@@ -2,7 +2,7 @@
 
 - `firecracker-containerd` project contains CloudFormation template to run an EC2 instance suitable for benchmarking.
 It installs dependencies, prepares EBS volumes with same performance characteristics, and creates thin-pool device.
-You can make stack with the following command:
+You can make stack with the following command (note: there is a charge for using AWS resources):
 
 ```bash
 aws cloudformation create-stack \
@@ -71,4 +71,10 @@ BenchmarkDeviceMapper/commit       1         23720367 ns/op
 
 PASS
 ok  	github.com/firecracker-microvm/firecracker-containerd/snapshotter	185.204s
+```
+
+- Don't forget to tear down the stack so it does not continue to incur charges:
+
+```bash
+aws cloudformation delete-stack --stack-name benchmark-instance
 ```

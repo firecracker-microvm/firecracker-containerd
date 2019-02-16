@@ -187,12 +187,13 @@ func testDeactivateThinDevice(t *testing.T, pool *PoolDevice) {
 	}
 
 	for _, deviceName := range deviceList {
+		assert.True(t, pool.IsActivated(deviceName))
+
 		err := pool.DeactivateDevice(context.Background(), deviceName, false)
 		assert.NoErrorf(t, err, "failed to remove '%s'", deviceName)
-	}
 
-	err := pool.DeactivateDevice(context.Background(), "not-existing-device", false)
-	assert.Error(t, err, "should return an error if trying to remove not existing device")
+		assert.False(t, pool.IsActivated(deviceName))
+	}
 }
 
 func testRemoveThinDevice(t *testing.T, pool *PoolDevice) {

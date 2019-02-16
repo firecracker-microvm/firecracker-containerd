@@ -21,11 +21,11 @@ import (
 
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/containerd/snapshots/testsuite"
-	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/pkg/dmsetup"
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/pkg/losetup"
 )

@@ -206,26 +206,33 @@ func (p *PoolDevice) CreateSnapshotDevice(ctx context.Context, deviceName string
 		return errors.Wrapf(err, "failed to save initial metadata for snapshot %q", snapshotName)
 	}
 
+	var result *multierror.Error
+
 	// Create thin device snapshot
 	if err := p.transition(ctx, snapInfo.Name, Creating, Created, func() error {
 		return dmsetup.CreateSnapshot(p.poolName, snapInfo.DeviceID, baseInfo.DeviceID)
 	}); err != nil {
-		return errors.Wrapf(err,
+		// Don't return here, resume base thin-device first
+		result = multierror.Append(result, errors.Wrapf(err,
 			"failed to create snapshot %q (dev: %d) from %q (dev: %d, activated: %t)",
 			snapInfo.Name,
 			snapInfo.DeviceID,
 			baseInfo.Name,
 			baseInfo.DeviceID,
-			isActivated)
+			isActivated))
 	}
 
+	// Resume base thin-device
 	if isActivated {
-		// Resume base thin-device
 		if err := p.transition(ctx, baseInfo.Name, Resuming, Resumed, func() error {
 			return dmsetup.ResumeDevice(baseInfo.Name)
 		}); err != nil {
-			return errors.Wrapf(err, "failed to resume device %q", deviceName)
+			result = multierror.Append(result, errors.Wrapf(err, "failed to resume device %q", deviceName))
 		}
+	}
+
+	if err := result.ErrorOrNil(); err != nil {
+		return err
 	}
 
 	// Activate snapshot
@@ -258,6 +265,7 @@ func (p *PoolDevice) DeactivateDevice(ctx context.Context, deviceName string, de
 	return nil
 }
 
+// IsActivated returns true if thin-device is activated and not suspended
 func (p *PoolDevice) IsActivated(deviceName string) bool {
 	infos, err := dmsetup.Info(deviceName)
 	if err != nil || len(infos) == 0 {
@@ -265,8 +273,7 @@ func (p *PoolDevice) IsActivated(deviceName string) bool {
 		return false
 	}
 
-	devInfo := infos[0]
-	if devInfo.Suspended {
+	if devInfo := infos[0]; devInfo.Suspended {
 		return false
 	}
 

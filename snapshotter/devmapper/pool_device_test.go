@@ -22,11 +22,11 @@ import (
 	"testing"
 
 	"github.com/docker/go-units"
-	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/pkg/dmsetup"
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/pkg/losetup"
 )

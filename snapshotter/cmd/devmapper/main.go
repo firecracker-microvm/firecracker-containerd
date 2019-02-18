@@ -110,20 +110,8 @@ func applyStorageOpt(ctx context.Context, key, value string, config *devmapper.C
 
 		config.BaseImageSize = value
 		config.BaseImageSizeBytes = uint64(size)
-	case "dm.metadatadev":
-		config.MetadataDevice = value
-	case "dm.datadev":
-		config.DataDevice = value
 	case "dm.thinpooldev":
 		config.PoolName = strings.TrimPrefix(value, dmsetup.DevMapperDir)
-	case "dm.blocksize":
-		size, err := units.RAMInBytes(value)
-		if err != nil {
-			return err
-		}
-
-		config.DataBlockSize = value
-		config.DataBlockSizeSectors = uint32(size / dmsetup.SectorSize)
 	case "dm.fs":
 		// TODO: Support alternative file systems (https://github.com/firecracker-microvm/firecracker-containerd/issues/44)
 		if value != "ext4" {

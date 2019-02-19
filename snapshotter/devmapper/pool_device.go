@@ -105,27 +105,71 @@ func (p *PoolDevice) transition(ctx context.Context, deviceName string, tryingSt
 // CreateThinDevice creates new devmapper thin-device with given name and size.
 // Device ID for thin-device will be allocated from metadata store.
 // If allocation successful, device will be activated with /dev/mapper/<deviceName>
-func (p *PoolDevice) CreateThinDevice(ctx context.Context, deviceName string, virtualSizeBytes uint64) error {
+func (p *PoolDevice) CreateThinDevice(ctx context.Context, deviceName string, virtualSizeBytes uint64) (retErr error) {
 	info := &DeviceInfo{
 		Name:  deviceName,
 		Size:  virtualSizeBytes,
 		State: Unknown,
 	}
 
+	var (
+		metadataAdded bool
+		deviceCreated bool
+	)
+
+	defer func() {
+		if retErr == nil {
+			return
+		}
+
+		// Do rollback
+
+		result := multierror.Append(retErr)
+
+		if deviceCreated {
+			result = multierror.Append(result,
+				p.deleteDevice(ctx, info))
+		}
+
+		if metadataAdded {
+			result = multierror.Append(result,
+				p.metadata.RemoveDevice(ctx, info.Name))
+		}
+
+		retErr = result
+	}()
+
 	// Save initial device metadata and allocate new device ID from store
 	if err := p.metadata.AddDevice(ctx, info); err != nil {
 		return errors.Wrapf(err, "failed to save initial metadata for new thin device %q", deviceName)
 	}
 
+	metadataAdded = true
+
 	// Create thin device
-	if err := p.transition(ctx, deviceName, Creating, Created, func() error {
+	if err := p.createDevice(ctx, info); err != nil {
+		return err
+	}
+
+	deviceCreated = true
+
+	return p.activateDevice(ctx, info)
+}
+
+// createDevice creates thin device
+func (p *PoolDevice) createDevice(ctx context.Context, info *DeviceInfo) error {
+	if err := p.transition(ctx, info.Name, Creating, Created, func() error {
 		return dmsetup.CreateDevice(p.poolName, info.DeviceID)
 	}); err != nil {
 		return errors.Wrapf(err, "failed to create new thin device %q (dev: %d)", info.Name, info.DeviceID)
 	}
 
-	// Activate thin device
-	if err := p.transition(ctx, deviceName, Activating, Activated, func() error {
+	return nil
+}
+
+// activateDevice activates thin device
+func (p *PoolDevice) activateDevice(ctx context.Context, info *DeviceInfo) error {
+	if err := p.transition(ctx, info.Name, Activating, Activated, func() error {
 		return dmsetup.ActivateDevice(p.poolName, info.Name, info.DeviceID, info.Size, "")
 	}); err != nil {
 		return errors.Wrapf(err, "failed to activate new thin device %q (dev: %d)", info.Name, info.DeviceID)
@@ -135,19 +179,17 @@ func (p *PoolDevice) CreateThinDevice(ctx context.Context, deviceName string, vi
 }
 
 // CreateSnapshotDevice creates and activates new thin-device from parent thin-device (makes snapshot)
-func (p *PoolDevice) CreateSnapshotDevice(ctx context.Context, deviceName string, snapshotName string, virtualSizeBytes uint64) error {
+func (p *PoolDevice) CreateSnapshotDevice(ctx context.Context, deviceName string, snapshotName string, virtualSizeBytes uint64) (retErr error) {
 	baseInfo, err := p.metadata.GetDevice(ctx, deviceName)
 	if err != nil {
 		return errors.Wrapf(err, "failed to query device metadata for %q", deviceName)
 	}
 
-	// Suspend thin device if it was activated previously
+	// Suspend thin device if it was activated previously to avoid corruptions
 	isActivated := p.IsActivated(baseInfo.Name)
 	if isActivated {
-		if err := p.transition(ctx, baseInfo.Name, Suspending, Suspended, func() error {
-			return dmsetup.SuspendDevice(baseInfo.Name)
-		}); err != nil {
-			return errors.Wrapf(err, "failed to suspend device %q", baseInfo.Name)
+		if err := p.suspendDevice(ctx, baseInfo); err != nil {
+			return err
 		}
 	}
 
@@ -158,45 +200,86 @@ func (p *PoolDevice) CreateSnapshotDevice(ctx context.Context, deviceName string
 		State:      Unknown,
 	}
 
+	var (
+		metadataAdded bool
+		snapCreated   bool
+	)
+
+	defer func() {
+		var result *multierror.Error
+
+		// Always resume base thin device if suspended
+		if isActivated {
+			result = multierror.Append(result,
+				p.resumeDevice(ctx, baseInfo))
+		}
+
+		// Do rollback if errors
+		if retErr != nil {
+			result = multierror.Append(result, retErr)
+
+			if snapCreated {
+				result = multierror.Append(result,
+					p.deleteDevice(ctx, snapInfo))
+			}
+
+			if metadataAdded {
+				result = multierror.Append(result,
+					p.metadata.RemoveDevice(ctx, snapInfo.Name))
+			}
+		}
+
+		retErr = result.ErrorOrNil()
+	}()
+
 	// Save snapshot metadata and allocate new device ID
 	if err := p.metadata.AddDevice(ctx, snapInfo); err != nil {
 		return errors.Wrapf(err, "failed to save initial metadata for snapshot %q", snapshotName)
 	}
 
-	var result *multierror.Error
+	metadataAdded = true
 
 	// Create thin device snapshot
-	if err := p.transition(ctx, snapInfo.Name, Creating, Created, func() error {
-		return dmsetup.CreateSnapshot(p.poolName, snapInfo.DeviceID, baseInfo.DeviceID)
-	}); err != nil {
-		// Don't return here, resume base thin-device first
-		result = multierror.Append(result, errors.Wrapf(err,
-			"failed to create snapshot %q (dev: %d) from %q (dev: %d, activated: %t)",
-			snapInfo.Name,
-			snapInfo.DeviceID,
-			baseInfo.Name,
-			baseInfo.DeviceID,
-			isActivated))
-	}
-
-	// Resume base thin-device
-	if isActivated {
-		if err := p.transition(ctx, baseInfo.Name, Resuming, Resumed, func() error {
-			return dmsetup.ResumeDevice(baseInfo.Name)
-		}); err != nil {
-			result = multierror.Append(result, errors.Wrapf(err, "failed to resume device %q", deviceName))
-		}
-	}
-
-	if err := result.ErrorOrNil(); err != nil {
+	if err := p.createSnapshot(ctx, baseInfo, snapInfo); err != nil {
 		return err
 	}
 
-	// Activate snapshot
-	if err := p.transition(ctx, snapInfo.Name, Activating, Activated, func() error {
-		return dmsetup.ActivateDevice(p.poolName, snapInfo.Name, snapInfo.DeviceID, snapInfo.Size, "")
+	snapCreated = true
+
+	// Activate snapshot device
+	return p.activateDevice(ctx, snapInfo)
+}
+
+func (p *PoolDevice) suspendDevice(ctx context.Context, info *DeviceInfo) error {
+	if err := p.transition(ctx, info.Name, Suspending, Suspended, func() error {
+		return dmsetup.SuspendDevice(info.Name)
 	}); err != nil {
-		return errors.Wrapf(err, "failed to activate snapshot device %q (dev: %d)", snapInfo.Name, snapInfo.DeviceID)
+		return errors.Wrapf(err, "failed to suspend device %q", info.Name)
+	}
+
+	return nil
+}
+
+func (p *PoolDevice) resumeDevice(ctx context.Context, info *DeviceInfo) error {
+	if err := p.transition(ctx, info.Name, Resuming, Resumed, func() error {
+		return dmsetup.ResumeDevice(info.Name)
+	}); err != nil {
+		return errors.Wrapf(err, "failed to resume device %q", info.Name)
+	}
+
+	return nil
+}
+
+func (p *PoolDevice) createSnapshot(ctx context.Context, baseInfo, snapInfo *DeviceInfo) error {
+	if err := p.transition(ctx, snapInfo.Name, Creating, Created, func() error {
+		return dmsetup.CreateSnapshot(p.poolName, snapInfo.DeviceID, baseInfo.DeviceID)
+	}); err != nil {
+		return errors.Wrapf(err,
+			"failed to create snapshot %q (dev: %d) from %q (dev: %d)",
+			snapInfo.Name,
+			snapInfo.DeviceID,
+			baseInfo.Name,
+			baseInfo.DeviceID)
 	}
 
 	return nil
@@ -248,16 +331,24 @@ func (p *PoolDevice) RemoveDevice(ctx context.Context, deviceName string) error 
 		return err
 	}
 
-	if err := p.transition(ctx, deviceName, Removing, Removed, func() error {
-		// Send 'delete' message to thin-pool
-		return dmsetup.DeleteDevice(p.poolName, info.DeviceID)
-	}); err != nil {
-		return errors.Wrapf(err, "failed to delete device %q (dev id: %d)", info.Name, info.DeviceID)
+	if err := p.deleteDevice(ctx, info); err != nil {
+		return err
 	}
 
 	// Remove record from meta store and free device ID
 	if err := p.metadata.RemoveDevice(ctx, deviceName); err != nil {
 		return errors.Wrapf(err, "can't remove device %q metadata from store after removal", deviceName)
+	}
+
+	return nil
+}
+
+func (p *PoolDevice) deleteDevice(ctx context.Context, info *DeviceInfo) error {
+	if err := p.transition(ctx, info.Name, Removing, Removed, func() error {
+		// Send 'delete' message to thin-pool
+		return dmsetup.DeleteDevice(p.poolName, info.DeviceID)
+	}); err != nil {
+		return errors.Wrapf(err, "failed to delete device %q (dev id: %d)", info.Name, info.DeviceID)
 	}
 
 	return nil

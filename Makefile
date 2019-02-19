@@ -15,6 +15,8 @@ SUBDIRS:=agent runtime snapshotter
 export INSTALLROOT?=/usr/local
 export STATIC_AGENT
 
+GOPATH:=$(shell go env GOPATH)
+
 all: $(SUBDIRS)
 
 $(SUBDIRS):
@@ -27,8 +29,7 @@ clean:
 	for d in $(SUBDIRS); do $(MAKE) -C $$d clean; done
 
 deps:
-	test -n "$(GOPATH)" # Make sure GOPATH defined
-	curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b ${GOPATH}/bin v1.12.3
+	curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $(GOPATH)/bin v1.12.3
 	GO111MODULE=off go get -u github.com/vbatts/git-validation
 	GO111MODULE=off go get -u github.com/kunalkushwaha/ltag
 

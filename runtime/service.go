@@ -602,6 +602,24 @@ func findNextAvailableVsockCID(ctx context.Context) (uint32, error) {
 	return 0, errors.New("couldn't find any available vsock context id")
 }
 
+func parseCreateTaskOpts(ctx context.Context, opts *ptypes.Any) (*proto.FirecrackerConfig, *ptypes.Any, error) {
+	cfg, err := typeurl.UnmarshalAny(opts)
+	if err != nil {
+		return nil, nil, errors.Wrapf(err, "unmarshaling task create request options")
+	}
+	// We've verified that this is a valid prototype at this point of time.
+	// Check if it's the FirecrackerConfig type
+	firecrackerConfig, ok := cfg.(*proto.FirecrackerConfig)
+	if ok {
+		// We've verified that the proto message was of FirecrackerConfig type.
+		// Get runc options based on what was set in FirecrackerConfig.
+		return firecrackerConfig, firecrackerConfig.RuncOptions, nil
+	}
+	// This is a valid proto message, but is not FirecrackerConfig type.
+	// Treat the message as runc opts
+	return nil, opts, nil
+}
+
 func (s *service) startVM(ctx context.Context,
 	request *taskAPI.CreateTaskRequest,
 	vmConfig *proto.FirecrackerConfig,
@@ -681,45 +699,8 @@ func (s *service) startVM(ctx context.Context,
 	return apiClient, nil
 }
 
-func overrideVMConfigFromTaskOpts(cfg firecracker.Config, vmConfig *proto.FirecrackerConfig) firecracker.Config {
-	if vmConfig == nil {
-		return cfg
-	}
-	// Attach network interface specified in the config
-	if len(vmConfig.NetworkInterfaces) > 0 {
-		nwIfaces := make([]firecracker.NetworkInterface, len(vmConfig.NetworkInterfaces))
-		for i, nw := range vmConfig.NetworkInterfaces {
-			nwIfaces[i] = firecracker.NetworkInterface{
-				MacAddress:  nw.MacAddress,
-				HostDevName: nw.HostDevName,
-			}
-		}
-		cfg.NetworkInterfaces = nwIfaces
-	}
-
-	return cfg
-}
-
 func (s *service) stopVM() error {
 	return s.machine.StopVMM()
-}
-
-func parseCreateTaskOpts(ctx context.Context, opts *ptypes.Any) (*proto.FirecrackerConfig, *ptypes.Any, error) {
-	cfg, err := typeurl.UnmarshalAny(opts)
-	if err != nil {
-		return nil, nil, errors.Wrapf(err, "unmarshaling task create request options")
-	}
-	// We've verified that this is a valid prototype at this point of time.
-	// Check if it's the FirecrackerConfig type
-	firecrackerConfig, ok := cfg.(*proto.FirecrackerConfig)
-	if ok {
-		// We've verified that the proto message was of FirecrackerConfig type.
-		// Get runc options based on what was set in FirecrackerConfig.
-		return firecrackerConfig, firecrackerConfig.RuncOptions, nil
-	}
-	// This is a valid proto message, but is not FirecrackerConfig type.
-	// Treat the message as runc opts
-	return nil, opts, nil
 }
 
 func packBundle(path string, options *ptypes.Any) (*ptypes.Any, error) {

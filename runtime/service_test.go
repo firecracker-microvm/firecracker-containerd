@@ -20,7 +20,6 @@ import (
 
 	"github.com/containerd/typeurl"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
-	firecracker "github.com/firecracker-microvm/firecracker-go-sdk"
 	"github.com/stretchr/testify/require"
 	"gotest.tools/assert"
 )
@@ -91,43 +90,4 @@ func TestParseCreateTaskLeavesNonFirecrackerConfigAlong(t *testing.T) {
 		t.Error("unexpected value parsed for firecracker config")
 	}
 	assert.Equal(t, protoIn, outOpts)
-}
-
-func TestOverrideVMConfigFromTaskOpts(t *testing.T) {
-	var testCases = []struct {
-		name        string
-		in          firecracker.Config
-		vmConfig    *proto.FirecrackerConfig
-		expectedOut firecracker.Config
-	}{
-		{
-			name: "network config",
-			in:   firecracker.Config{},
-			vmConfig: &proto.FirecrackerConfig{
-				NetworkInterfaces: []*proto.FirecrackerNetworkInterface{
-					{
-						MacAddress:  mac,
-						HostDevName: hostDevName,
-					},
-				},
-			},
-			expectedOut: firecracker.Config{
-				NetworkInterfaces: []firecracker.NetworkInterface{
-					{
-						MacAddress:  mac,
-						HostDevName: hostDevName,
-					},
-				},
-			},
-		},
-	}
-	for _, tc := range testCases {
-		// scopelint gets sad if we use tc directly. The specific complaint is
-		// "Using the variable on range scope in function literal".
-		test := tc
-		t.Run(test.name, func(t *testing.T) {
-			out := overrideVMConfigFromTaskOpts(test.in, test.vmConfig)
-			assert.DeepEqual(t, test.expectedOut, out)
-		})
-	}
 }

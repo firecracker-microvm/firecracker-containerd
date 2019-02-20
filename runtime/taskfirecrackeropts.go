@@ -19,13 +19,27 @@ import (
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	firecracker "github.com/firecracker-microvm/firecracker-go-sdk"
 	models "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
+	"github.com/pkg/errors"
 )
 
 // overrideVMConfigFromTaskOpts overrides the firecracker VM config for the
 // task with values set in the protobuf message.
-func overrideVMConfigFromTaskOpts(cfg firecracker.Config, vmConfig *proto.FirecrackerConfig) firecracker.Config {
+func overrideVMConfigFromTaskOpts(
+	cfg firecracker.Config,
+	vmConfig *proto.FirecrackerConfig,
+	drivesBuilder firecracker.DrivesBuilder,
+) (firecracker.Config, firecracker.DrivesBuilder, error) {
 	if vmConfig == nil {
-		return cfg
+		return cfg, drivesBuilder, nil
+	}
+	var err error
+	if vmConfig.KernelImagePath != "" {
+		// If kernel image path is set, override it.
+		cfg.KernelImagePath = vmConfig.KernelImagePath
+	}
+	if vmConfig.KernelArgs != "" {
+		// If kernel args are set, override it.
+		cfg.KernelArgs = vmConfig.KernelArgs
 	}
 	// Attach network interface specified in the config.
 	if len(vmConfig.NetworkInterfaces) > 0 {
@@ -35,8 +49,24 @@ func overrideVMConfigFromTaskOpts(cfg firecracker.Config, vmConfig *proto.Firecr
 		}
 		cfg.NetworkInterfaces = nwIfaces
 	}
+	if vmConfig.MachineCfg != nil {
+		cfg.MachineCfg, err = machineConfigFromProto(vmConfig.MachineCfg)
+		if err != nil {
+			return firecracker.Config{}, drivesBuilder, err
+		}
+	}
+	// Overwrite the root drive config if specified.
+	if vmConfig.RootDrive != nil {
+		drivesBuilder = drivesBuilderFromProto(vmConfig.RootDrive, drivesBuilder, true)
+	}
+	// Add additional drives if specified.
+	if len(vmConfig.AdditionalDrives) > 0 {
+		for _, drive := range vmConfig.AdditionalDrives {
+			drivesBuilder = drivesBuilderFromProto(drive, drivesBuilder, false)
+		}
+	}
 
-	return cfg
+	return cfg, drivesBuilder, nil
 }
 
 // networkConfigFromProto creates a firecracker NetworkInterface object from
@@ -55,6 +85,47 @@ func networkConfigFromProto(nwIface *proto.FirecrackerNetworkInterface) firecrac
 	}
 
 	return result
+}
+
+// machineConfigFromProto creates a firecracker MachineConfiguration object
+// from the protobuf FirecrackerMachineConfiguration message.
+func machineConfigFromProto(mCfg *proto.FirecrackerMachineConfiguration) (models.MachineConfiguration, error) {
+	result := models.MachineConfiguration{}
+	if mCfg.MemSizeMib > 0 && mCfg.VcpuCount == 0 {
+		// Only memory is being overridden.
+		return result, errors.New("both vm memory and vcpu count need to be overridden")
+	}
+	if mCfg.VcpuCount > 0 && mCfg.MemSizeMib == 0 {
+		// Only cpu is being overridden.
+		return result, errors.New("both vm memory and vcpu count need to be overridden")
+	}
+	if mCfg.CPUTemplate != "" {
+		result.CPUTemplate = models.CPUTemplate(mCfg.CPUTemplate)
+	}
+	result.HtEnabled = mCfg.HtEnabled
+	result.MemSizeMib = int64(mCfg.MemSizeMib)
+	result.VcpuCount = int64(mCfg.VcpuCount)
+
+	return result, nil
+}
+
+// drivesBuilderFromProto returns a new DrivesBuilder that can be used to
+// build the firecracker Drives config. The new DrivesBuilder object is
+// constructed using the information present in the protobuf message.
+func drivesBuilderFromProto(drive *proto.FirecrackerDrive,
+	drivesBuilder firecracker.DrivesBuilder,
+	isRoot bool,
+) firecracker.DrivesBuilder {
+	opt := func(d *models.Drive) {
+		d.Partuuid = drive.Partuuid
+		if drive.RateLimiter != nil {
+			d.RateLimiter = rateLimiterFromProto(drive.RateLimiter)
+		}
+	}
+	if isRoot {
+		return drivesBuilder.WithRootDrive(drive.PathOnHost, opt)
+	}
+	return drivesBuilder.AddDrive(drive.PathOnHost, drive.IsReadOnly, opt)
 }
 
 // rateLimiterFromProto creates a firecracker RateLimiter object from the

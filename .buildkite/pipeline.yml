@@ -1,4 +1,4 @@
-# Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License"). You may
 # not use this file except in compliance with the License. A copy of the
@@ -31,3 +31,8 @@ steps:
     commands:
       - "cd snapshotter"
       - "sudo make test EXTRAGOARGS='-v -count=1'"
+
+  - label: ':running_shirt_with_sash: runtime tests'
+    commands:
+      - "cd runtime"
+      - "make test EXTRAGOARGS='-v -count=1'"

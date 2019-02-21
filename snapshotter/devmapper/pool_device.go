@@ -112,46 +112,33 @@ func (p *PoolDevice) CreateThinDevice(ctx context.Context, deviceName string, vi
 		State: Unknown,
 	}
 
-	var (
-		metadataAdded bool
-		deviceCreated bool
-	)
+	// Save initial device metadata and allocate new device ID from store
+	if err := p.metadata.AddDevice(ctx, info); err != nil {
+		return errors.Wrapf(err, "failed to save initial metadata for new thin device %q", deviceName)
+	}
 
 	defer func() {
 		if retErr == nil {
 			return
 		}
 
-		// Do rollback
-
-		result := multierror.Append(retErr)
-
-		if deviceCreated {
-			result = multierror.Append(result,
-				p.deleteDevice(ctx, info))
-		}
-
-		if metadataAdded {
-			result = multierror.Append(result,
-				p.metadata.RemoveDevice(ctx, info.Name))
-		}
-
-		retErr = result
+		// Rollback metadata
+		retErr = multierror.Append(retErr, p.metadata.RemoveDevice(ctx, info.Name))
 	}()
-
-	// Save initial device metadata and allocate new device ID from store
-	if err := p.metadata.AddDevice(ctx, info); err != nil {
-		return errors.Wrapf(err, "failed to save initial metadata for new thin device %q", deviceName)
-	}
-
-	metadataAdded = true
 
 	// Create thin device
 	if err := p.createDevice(ctx, info); err != nil {
 		return err
 	}
 
-	deviceCreated = true
+	defer func() {
+		if retErr == nil {
+			return
+		}
+
+		// Rollback creation
+		retErr = multierror.Append(retErr, p.deleteDevice(ctx, info))
+	}()
 
 	return p.activateDevice(ctx, info)
 }
@@ -191,6 +178,11 @@ func (p *PoolDevice) CreateSnapshotDevice(ctx context.Context, deviceName string
 		if err := p.suspendDevice(ctx, baseInfo); err != nil {
 			return err
 		}
+
+		// Resume back base thin device on exit
+		defer func() {
+			retErr = multierror.Append(retErr, p.resumeDevice(ctx, baseInfo)).ErrorOrNil()
+		}()
 	}
 
 	snapInfo := &DeviceInfo{
@@ -200,51 +192,33 @@ func (p *PoolDevice) CreateSnapshotDevice(ctx context.Context, deviceName string
 		State:      Unknown,
 	}
 
-	var (
-		metadataAdded bool
-		snapCreated   bool
-	)
-
-	defer func() {
-		var result *multierror.Error
-
-		// Always resume base thin device if suspended
-		if isActivated {
-			result = multierror.Append(result,
-				p.resumeDevice(ctx, baseInfo))
-		}
-
-		// Do rollback if errors
-		if retErr != nil {
-			result = multierror.Append(result, retErr)
-
-			if snapCreated {
-				result = multierror.Append(result,
-					p.deleteDevice(ctx, snapInfo))
-			}
-
-			if metadataAdded {
-				result = multierror.Append(result,
-					p.metadata.RemoveDevice(ctx, snapInfo.Name))
-			}
-		}
-
-		retErr = result.ErrorOrNil()
-	}()
-
 	// Save snapshot metadata and allocate new device ID
 	if err := p.metadata.AddDevice(ctx, snapInfo); err != nil {
 		return errors.Wrapf(err, "failed to save initial metadata for snapshot %q", snapshotName)
 	}
 
-	metadataAdded = true
+	defer func() {
+		if retErr == nil {
+			return
+		}
+
+		// Rollback metadata
+		retErr = multierror.Append(retErr, p.metadata.RemoveDevice(ctx, snapInfo.Name))
+	}()
 
 	// Create thin device snapshot
 	if err := p.createSnapshot(ctx, baseInfo, snapInfo); err != nil {
 		return err
 	}
 
-	snapCreated = true
+	defer func() {
+		if retErr == nil {
+			return
+		}
+
+		// Rollback snapshot creation
+		retErr = multierror.Append(retErr, p.deleteDevice(ctx, snapInfo))
+	}()
 
 	// Activate snapshot device
 	return p.activateDevice(ctx, snapInfo)
@@ -308,7 +282,7 @@ func (p *PoolDevice) DeactivateDevice(ctx context.Context, deviceName string, de
 // IsActivated returns true if thin-device is activated and not suspended
 func (p *PoolDevice) IsActivated(deviceName string) bool {
 	infos, err := dmsetup.Info(deviceName)
-	if err != nil || len(infos) == 0 {
+	if err != nil || len(infos) != 1 {
 		// Couldn't query device info, device not active
 		return false
 	}

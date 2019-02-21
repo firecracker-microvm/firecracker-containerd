@@ -18,7 +18,7 @@ require (
 	github.com/docker/docker v1.13.1 // indirect
 	github.com/docker/go-events v0.0.0-20170721190031-9461782956ad // indirect
 	github.com/docker/go-units v0.3.3
-	github.com/firecracker-microvm/firecracker-go-sdk v0.0.0-20190111234345-e4d80c16bbb3
+	github.com/firecracker-microvm/firecracker-go-sdk v0.0.0-20190219211450-78fe329f36bd
 	github.com/godbus/dbus v0.0.0-20181025153459-66d97aec3384 // indirect
 	github.com/gogo/googleapis v1.1.0 // indirect
 	github.com/gogo/protobuf v1.1.1
@@ -38,5 +38,5 @@ require (
 	golang.org/x/sys v0.0.0-20181107165924-66b7b1311ac8
 	google.golang.org/genproto v0.0.0-20181109154231-b5d43981345b // indirect
 	google.golang.org/grpc v1.16.0
-	gotest.tools v2.2.0+incompatible // indirect
+	gotest.tools v2.2.0+incompatible
 )

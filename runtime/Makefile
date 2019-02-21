@@ -11,15 +11,23 @@
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
+# Set this to pass additional commandline flags to the go compiler, e.g. "make test EXTRAGOARGS=-v"
+EXTRAGOARGS:=
+
+SOURCES:=$(shell find . -name '*.go')
+
 all: runtime
 
 runtime: containerd-shim-aws-firecracker
 
-containerd-shim-aws-firecracker: *.go
+containerd-shim-aws-firecracker: $(SOURCES)
 	go build -o containerd-shim-aws-firecracker
 
 install: containerd-shim-aws-firecracker
 	install -D -o root -g root -m755 -t $(INSTALLROOT)/bin containerd-shim-aws-firecracker
+
+test: $(SOURCES)
+	go test ./... $(EXTRAGOARGS)
 
 clean:
 	- rm -f containerd-shim-aws-firecracker

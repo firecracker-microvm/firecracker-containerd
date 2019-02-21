@@ -15,18 +15,20 @@ package devmapper
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/docker/go-units"
-	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/pkg/dmsetup"
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/pkg/losetup"
 )
@@ -61,6 +63,10 @@ func TestPoolDevice(t *testing.T) {
 	_, loopDataDevice := createLoopbackDevice(t, tempDir)
 	_, loopMetaDevice := createLoopbackDevice(t, tempDir)
 
+	poolName := fmt.Sprintf("test-pool-device-%d", time.Now().Nanosecond())
+	err = dmsetup.CreatePool(poolName, loopDataDevice, loopMetaDevice, 64*1024/dmsetup.SectorSize)
+	require.NoErrorf(t, err, "failed to create pool %q", poolName)
+
 	defer func() {
 		// Detach loop devices and remove images
 		err := losetup.DetachLoopDevice(loopDataDevice, loopMetaDevice)
@@ -71,14 +77,10 @@ func TestPoolDevice(t *testing.T) {
 	}()
 
 	config := &Config{
-		PoolName:             "test-pool-device-1",
-		RootPath:             tempDir,
-		DataDevice:           loopDataDevice,
-		MetadataDevice:       loopMetaDevice,
-		DataBlockSize:        "65536",
-		DataBlockSizeSectors: 128,
-		BaseImageSize:        "16mb",
-		BaseImageSizeBytes:   16 * 1024 * 1024,
+		PoolName:           poolName,
+		RootPath:           tempDir,
+		BaseImageSize:      "16mb",
+		BaseImageSizeBytes: 16 * 1024 * 1024,
 	}
 
 	pool, err := NewPoolDevice(ctx, config)
@@ -187,12 +189,13 @@ func testDeactivateThinDevice(t *testing.T, pool *PoolDevice) {
 	}
 
 	for _, deviceName := range deviceList {
+		assert.True(t, pool.IsActivated(deviceName))
+
 		err := pool.DeactivateDevice(context.Background(), deviceName, false)
 		assert.NoErrorf(t, err, "failed to remove '%s'", deviceName)
-	}
 
-	err := pool.DeactivateDevice(context.Background(), "not-existing-device", false)
-	assert.Error(t, err, "should return an error if trying to remove not existing device")
+		assert.False(t, pool.IsActivated(deviceName))
+	}
 }
 
 func testRemoveThinDevice(t *testing.T, pool *PoolDevice) {

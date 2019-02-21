@@ -43,9 +43,5 @@ func TestApplyStorageOpt(t *testing.T) {
 
 	assert.Equal(t, "10gb", config.BaseImageSize)
 	assert.EqualValues(t, 10*1024*1024*1024, config.BaseImageSizeBytes)
-	assert.Equal(t, "/meta_dev", config.MetadataDevice)
-	assert.Equal(t, "/data_dev", config.DataDevice)
 	assert.Equal(t, "/pool_dev", config.PoolName)
-	assert.Equal(t, "100mb", config.DataBlockSize)
-	assert.EqualValues(t, 100*1024*1024/512, config.DataBlockSizeSectors)
 }

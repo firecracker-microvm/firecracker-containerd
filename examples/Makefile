@@ -21,4 +21,6 @@ taskworkflow: taskworkflow.go
 clean:
 	- rm -f taskworkflow
 
-.PHONY: all examples clean
+install:
+
+.PHONY: all examples clean install

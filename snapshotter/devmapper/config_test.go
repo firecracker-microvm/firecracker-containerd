@@ -17,7 +17,6 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/hashicorp/go-multierror"
@@ -27,12 +26,9 @@ import (
 
 func TestLoadConfig(t *testing.T) {
 	expected := Config{
-		RootPath:       "/tmp",
-		PoolName:       "test",
-		DataDevice:     "/dev/loop0",
-		MetadataDevice: "/dev/loop1",
-		DataBlockSize:  "1mb",
-		BaseImageSize:  "128Mb",
+		RootPath:      "/tmp",
+		PoolName:      "test",
+		BaseImageSize: "128Mb",
 	}
 
 	data, err := json.Marshal(&expected)
@@ -57,12 +53,8 @@ func TestLoadConfig(t *testing.T) {
 
 	assert.Equal(t, loaded.RootPath, expected.RootPath)
 	assert.Equal(t, loaded.PoolName, expected.PoolName)
-	assert.Equal(t, loaded.DataDevice, expected.DataDevice)
-	assert.Equal(t, loaded.MetadataDevice, expected.MetadataDevice)
-	assert.Equal(t, loaded.DataBlockSize, expected.DataBlockSize)
 	assert.Equal(t, loaded.BaseImageSize, expected.BaseImageSize)
 
-	assert.EqualValues(t, 1*1024*1024/512, loaded.DataBlockSizeSectors)
 	assert.EqualValues(t, 128*1024*1024, loaded.BaseImageSizeBytes)
 }
 
@@ -76,37 +68,25 @@ func TestLoadConfigInvalidPath(t *testing.T) {
 
 func TestParseInvalidData(t *testing.T) {
 	config := Config{
-		DataBlockSize: "x",
 		BaseImageSize: "y",
 	}
 
 	err := config.parse()
 	require.Error(t, err)
-
-	multErr := (err).(*multierror.Error)
-	require.Len(t, multErr.Errors, 2)
-
-	assert.True(t, strings.Contains(multErr.Errors[0].Error(), "failed to parse data block size: \"x\""))
-	assert.True(t, strings.Contains(multErr.Errors[1].Error(), "failed to parse base image size: \"y\""))
+	require.EqualError(t, err, "failed to parse base image size: 'y': invalid size: 'y'")
 }
 
 func TestFieldValidation(t *testing.T) {
-	config := &Config{DataBlockSizeSectors: 1}
+	config := &Config{}
 	err := config.Validate()
 	require.Error(t, err)
 
 	multErr := (err).(*multierror.Error)
-	require.Len(t, multErr.Errors, 8)
+	require.Len(t, multErr.Errors, 3)
 
 	assert.Error(t, multErr.Errors[0], "pool_name is empty")
 	assert.Error(t, multErr.Errors[1], "root_path is empty")
 	assert.Error(t, multErr.Errors[2], "base_image_size is empty")
-	assert.Error(t, multErr.Errors[3], "data_device is empty")
-	assert.Error(t, multErr.Errors[4], "meta_device is empty")
-	assert.Error(t, multErr.Errors[5], "data_block_size is empty")
-
-	assert.Equal(t, multErr.Errors[6], errInvalidBlockSize)
-	assert.Equal(t, multErr.Errors[7], errInvalidBlockAlignment)
 }
 
 func TestExistingPoolFieldValidation(t *testing.T) {

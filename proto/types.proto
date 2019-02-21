@@ -12,14 +12,59 @@ message ExtraData {
 	google.protobuf.Any RuncOptions = 2;
 }
 
-// Message to specify network config for a Firecracker VM
-message FirecrackerNetworkInterface {
-	string MacAddress = 1;
-	string HostDevName = 2;
-}
-
 // Message to specify the various Firecracker VM configurations for a task
 message FirecrackerConfig {
-	google.protobuf.Any RuncOptions = 1; // Can be used by the CreateTask request needs to relay any Runc options to the agent
-	repeated FirecrackerNetworkInterface NetworkInterfaces = 2; // Can be used to set the networking configuration for a VM
+	google.protobuf.Any RuncOptions = 1; // Specifies Runc options that need to relayed to the CreateTask request
+	repeated FirecrackerNetworkInterface NetworkInterfaces = 2; // Specifies the networking configuration for a VM
+	string KernelImagePath = 3; // Specifies the file path where the kernel image is located
+	string KernelArgs = 4; // Specifies the commandline arguments that should be passed to the kernel
+	FirecrackerMachineConfiguration MachineCfg = 5; // Specifies the machine configuration for the VM
+	FirecrackerDrive RootDrive = 6; // Specifies the root block device for the VM
+	// Specifies the additional block device config for the VM. Note that
+	// the snapshotter used might itself present block devices to the be
+	// attached to the VM. This fields allows additional block devices to
+	// that list.
+	repeated FirecrackerDrive AdditionalDrives = 7;
+}
+
+// Message to specify network config for a Firecracker VM
+message FirecrackerNetworkInterface {
+	string MacAddress = 1; // Specifies the mac address for the the device
+	string HostDevName = 2; // Specifies the name of the tap device on the host
+	bool AllowMMDS = 3; // Specifies if metadata service should be available on this network interface
+	FirecrackerRateLimiter InRateLimiter = 4; // Specifies a rate limiter for incoming bytes
+	FirecrackerRateLimiter OutRateLimiter = 5; // Specifies a rate limiter for outgoing bytes
+}
+
+// Message to set the machine config for a Firecracker VM
+message FirecrackerMachineConfiguration {
+	string CPUTemplate = 1; // Specifies the cpu template. Example: "T2" or "C3"
+	bool HtEnabled = 2; // Specifies if hyper-threading should be enabled
+	 // Specifies the memory size of VM
+	 // This lets us create a Firecracker VM of up to 4096 TiB, which
+	 // for a mircroVM should be large enough
+	uint32 MemSizeMib = 3;
+	uint32 VcpuCount = 4; // Specifies the number of vCPUs for the VM
+}
+
+// Message to specify the block device config for a Firecracker VM
+message FirecrackerDrive {
+	bool IsReadOnly = 1; // Specifies if the drive is read only
+	bool IsRootDevice = 2; // Specifies if the drive is the root device
+	string Partuuid = 3; // Specifies the unique id of the boot partition on this device
+	string PathOnHost = 4; // Specifies the host level path for the guest drive
+	FirecrackerRateLimiter RateLimiter = 5; // Specifies a rate limiter for block IO
+}
+
+// Message to specify an IO rate limiter with bytes/s and ops/s limits
+message FirecrackerRateLimiter {
+	FirecrackerTokenBucket Bandwidth = 1; // Specifies a token bucket with bytes as tokens
+	FirecrackerTokenBucket Ops = 2; // Specifies a token bucket with operations as tokens
+}
+
+// Message to specify a token buicket used to rate limit disk and network IO for a Firecracker VM
+message FirecrackerTokenBucket {
+	int64 OneTimeBurst = 1; // Specifies the initial size of the token bucket
+	int64 RefillTime = 2; // Specifies the amount of millis it takes for the bucket to fill
+	int64 Capacity = 3; // Specifies the number of tokens this bucket can hold
 }

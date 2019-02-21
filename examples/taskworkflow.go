@@ -16,6 +16,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -31,16 +32,27 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	kernelArgsFormat = "console=ttyS0 noapic reboot=k panic=1 pci=off nomodules rw ip=%s::%s:%s:::off::::"
+	macAddress       = "AA:FC:00:00:00:01"
+	hostDevName      = "tap0"
+)
+
 func main() {
-	var ip = flag.String("ip", "", "ip address assigned to the container")
+	var ip = flag.String("ip", "", "ip address assigned to the container. Example: -ip 172.16.0.1")
+	var gateway = flag.String("gw", "", "gateway ip address. Example: -gw 172.16.0.1")
+	var netMask = flag.String("mask", "", "subnet gatway mask. Example: -mask 255.255.255.0")
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
 	flag.Parse()
-	if err := taskWorkflow(*ip); err != nil {
+	if *ip != "" && (*gateway == "" || *netMask == "") {
+		log.Fatal("Incorrect usage. 'gw' and 'mask' need to be specified when 'ip' is specified")
+	}
+	if err := taskWorkflow(*ip, *gateway, *netMask); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func taskWorkflow(containerIP string) error {
+func taskWorkflow(containerIP string, gateway string, netMask string) error {
 	log.Println("Creating containerd client")
 	client, err := containerd.New("/run/containerd/containerd.sock")
 	if err != nil {
@@ -80,8 +92,24 @@ func taskWorkflow(containerIP string) error {
 
 	task, err := container.NewTask(ctx,
 		cio.NewCreator(cio.WithStdio),
-		withFirecrackerConfig(containerIP, "AA:FC:00:00:00:01", "tap0"),
-	)
+		func(ctx context.Context, _ *containerd.Client, ti *containerd.TaskInfo) error {
+			if containerIP == "" {
+				return nil
+			}
+			// An IP address for the container has been provided. Configure
+			// the VM opts accordingly.
+			firecrackerConfig := &proto.FirecrackerConfig{
+				NetworkInterfaces: []*proto.FirecrackerNetworkInterface{
+					{
+						MacAddress:  macAddress,
+						HostDevName: hostDevName,
+					},
+				},
+				KernelArgs: fmt.Sprintf(kernelArgsFormat, containerIP, gateway, netMask),
+			}
+			ti.Options = firecrackerConfig
+			return nil
+		})
 	if err != nil {
 		return errors.Wrapf(err, "creating task")
 
@@ -121,23 +149,6 @@ func taskWorkflow(containerIP string) error {
 	}
 	log.Printf("task exited with status: %d\n", code)
 	return nil
-}
-
-func withFirecrackerConfig(containerIP string, mac string, hostDevName string) containerd.NewTaskOpts {
-	return func(ctx context.Context, _ *containerd.Client, ti *containerd.TaskInfo) error {
-		if containerIP != "" {
-			firecrackerConfig := &proto.FirecrackerConfig{
-				NetworkInterfaces: []*proto.FirecrackerNetworkInterface{
-					{
-						MacAddress:  mac,
-						HostDevName: hostDevName,
-					},
-				},
-			}
-			ti.Options = firecrackerConfig
-		}
-		return nil
-	}
 }
 
 func getResponse(containerIP string) {

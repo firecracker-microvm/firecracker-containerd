@@ -17,31 +17,24 @@ $ sudo /path/to/firecracker-containerd/examples/taskworkflow
 For a workflow with networking setup for the container, create a tap device
 for the VM by following [these instructions](https://github.com/firecracker-microvm/firecracker/blob/master/docs/network-setup.md).
 
-This will create a tap device named `tap0`. Now, edit the kernel args in the
-firecracker-containerd config to set a static ip address from the
-`172.16.0.1/24` subnet. The following example sets it to `172.16.0.2`.
+This creates a tap device named `tap0`, in the local `172.16.0.1/24` subnet.
+Since the example does not rely on a DHCP client running within the VM to
+initialize the network interface, `gw` and `mask` flags should be used to
+specify the gateway and subnet mask values.
+
+The following example sets:
+* The IP address to `172.16.0.2`
+* The gateway IP address to `172.16.0.1`
+* The subnet mask to `255.255.255.0` (`/24`)
+
 ** NOTE: This example will not work if you're running more than 1 container
 on a host at the same time **
-```bash
-$ cat /etc/containerd/firecracker-runtime.json
-{
-    "firecracker_binary_path": "/usr/local/bin/firecracker",
-    "socket_path": "./firecracker.sock",
-    "kernel_image_path": "/var/lib/firecracker-containerd/runtime/vmlinux-2018-07-03",
-    "kernel_args": "console=ttyS0 noapic reboot=k panic=1 pci=off nomodules rw ip=172.16.0.2::172.16.0.1:255.255.255.0:::off::::",
-    "root_drive": "/var/lib/firecracker-containerd/runtime/amzn2-firecracker-fc-ctrd-2.0.20190130.runc-x86_64.ext4",
-    "cpu_count": 1,
-    "cpu_template": "T2",
-    "console": "stdio",
-    "log_fifo": "/tmp/fc-logs.fifo",
-    "log_level": "Debug",
-    "metrics_fifo": "/tmp/fc-metrics.fifo"
-}
-```
 
 Now, run the example by passing the `-ip` argument:
 ```bash
-$ sudo /path/to/firecracker-containerd/examples/taskworkflow -ip 172.16.0.2
+$ sudo /path/to/firecracker-containerd/examples/taskworkflow -ip 172.16.0.2 \
+    -gw 172.16.0.1 \
+    -mask 255.255.255.0
 ```
 
 You should see output similar to this:

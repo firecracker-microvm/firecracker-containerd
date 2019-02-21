@@ -56,15 +56,9 @@ func TestSnapshotterSuite(t *testing.T) {
 
 		// Remove device mapper pool and detach loop devices after test completes
 		removePool := func() error {
-			var result *multierror.Error
-
-			if err := snap.pool.RemovePool(ctx); err != nil {
-				result = multierror.Append(result, err)
-			}
-
-			if err := losetup.DetachLoopDevice(loopDataDevice, loopMetaDevice); err != nil {
-				result = multierror.Append(result, err)
-			}
+			result := multierror.Append(
+				snap.pool.RemovePool(ctx),
+				losetup.DetachLoopDevice(loopDataDevice, loopMetaDevice))
 
 			return result.ErrorOrNil()
 		}

@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/containerd/containerd/mount"
 	"github.com/docker/go-units"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -103,37 +104,33 @@ func TestPoolDevice(t *testing.T) {
 	})
 
 	// Mount 'thin-1'
-	thin1MountPath := tempMountPath(t)
-	output, err := exec.Command("mount", dmsetup.GetFullDevicePath(thinDevice1), thin1MountPath).CombinedOutput()
-	require.NoErrorf(t, err, "failed to mount '%s': %s", thinDevice1, string(output))
+	mount.WithTempMount(ctx, getMounts(thinDevice1), func(thin1MountPath string) error {
+		// Write v1 test file on 'thin-1' device
+		thin1TestFilePath := filepath.Join(thin1MountPath, "TEST")
+		err := ioutil.WriteFile(thin1TestFilePath, []byte("test file (v1)"), 0700)
+		require.NoErrorf(t, err, "failed to write test file v1 on '%s' volume", thinDevice1)
 
-	// Write v1 test file on 'thin-1' device
-	thin1TestFilePath := filepath.Join(thin1MountPath, "TEST")
-	err = ioutil.WriteFile(thin1TestFilePath, []byte("test file (v1)"), 0700)
-	require.NoErrorf(t, err, "failed to write test file v1 on '%s' volume", thinDevice1)
+		// Take snapshot of 'thin-1'
+		t.Run("CreateSnapshotDevice", func(t *testing.T) {
+			testCreateSnapshot(t, pool)
+		})
 
-	// Take snapshot of 'thin-1'
-	t.Run("CreateSnapshotDevice", func(t *testing.T) {
-		testCreateSnapshot(t, pool)
+		// Update TEST file on 'thin-1' to v2
+		err = ioutil.WriteFile(thin1TestFilePath, []byte("test file (v2)"), 0700)
+		assert.NoErrorf(t, err, "failed to write test file v2 on 'thin-1' volume after taking snapshot")
+
+		return err
 	})
 
-	// Update TEST file on 'thin-1' to v2
-	err = ioutil.WriteFile(thin1TestFilePath, []byte("test file (v2)"), 0700)
-	assert.NoErrorf(t, err, "failed to write test file v2 on 'thin-1' volume after taking snapshot")
-
 	// Mount 'snap-1' and make sure TEST file is v1
-	snap1MountPath := tempMountPath(t)
-	output, err = exec.Command("mount", dmsetup.GetFullDevicePath(snapDevice1), snap1MountPath).CombinedOutput()
-	require.NoErrorf(t, err, "failed to mount '%s' device: %s", snapDevice1, string(output))
+	mount.WithTempMount(ctx, getMounts(snapDevice1), func(snap1MountPath string) error {
+		// Read test file from snapshot device and make sure it's v1
+		fileData, err := ioutil.ReadFile(filepath.Join(snap1MountPath, "TEST"))
+		assert.NoErrorf(t, err, "couldn't read test file from '%s' device", snapDevice1)
+		assert.EqualValues(t, "test file (v1)", string(fileData), "test file content is invalid on snapshot")
 
-	// Read test file from snapshot device and make sure it's v1
-	fileData, err := ioutil.ReadFile(filepath.Join(snap1MountPath, "TEST"))
-	assert.NoErrorf(t, err, "couldn't read test file from '%s' device", snapDevice1)
-	assert.EqualValues(t, "test file (v1)", string(fileData), "test file content is invalid on snapshot")
-
-	// Unmount devices before removing
-	output, err = exec.Command("umount", thin1MountPath, snap1MountPath).CombinedOutput()
-	assert.NoErrorf(t, err, "failed to unmount devices: %s", string(output))
+		return err
+	})
 
 	t.Run("DeactivateDevice", func(t *testing.T) {
 		testDeactivateThinDevice(t, pool)
@@ -203,11 +200,13 @@ func testRemoveThinDevice(t *testing.T, pool *PoolDevice) {
 	assert.NoErrorf(t, err, "should delete thin device from pool")
 }
 
-func tempMountPath(t *testing.T) string {
-	path, err := ioutil.TempDir("", "devmapper-snapshotter-mount-")
-	require.NoError(t, err, "failed to get temp directory for mount")
-
-	return path
+func getMounts(thinDeviceName string) []mount.Mount {
+	return []mount.Mount{
+		{
+			Source: dmsetup.GetFullDevicePath(thinDeviceName),
+			Type:   "ext4",
+		},
+	}
 }
 
 func createLoopbackDevice(t *testing.T, dir string) (string, string) {

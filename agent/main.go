@@ -21,10 +21,12 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/containerd/containerd/events"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/runtime/v2/runc"
 	"github.com/containerd/containerd/runtime/v2/shim"
 	shimapi "github.com/containerd/containerd/runtime/v2/task"
+	"github.com/containerd/containerd/sys"
 	"github.com/containerd/ttrpc"
 	"github.com/mdlayher/vsock"
 	"github.com/sirupsen/logrus"
@@ -32,7 +34,23 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-const defaultPort = 10789
+const (
+	defaultPort = 10789
+
+	// per prctl(2), we must provide a non-zero arg when calling prctl with
+	// PR_SET_CHILD_SUBREAPER in order to enable subreaping (0 disables it)
+	enableSubreaper = 1
+)
+
+// A fake publisher that we use as a bandaid to prevent nil pointer exceptions when the
+// runc shim tries to publish events.
+// TODO replace this with a publisher that forwards events over vsock to the outer shim
+// on the host.
+type noopPublisher struct{}
+
+func (p *noopPublisher) Publish(ctx context.Context, topic string, event events.Event) error {
+	return nil
+}
 
 func main() {
 	var (
@@ -63,13 +81,19 @@ func main() {
 		log.G(ctx).WithError(errors.New("invalid argument")).Fatal("id not set")
 	}
 
+	// Ensure this process is a subreaper or else containers created via runc will
+	// not be its children.
+	if err := sys.SetSubreaper(enableSubreaper); err != nil {
+		log.G(ctx).WithError(err).Fatal("failed to set shim as subreaper")
+	}
+
 	// Create a runc task service that can be used via GRPC.
 	// This can be wrapped to add missing functionality (like
 	// running multiple containers inside one Firecracker VM)
 
 	log.G(ctx).WithField("id", id).Info("creating runc shim")
 
-	runcTaskService, err := runc.New(ctx, id, nil)
+	runcTaskService, err := runc.New(ctx, id, &noopPublisher{})
 	if err != nil {
 		log.G(ctx).WithError(err).Fatal("failed to create runc shim")
 	}

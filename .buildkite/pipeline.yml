@@ -108,3 +108,15 @@ steps:
             cd /firecracker-containerd/agent
             make test EXTRAGOARGS="-v -count=1"
           '
+
+  - label: ":exclamation: event tests"
+    agents:
+      queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
+    command:
+      >
+        docker run --rm \
+          localhost/firecracker-containerd-unittest-nonroot:${BUILDKITE_BUILD_NUMBER} \
+          '
+            cd /firecracker-containerd/eventbridge
+            make test EXTRAGOARGS="-v -count=1"
+          '

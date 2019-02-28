@@ -39,7 +39,7 @@ import (
 
 const (
 	defaultPort      = 10789
-	defaultNamespace = "default"
+	defaultNamespace = namespaces.Default
 
 	// per prctl(2), we must provide a non-zero arg when calling prctl with
 	// PR_SET_CHILD_SUBREAPER in order to enable subreaping (0 disables it)

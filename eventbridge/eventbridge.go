@@ -15,7 +15,6 @@ package eventbridge
 
 import (
 	"context"
-
 	// We need the typeurl register calls that occur in the init of this package in order to be able to unmarshal events
 	// in the Republish func below
 	_ "github.com/containerd/containerd/api/events"
@@ -40,6 +39,9 @@ const (
 // retrieving events via long-polling as opposed to a streaming model. This allows us to use TTRPC for the
 // implementation, which currently does not support streaming.
 type Getter interface {
+	// GetEvent retrieves a single event from the source provided by the implementation. If no event is available at the
+	// time of the call, GetEvent is expected to block until an event is available, an error occurs or the context is
+	// canceled.
 	GetEvent(ctx context.Context) (*eventapi.Envelope, error)
 }
 
@@ -59,7 +61,8 @@ func NewGetterService(ctx context.Context, eventSource events.Subscriber) Getter
 	}
 }
 
-// GetEvent pops and returns an event buffered in the service's subscription channel.
+// GetEvent pops and returns an event buffered in the service's subscription channel. If not events is in the channel
+// GetEvent blocks until one is available, an error is published on the error channel or the context is canceled.
 func (s *getterService) GetEvent(ctx context.Context) (*eventapi.Envelope, error) {
 	select {
 	case receivedEnvelope := <-s.eventChan:
@@ -70,12 +73,15 @@ func (s *getterService) GetEvent(ctx context.Context) (*eventapi.Envelope, error
 			Event:     receivedEnvelope.Event,
 		}, nil
 	case err := <-s.errChan:
+		// containerd's eventExchange will return a nil error if context is canceled, so if context is canceled and
+		// this case statement wins the race with <-ctx.Done(), we return a nil envelope and error, which is confusing.
+		// Instead, return ctx.Err() in that case
+		if err == nil {
+			err = ctx.Err()
+		}
 		return nil, err
 	case <-ctx.Done():
-		if ctxErr := ctx.Err(); ctxErr != context.Canceled {
-			return nil, ctxErr
-		}
-		return nil, nil
+		return nil, ctx.Err()
 	}
 }
 
@@ -100,8 +106,8 @@ func NewGetterClient(rpcClient *ttrpc.Client) Getter {
 	}
 }
 
-// GetEvent requests and returns an event from the Getter service. If no event is available at the time of the request
-// it will block until one is.
+// GetEvent requests and returns an event from a Getter service. If no event is available at the time of the request it
+// will block until one is.
 func (c *getterClient) GetEvent(ctx context.Context) (*eventapi.Envelope, error) {
 	var req types.Empty
 	var resp eventapi.Envelope
@@ -115,59 +121,80 @@ func (c *getterClient) GetEvent(ctx context.Context) (*eventapi.Envelope, error)
 // Attach takes an existing Getter and forwards each event retrieved from it to the provided forwarder. For example, if
 // the source is a client for a remote exchange and sink is a local exchange, Attach will result in each event published
 // on the remote exchange to be forwarded to the local exchange, essentially bridging the two together.
-func Attach(ctx context.Context, source Getter, sink events.Forwarder) error {
-	for {
-		// If the context was closed, return. Otherwise, don't get hung up and continue on with the loop.
-		select {
-		case <-ctx.Done():
-			if ctxErr := ctx.Err(); ctxErr != context.Canceled {
-				return ctxErr
+func Attach(ctx context.Context, source Getter, sink events.Forwarder) <-chan error {
+	errChan := make(chan error)
+
+	go func(errChan chan<- error) {
+		defer close(errChan)
+		for {
+			// If the context was closed, return. Otherwise, don't get hung up and continue on with the loop.
+			select {
+			case <-ctx.Done():
+				errChan <- ctx.Err()
+				return
+			default:
+				// GetEvent blocks until an event is available
+				envelope, err := source.GetEvent(ctx)
+				if err != nil {
+					errChan <- err
+					return
+				}
+
+				err = sink.Forward(ctx, &events.Envelope{
+					Timestamp: envelope.Timestamp,
+					Namespace: envelope.Namespace,
+					Topic:     envelope.Topic,
+					Event:     envelope.Event,
+				})
+				if err != nil {
+					errChan <- err
+					return
+				}
 			}
-			return nil
-		default:
 		}
+	}(errChan)
 
-		envelope, err := source.GetEvent(ctx)
-		if err != nil {
-			return err
-		}
-
-		err = sink.Forward(ctx, &events.Envelope{
-			Timestamp: envelope.Timestamp,
-			Namespace: envelope.Namespace,
-			Topic:     envelope.Topic,
-			Event:     envelope.Event,
-		})
-		if err != nil {
-			return err
-		}
-	}
+	return errChan
 }
 
 // Republish subscribes to the provided source and publishes each received event on the provided sink. Note that the
 // timestamp and namespace of the event will be set via the caller's context due to the use of Publish, as opposed to
 // Forward.
-func Republish(ctx context.Context, source events.Subscriber, sink events.Publisher) error {
-	eventChan, errChan := source.Subscribe(ctx)
-	for {
-		select {
-		case envelope := <-eventChan:
-			decodedEvent, err := typeurl.UnmarshalAny(envelope.Event)
-			if err != nil {
-				return err
-			}
+func Republish(ctx context.Context, source events.Subscriber, sink events.Publisher) <-chan error {
+	errChan := make(chan error)
 
-			err = sink.Publish(ctx, envelope.Topic, decodedEvent)
-			if err != nil {
-				return err
+	eventChan, eventErrChan := source.Subscribe(ctx)
+	go func(errChan chan<- error) {
+		defer close(errChan)
+		for {
+			select {
+			case envelope := <-eventChan:
+				decodedEvent, err := typeurl.UnmarshalAny(envelope.Event)
+				if err != nil {
+					errChan <- err
+					return
+				}
+
+				err = sink.Publish(ctx, envelope.Topic, decodedEvent)
+				if err != nil {
+					errChan <- err
+					return
+				}
+			case err := <-eventErrChan:
+				// containerd's eventExchange will not return an error if context is canceled, so if context is canceled and
+				// this case statement wins the race with <-ctx.Done(), we return a nil envelope and error, which is confusing.
+				// Instead, return ctx.Err() in that case
+				if err == nil {
+					err = ctx.Err()
+				}
+				errChan <- err
+				return
+			case <-ctx.Done():
+				errChan <- ctx.Err()
+				return
 			}
-		case err := <-errChan:
-			return err
-		case <-ctx.Done():
-			if ctxErr := ctx.Err(); ctxErr != context.Canceled {
-				return ctxErr
-			}
-			return nil
 		}
-	}
+	}(errChan)
+
+	return errChan
 }

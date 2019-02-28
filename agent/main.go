@@ -21,8 +21,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/containerd/containerd/events"
+	"github.com/containerd/containerd/events/exchange"
 	"github.com/containerd/containerd/log"
+	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/runtime/v2/runc"
 	"github.com/containerd/containerd/runtime/v2/shim"
 	shimapi "github.com/containerd/containerd/runtime/v2/task"
@@ -32,25 +33,18 @@ import (
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/unix"
+
+	"github.com/firecracker-microvm/firecracker-containerd/eventbridge"
 )
 
 const (
-	defaultPort = 10789
+	defaultPort      = 10789
+	defaultNamespace = "default"
 
 	// per prctl(2), we must provide a non-zero arg when calling prctl with
 	// PR_SET_CHILD_SUBREAPER in order to enable subreaping (0 disables it)
 	enableSubreaper = 1
 )
-
-// A fake publisher that we use as a bandaid to prevent nil pointer exceptions when the
-// runc shim tries to publish events.
-// TODO replace this with a publisher that forwards events over vsock to the outer shim
-// on the host.
-type noopPublisher struct{}
-
-func (p *noopPublisher) Publish(ctx context.Context, topic string, event events.Event) error {
-	return nil
-}
 
 func main() {
 	var (
@@ -71,7 +65,7 @@ func main() {
 	signals := make(chan os.Signal, 32)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM, unix.SIGCHLD)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(namespaces.WithNamespace(context.Background(), defaultNamespace))
 	defer cancel()
 
 	group, ctx := errgroup.WithContext(ctx)
@@ -93,7 +87,8 @@ func main() {
 
 	log.G(ctx).WithField("id", id).Info("creating runc shim")
 
-	runcTaskService, err := runc.New(ctx, id, &noopPublisher{})
+	eventExchange := exchange.NewExchange()
+	runcTaskService, err := runc.New(ctx, id, eventExchange)
 	if err != nil {
 		log.G(ctx).WithError(err).Fatal("failed to create runc shim")
 	}
@@ -106,6 +101,7 @@ func main() {
 	}
 
 	shimapi.RegisterTaskService(server, taskService)
+	eventbridge.RegisterGetterService(server, eventbridge.NewGetterService(ctx, eventExchange))
 
 	// Run ttrpc over vsock
 

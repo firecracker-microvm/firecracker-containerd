@@ -37,7 +37,6 @@ import (
 )
 
 const (
-	defaultNamespace = "default"
 	bundleMountPath  = "/container"
 	defaultStdioPath = "/container/fifo"
 )
@@ -87,7 +86,6 @@ func (ts *TaskService) Create(ctx context.Context, req *shimapi.CreateTaskReques
 	ioctx, cancel := context.WithCancel(ctx)
 	ts.cancels = append(ts.cancels, cancel)
 	ts.proxyStdio(ioctx, req.Stdin, req.Stdout, req.Stderr)
-	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
 	// before create call ensure we remove any existing .init.pid file
 	// We can ignore errors since it's valid for the file to not be present
 	os.Remove(".init.pid")

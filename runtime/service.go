@@ -29,6 +29,7 @@ import (
 	eventstypes "github.com/containerd/containerd/api/events"
 	"github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/containerd/events"
+	"github.com/containerd/containerd/events/exchange"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/runtime"
@@ -37,7 +38,7 @@ import (
 	"github.com/containerd/fifo"
 	"github.com/containerd/ttrpc"
 	"github.com/containerd/typeurl"
-	firecracker "github.com/firecracker-microvm/firecracker-go-sdk"
+	"github.com/firecracker-microvm/firecracker-go-sdk"
 	models "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 	ptypes "github.com/gogo/protobuf/types"
 	"github.com/mdlayher/vsock"
@@ -45,6 +46,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 
+	"github.com/firecracker-microvm/firecracker-containerd/eventbridge"
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 )
@@ -56,9 +58,10 @@ const (
 
 // implements shimapi
 type service struct {
-	server  *ttrpc.Server
-	id      string
-	publish events.Publisher
+	server        *ttrpc.Server
+	id            string
+	publish       events.Publisher
+	eventExchange *exchange.Exchange
 
 	agentStarted bool
 	agentClient  taskAPI.TaskService
@@ -76,7 +79,7 @@ var (
 
 // NewService creates new runtime shim.
 // Matches type Init func(..).. defined https://github.com/containerd/containerd/blob/master/runtime/v2/shim/shim.go#L47
-func NewService(ctx context.Context, id string, publisher events.Publisher) (shim.Shim, error) {
+func NewService(ctx context.Context, id string, remotePublisher events.Publisher) (shim.Shim, error) {
 	server, err := newServer()
 	if err != nil {
 		return nil, err
@@ -93,11 +96,26 @@ func NewService(ctx context.Context, id string, publisher events.Publisher) (shi
 		config.Debug = opts.Debug
 	}
 
+	eventExchange := exchange.NewExchange()
+
+	// Republish each event received on our exchange to the provided remote publisher.
+	// TODO ideally we would be forwarding events instead of re-publishing them, which would preserve the events'
+	// original timestamps and namespaces. However, as of this writing, the containerd v2 runtime model only provides a
+	// shim with a publisher, not a forwarder, so we have to republish for now.
+	go func() {
+		err := eventbridge.Republish(ctx, eventExchange, remotePublisher)
+		if err != nil && err != context.Canceled {
+			log.G(ctx).WithError(err).Error("error while republishing events")
+		}
+	}()
+
 	s := &service{
-		server:  server,
-		id:      id,
-		publish: publisher,
-		config:  config,
+		server:        server,
+		id:            id,
+		publish:       remotePublisher,
+		eventExchange: eventExchange,
+
+		config: config,
 	}
 
 	return s, nil
@@ -235,7 +253,7 @@ func (s *service) monitorState(ctx context.Context, id, execID string, pid uint3
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			//make a state request
+			// make a state request
 			req := &taskAPI.StateRequest{
 				ID:     id,
 				ExecID: execID,
@@ -703,6 +721,16 @@ func (s *service) startVM(ctx context.Context,
 	rpcClient := ttrpc.NewClient(conn)
 	rpcClient.OnClose(func() { conn.Close() })
 	apiClient := taskAPI.NewTaskClient(rpcClient)
+	eventBridgeClient := eventbridge.NewGetterClient(rpcClient)
+
+	go func() {
+		// Connect the agent's event exchange to our own own event exchange using the eventbridge client. All events
+		// that are published on the agent's exchange will also be published on our own
+		err := eventbridge.Attach(ctx, eventBridgeClient, s.eventExchange)
+		if err != nil {
+			log.G(ctx).WithError(err).Error("error while forwarding events from VM agent")
+		}
+	}()
 
 	return apiClient, nil
 }

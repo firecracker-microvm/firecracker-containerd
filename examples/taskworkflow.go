@@ -33,26 +33,41 @@ import (
 )
 
 const (
-	kernelArgsFormat = "console=ttyS0 noapic reboot=k panic=1 pci=off nomodules rw ip=%s::%s:%s:::off::::"
-	macAddress       = "AA:FC:00:00:00:01"
-	hostDevName      = "tap0"
+	kernelArgsFormat   = "console=ttyS0 noapic reboot=k panic=1 pci=off nomodules rw ip=%s::%s:%s:::off::::"
+	defaultMacAddress  = "AA:FC:00:00:00:01"
+	defaultHostDevName = "tap0"
 )
 
 func main() {
 	var ip = flag.String("ip", "", "ip address assigned to the container. Example: -ip 172.16.0.1")
 	var gateway = flag.String("gw", "", "gateway ip address. Example: -gw 172.16.0.1")
 	var netMask = flag.String("mask", "", "subnet gatway mask. Example: -mask 255.255.255.0")
+	var netNS = flag.String("netns", "", "firecracker VM network namespace. Example: -netNS testing")
+	var hostDevName = flag.String("host_device", defaultHostDevName,
+		"the host device name for the network interface, required when specifying 'netns'. Example: -host_device tap0")
+	var macAddress = flag.String("mac", defaultMacAddress,
+		"the mac address for the network interface, required when specifying 'netns'. Example: -mac AA:FC:00:00:00:01")
+	var kernelNetworkArgs = flag.Bool("kernel_nw_args", false,
+		"specifies if network params for the VMs should be included with kernel args. Example: -kernel_nw_args true")
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
 	flag.Parse()
-	if *ip != "" && (*gateway == "" || *netMask == "") {
-		log.Fatal("Incorrect usage. 'gw' and 'mask' need to be specified when 'ip' is specified")
+	if *kernelNetworkArgs && (*gateway == "" || *netMask == "" || *ip == "") {
+		log.Fatal("Incorrect usage. 'ip', 'gw' and 'mask' need to be specified when 'kernel_nw_args' is set")
 	}
-	if err := taskWorkflow(*ip, *gateway, *netMask); err != nil {
+	if err := taskWorkflow(*ip, *kernelNetworkArgs, *gateway, *netMask, *macAddress, *hostDevName, *netNS); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func taskWorkflow(containerIP string, gateway string, netMask string) error {
+func taskWorkflow(
+	containerIP string,
+	kernelNetworkArgs bool,
+	gateway string,
+	netMask string,
+	macAddress string,
+	hostDevName string,
+	netNS string,
+) error {
 	log.Println("Creating containerd client")
 	client, err := containerd.New("/run/containerd/containerd.sock")
 	if err != nil {
@@ -93,21 +108,23 @@ func taskWorkflow(containerIP string, gateway string, netMask string) error {
 	task, err := container.NewTask(ctx,
 		cio.NewCreator(cio.WithStdio),
 		func(ctx context.Context, _ *containerd.Client, ti *containerd.TaskInfo) error {
-			if containerIP == "" {
+			if containerIP == "" && netNS == "" {
+				// No params to configure, return.
 				return nil
 			}
-			// An IP address for the container has been provided. Configure
-			// the VM opts accordingly.
-			firecrackerConfig := &proto.FirecrackerConfig{
-				NetworkInterfaces: []*proto.FirecrackerNetworkInterface{
-					{
-						MacAddress:  macAddress,
-						HostDevName: hostDevName,
-					},
-				},
-				KernelArgs: fmt.Sprintf(kernelArgsFormat, containerIP, gateway, netMask),
+			// An IP address or the network namespace for the container has
+			// been provided. Configure VM opts accordingly.
+			builder := newFirecrackerConfigBuilder()
+			if containerIP != "" {
+				builder.setNetworkConfig(macAddress, hostDevName)
 			}
-			ti.Options = firecrackerConfig
+			if kernelNetworkArgs {
+				builder.setKernelNetworkArgs(containerIP, gateway, netMask)
+			}
+			if netNS != "" {
+				builder.setNetNS(netNS)
+			}
+			ti.Options = builder.build()
 			return nil
 		})
 	if err != nil {
@@ -149,6 +166,47 @@ func taskWorkflow(containerIP string, gateway string, netMask string) error {
 	}
 	log.Printf("task exited with status: %d\n", code)
 	return nil
+}
+
+type firecrackerConfigBuilder struct {
+	vmConfig *proto.FirecrackerConfig
+}
+
+func newFirecrackerConfigBuilder() *firecrackerConfigBuilder {
+	return &firecrackerConfigBuilder{
+		vmConfig: &proto.FirecrackerConfig{},
+	}
+}
+
+func (builder *firecrackerConfigBuilder) build() *proto.FirecrackerConfig {
+	return builder.vmConfig
+}
+
+// setNetworkConfig sets the fields in the protobuf message required to
+// configure the VM with the container IP, gateway and netmask sepcified.
+func (builder *firecrackerConfigBuilder) setNetworkConfig(
+	macAddress string,
+	hostDevName string,
+) {
+	builder.vmConfig.NetworkInterfaces = []*proto.FirecrackerNetworkInterface{
+		{
+			MacAddress:  macAddress,
+			HostDevName: hostDevName,
+		},
+	}
+}
+
+func (builder *firecrackerConfigBuilder) setKernelNetworkArgs(
+	containerIP string,
+	gateway string,
+	netMask string,
+) {
+	builder.vmConfig.KernelArgs = fmt.Sprintf(kernelArgsFormat, containerIP, gateway, netMask)
+}
+
+// setNetNS sets the network namespace field in the protobuf message.
+func (builder *firecrackerConfigBuilder) setNetNS(netNS string) {
+	builder.vmConfig.FirecrackerNetworkNamespace = netNS
 }
 
 func getResponse(containerIP string) {

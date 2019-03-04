@@ -8,24 +8,29 @@ After checking out the `firecracker-containerd` repo, you can build this
 example using the `make examples` command.
 
 ### Running
+
+#### Basic workflow (no networking)
 For a basic workflow, without any networking setup, just run the executable
 built with the command in the previous section as super user:
 ```bash
 $ sudo /path/to/firecracker-containerd/examples/taskworkflow
 ```
 
+#### Workflow to create container, with networking
 For a workflow with networking setup for the container, create a tap device
 for the VM by following [these instructions](https://github.com/firecracker-microvm/firecracker/blob/master/docs/network-setup.md).
 
 This creates a tap device named `tap0`, in the local `172.16.0.1/24` subnet.
 Since the example does not rely on a DHCP client running within the VM to
 initialize the network interface, `gw` and `mask` flags should be used to
-specify the gateway and subnet mask values.
+specify the gateway and subnet mask values, along with the `kernel_nw_args`
+flag.
 
 The following example sets:
 * The IP address to `172.16.0.2`
 * The gateway IP address to `172.16.0.1`
 * The subnet mask to `255.255.255.0` (`/24`)
+* Kernel args to specify all 3 of these
 
 ** NOTE: This example will not work if you're running more than 1 container
 on a host at the same time **
@@ -34,7 +39,8 @@ Now, run the example by passing the `-ip` argument:
 ```bash
 $ sudo /path/to/firecracker-containerd/examples/taskworkflow -ip 172.16.0.2 \
     -gw 172.16.0.1 \
-    -mask 255.255.255.0
+    -mask 255.255.255.0 \
+    -kernel_nw_args
 ```
 
 You should see output similar to this:
@@ -75,3 +81,21 @@ Commercial support is available at
 ]
 172.16.0.1 - - [11/Feb/2019:21:02:54 +0000] "GET / HTTP/1.1" 200 612 "-" "Go-http-client/1.1" "-"
 ```
+
+#### Workflow to create container, with firecracker process in a netns
+For a workflow with networking setup for a container, where network parameters
+are being dervied from a network namespace, the `-netns` argument can be
+used.
+
+```bash
+sudo /path/to/firecracker-containerd/examples/taskworkflow -ip 10.0.5.33 \
+    -host_device tap301 \
+    -mac aa:bb:cc:dd:ee:ff \
+    -netns vlan301
+```
+
+The above example command assumes that a vlan device with vlan tag `301` has
+been setup with the `tap301` tap device in the `vlan301` network namespace.
+Since `-kernel_nw_args` has not been set, it's also assumed that the rootfs
+image for the VM has a DHCP client that runs on boot. The ip address for the
+vlan device is assumed to be `10.0.5.33` as well.

@@ -37,6 +37,7 @@ import (
 	"github.com/containerd/fifo"
 	"github.com/containerd/ttrpc"
 	"github.com/containerd/typeurl"
+	"github.com/containernetworking/plugins/pkg/ns"
 	firecracker "github.com/firecracker-microvm/firecracker-go-sdk"
 	models "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 	ptypes "github.com/gogo/protobuf/types"
@@ -52,6 +53,7 @@ import (
 const (
 	defaultVsockPort     = 10789
 	supportedMountFSType = "ext4"
+	namedNetNSPath       = "/var/run/netns/"
 )
 
 // implements shimapi
@@ -683,7 +685,7 @@ func (s *service) startVM(ctx context.Context,
 	s.machineCID = cid
 
 	log.G(ctx).Info("starting instance")
-	if err := s.machine.Start(vmmCtx); err != nil {
+	if err := s.netNSStartVM(vmmCtx, vmConfig); err != nil {
 		return nil, err
 	}
 
@@ -700,6 +702,25 @@ func (s *service) startVM(ctx context.Context,
 	apiClient := taskAPI.NewTaskClient(rpcClient)
 
 	return apiClient, nil
+}
+
+// netNSStartVM starts the firecracker process with the network namespace
+// specified in the VM config. If the namespace is not specified, the process
+// is started in the default network namespace.
+func (s *service) netNSStartVM(vmmCtx context.Context, vmConfig *proto.FirecrackerConfig) error {
+	netNSName := netNSFromProto(vmConfig)
+	if netNSName == "" {
+		return s.machine.Start(vmmCtx)
+	}
+	// Get the network namespace handle.
+	netNS, err := ns.GetNS(namedNetNSPath + netNSName)
+	if err != nil {
+		return errors.Wrapf(err, "unable to find netns %s", netNSName)
+	}
+	return netNS.Do(func(_ ns.NetNS) error {
+		// Start the firecracker process in the target network namespace.
+		return s.machine.Start(vmmCtx)
+	})
 }
 
 func (s *service) stopVM() error {

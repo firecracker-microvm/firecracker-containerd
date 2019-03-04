@@ -69,6 +69,16 @@ func overrideVMConfigFromTaskOpts(
 	return cfg, drivesBuilder, nil
 }
 
+// netNSFromProto returns the network namespace set, if any in the protobuf
+// message.
+func netNSFromProto(vmConfig *proto.FirecrackerConfig) string {
+	if vmConfig != nil {
+		return vmConfig.FirecrackerNetworkNamespace
+	}
+
+	return ""
+}
+
 // networkConfigFromProto creates a firecracker NetworkInterface object from
 // the protobuf FirecrackerNetworkInterface message.
 func networkConfigFromProto(nwIface *proto.FirecrackerNetworkInterface) firecracker.NetworkInterface {

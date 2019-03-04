@@ -13,6 +13,7 @@ require (
 	github.com/containerd/go-runc v0.0.0-20180907222934-5a6d9f37cfa3 // indirect
 	github.com/containerd/ttrpc v0.0.0-20181001154009-f51df4475b76
 	github.com/containerd/typeurl v0.0.0-20181015155603-461401dc8f19
+	github.com/containernetworking/plugins v0.7.4
 	github.com/coreos/go-systemd v0.0.0-20181031085051-9002847aa142 // indirect
 	github.com/docker/distribution v2.7.1+incompatible // indirect
 	github.com/docker/docker v1.13.1 // indirect

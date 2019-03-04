@@ -30,6 +30,8 @@ github.com/containerd/ttrpc v0.0.0-20181001154009-f51df4475b76 h1:vUPO9S35+FvukX
 github.com/containerd/ttrpc v0.0.0-20181001154009-f51df4475b76/go.mod h1:PvCDdDGpgqzQIzDW1TphrGLssLDZp2GuS+X5DkEJB8o=
 github.com/containerd/typeurl v0.0.0-20181015155603-461401dc8f19 h1:gzdItdct+4eLnZxiZi1YcIXx3uo5QWa/xXKnsldEqY8=
 github.com/containerd/typeurl v0.0.0-20181015155603-461401dc8f19/go.mod h1:Cm3kwCdlkCfMSHURc+r6fwoGH6/F1hH3S4sg0rLFWPc=
+github.com/containernetworking/plugins v0.7.4 h1:ugkuXfg1Pdzm54U5DGMzreYIkZPSCmSq4rm5TIXVICA=
+github.com/containernetworking/plugins v0.7.4/go.mod h1:dagHaAhNjXjT9QYOklkKJDGaQPTg4pf//FrUcJeb7FU=
 github.com/coreos/go-systemd v0.0.0-20181031085051-9002847aa142 h1:3jFq2xL4ZajGK4aZY8jz+DAF0FHjI51BXjjSwCzS1Dk=
 github.com/coreos/go-systemd v0.0.0-20181031085051-9002847aa142/go.mod h1:F5haX7vjVVG0kc13fIWeqUViNPyEJxv/OmvnBo0Yme4=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=

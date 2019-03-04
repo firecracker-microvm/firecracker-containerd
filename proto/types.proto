@@ -25,6 +25,7 @@ message FirecrackerConfig {
 	// attached to the VM. This fields allows additional block devices to
 	// that list.
 	repeated FirecrackerDrive AdditionalDrives = 7;
+	string FirecrackerNetworkNamespace = 8; // Specifies the network namespace for the firecracker process
 }
 
 // Message to specify network config for a Firecracker VM

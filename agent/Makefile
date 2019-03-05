@@ -11,9 +11,12 @@
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
+GOMOD := $(shell go env GOMOD)
+GOSUM := $(GOMOD:.mod=.sum)
+
 all: agent
 
-agent: *.go
+agent: *.go $(GOMOD) $(GOSUM)
 ifneq ($(STATIC_AGENT),)
 	CGO_ENABLED=0 go build -installsuffix cgo -a -ldflags "-s" -o agent
 else

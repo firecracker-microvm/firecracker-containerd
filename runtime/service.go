@@ -175,6 +175,11 @@ func (s *service) Create(ctx context.Context, request *taskAPI.CreateTaskRequest
 	if request.Options != nil {
 		firecrackerConfig, runcOpts, err = parseCreateTaskOpts(ctx, request.Options)
 		if err != nil {
+			log.G(ctx).WithFields(logrus.Fields{
+				"id":      request.ID,
+				"options": request.Options,
+				"error":   err,
+			}).Error("failed to unmarshal task create request options")
 			return nil, errors.Wrapf(err, "unmarshaling task create request options")
 		}
 	}

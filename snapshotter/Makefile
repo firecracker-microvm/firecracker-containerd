@@ -16,6 +16,8 @@ EXTRAGOARGS:=
 
 SUBDIRS:=cmd/devmapper cmd/naive
 SOURCES:=$(shell find . -name '*.go')
+GOMOD := $(shell go env GOMOD)
+GOSUM := $(GOMOD:.mod=.sum)
 
 all: $(SUBDIRS)
 
@@ -25,10 +27,10 @@ $(SUBDIRS):
 install: $(SUBDIRS)
 	for d in $(SUBDIRS); do $(MAKE) -C $$d install; done
 
-test: $(SOURCES)
+test: $(SOURCES) $(GOMOD) $(GOSUM)
 	go test ./... $(EXTRAGOARGS)
 
 clean:
 	for d in $(SUBDIRS); do $(MAKE) -C $$d clean; done
 
-.PHONY: all $(SUBDIRS) clean install
+.PHONY: all $(SUBDIRS) clean install test

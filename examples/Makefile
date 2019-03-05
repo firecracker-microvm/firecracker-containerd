@@ -11,11 +11,14 @@
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
+GOMOD := $(shell go env GOMOD)
+GOSUM := $(GOMOD:.mod=.sum)
+
 all: examples
 
 examples: taskworkflow
 
-taskworkflow: taskworkflow.go
+taskworkflow: taskworkflow.go $(GOMOD) $(GOSUM)
 	go build -o taskworkflow taskworkflow.go
 
 clean:

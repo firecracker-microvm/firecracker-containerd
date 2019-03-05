@@ -11,9 +11,12 @@
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
+GOMOD := $(shell go env GOMOD)
+GOSUM := $(GOMOD:.mod=.sum)
+
 all: devmapper_snapshotter
 
-devmapper_snapshotter: *.go
+devmapper_snapshotter: *.go $(GOMOD) $(GOSUM)
 	go build -o devmapper_snapshotter
 
 install: devmapper_snapshotter

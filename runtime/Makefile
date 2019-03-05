@@ -15,12 +15,14 @@
 EXTRAGOARGS:=
 
 SOURCES:=$(shell find . -name '*.go')
+GOMOD := $(shell go env GOMOD)
+GOSUM := $(GOMOD:.mod=.sum)
 
 all: runtime
 
 runtime: containerd-shim-aws-firecracker
 
-containerd-shim-aws-firecracker: $(SOURCES)
+containerd-shim-aws-firecracker: $(SOURCES) $(GOMOD) $(GOSUM)
 	go build -o containerd-shim-aws-firecracker
 
 install: containerd-shim-aws-firecracker

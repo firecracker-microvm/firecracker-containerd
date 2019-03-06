@@ -18,7 +18,7 @@ require (
 	github.com/docker/docker v1.13.1 // indirect
 	github.com/docker/go-events v0.0.0-20170721190031-9461782956ad // indirect
 	github.com/docker/go-units v0.3.3
-	github.com/firecracker-microvm/firecracker-go-sdk v0.0.0-20190219211450-78fe329f36bd
+	github.com/firecracker-microvm/firecracker-go-sdk v0.15.0
 	github.com/godbus/dbus v0.0.0-20181025153459-66d97aec3384 // indirect
 	github.com/gogo/googleapis v1.1.0 // indirect
 	github.com/gogo/protobuf v1.1.1

@@ -1,0 +1,9 @@
+#!/bin/sh
+mkdir -p /container
+exec > /container/agent-debug.log # Debug logs from the agent
+exec 2>&1
+touch /container/runtime
+mkdir /container/rootfs
+mount -t auto -o rw /dev/vdb /container/rootfs
+cd /container
+/usr/local/bin/agent -id 1 -debug &

@@ -80,8 +80,13 @@ channel on the [Firecracker Slack](https://tinyurl.com/firecracker-microvm)
 
 ### Building
 
-Each of the components requires Go 1.11 and utilizes Go modules.  You must have
+Each of the components requires Go 1.11 and utilizes Go modules. You must have
 a properly set up Go toolchain capable of building the components.
+Note that Modules are an experimental opt-in feature in Go 1.11, there are two
+ways to activate module support:
+
+* Invoke the go command in a directory outside of the `$GOPATH`.
+* set GO111MODULE=on before invoke the go command.
 
 The devicemapper snapshotter requires `dmsetup` command line tool to be
 installed and available on your computer. On Ubuntu, it can be installed

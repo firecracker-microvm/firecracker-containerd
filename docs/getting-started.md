@@ -122,6 +122,12 @@ git clone https://github.com/firecracker-microvm/firecracker-containerd
 make STATIC_AGENT=true
 ```
 
+If you clone repository inside the `$GOPATH` and golang version is 1.11.x, should explicitly set `GO111MODULE=on` before build.
+
+```bash
+GO111MODULE=on make STATIC_AGENT=true
+```
+
 Once you have built the runtime, be sure to place the
 `containerd-shim-aws-firecracker` binary on your `$PATH`.
 

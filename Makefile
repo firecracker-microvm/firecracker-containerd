@@ -41,4 +41,16 @@ lint:
 install:
 	for d in $(SUBDIRS); do $(MAKE) -C $$d install; done
 
+sandbox-test-cri:
+	docker build -f sandbox/cri/Dockerfile -t "cri" .
+	docker run \
+		--init \
+		--rm \
+		--privileged \
+		-v /tmp:/foo \
+		--security-opt seccomp=unconfined \
+		--ulimit core=0 \
+		--device=/dev/kvm:/dev/kvm \
+		-t cri
+
 .PHONY: all $(SUBDIRS) clean proto deps lint install

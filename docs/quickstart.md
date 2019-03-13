@@ -12,74 +12,68 @@ files into `/usr/local/bin`.
 1. Get an AWS account (see
    [this article](https://aws.amazon.com/premiumsupport/knowledge-center/create-and-activate-aws-account/)
    if you need help creating one)
-2. Launch an i3.metal instance running Amazon Linux 2 (you can find it in the
-   EC2 console Quickstart wizard, or by running
-   `aws ssm get-parameters --names /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2`
-   in your chosen region).  If you need help launching an EC2 instance, see the
+2. Launch an i3.metal instance running Debian Stretch (you can find it in the
+   [AWS marketplace](http://deb.li/awsmp) or on [this
+   page](https://wiki.debian.org/Cloud/AmazonEC2Image/Stretch).  If you need
+   help launching an EC2 instance, see the
    [EC2 getting started guide](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/EC2_GetStarted.html).
-3. If you have an older kernel, update the kernel to
-   `kernel-4.14.88-88.76.amzn2` (there's a bugfix in this that we need) and
-   reboot.  The latest AMIs for Amazon Linux 2 (which you can discover from the
-   instructions above) already have a new-enough kernel.
-   <details><summary>Click here for instructions on updating your kernel</summary>
-   ```bash
-   if [[ $(rpm --eval "%{lua: print(rpm.vercmp('$(uname -r)', '4.14.88-88.76.amzn2.x86_64'))}") -lt 0 ]]; then
-     echo "You need to install a kernel >= 4.14.88-88.76.amzn2.  You can do so by running the following commands:"
-     echo "sudo yum -y upgrade kernel && sudo reboot"
-   else
-     echo 'You are already up to date!'
-   fi
-   ```
-   </details>
 3. Run the script below to download and install all the required components.
    This script expects to be run from your `$HOME` directory.
 
 ```bash
 #!/bin/bash
 
-if [[ $(rpm --eval "%{lua: print(rpm.vercmp('$(uname -r)', '4.14.88-88.76.amzn2.x86_64'))}") -lt 0 ]]; then
-  echo "You need to install a kernel >= 4.14.88-88.76.amzn2.  You can do so by running the following commands:"
-  echo "sudo yum -y upgrade kernel && sudo reboot"
-fi
-
 cd ~
 
-# Install git
-sudo yum install -y git
+# Install git, Go 1.11, make, curl
+sudo mkdir -p /etc/apt/sources.list.d
+echo "deb http://ftp.debian.org/debian stretch-backports main" | \
+     sudo tee /etc/apt/sources.list.d/stretch-backports.list
+sudo DEBIAN_FRONTEND=noninteractive apt-get update
+sudo DEBIAN_FRONTEND=noninteractive apt-get \
+  --target-release stretch-backports \
+  install --yes \
+  golang-go \
+  make \
+  git \
+  curl \
+  e2fsprogs \
+  musl-tools \
+  util-linux
 
-# Install Rust and Go 1.11
-sudo amazon-linux-extras install -y rust1
-sudo amazon-linux-extras install -y golang1.11
+# Install Rust
+curl https://sh.rustup.rs -sSf | sh -s -- --verbose -y --default-toolchain 1.32.0
+source $HOME/.cargo/env
+rustup target add x86_64-unknown-linux-musl
 
-# Check out Firecracker and build it from the v0.12.0 tag
+# Check out Firecracker and build it from the v0.15.2 tag
 git clone https://github.com/firecracker-microvm/firecracker.git
 cd firecracker
-git checkout v0.12.0
-cargo build --release --features vsock --target x86_64-unknown-linux-gnu
-sudo cp target/x86_64-unknown-linux-gnu/release/{firecracker,jailer} /usr/local/bin
+git checkout v0.15.2
+cargo build --release --features vsock --target x86_64-unknown-linux-musl
+sudo cp target/x86_64-unknown-linux-musl/release/{firecracker,jailer} /usr/local/bin
 
 cd ~
 
-# Check out containerd and build it from the v1.2.1 tag
+# Check out containerd and build it from the v1.2.4 tag
 mkdir -p ~/go/src/github.com/containerd/containerd
 git clone https://github.com/containerd/containerd.git ~/go/src/github.com/containerd/containerd
 cd ~/go/src/github.com/containerd/containerd
-git checkout v1.2.1
-sudo yum install -y libseccomp-devel btrfs-progs-devel
+git checkout v1.2.4
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y libseccomp-dev btrfs-progs
 make
 sudo cp bin/* /usr/local/bin
 
 cd ~
 
-# Check out runc and build it from the 96ec2177ae841256168fcf76954f7177af9446eb
+# Check out runc and build it from the 6635b4f0c6af3810594d2770f662f34ddc15b40d
 # commit.  Note that this is the version described in
-# https://github.com/containerd/containerd/blob/v1.2.1/RUNC.md and
-# https://github.com/containerd/containerd/blob/v1.2.1/vendor.conf#L23
+# https://github.com/containerd/containerd/blob/v1.2.4/RUNC.md and
+# https://github.com/containerd/containerd/blob/v1.2.4/vendor.conf#L23
 mkdir -p ~/go/src/github.com/opencontainers/runc
 git clone https://github.com/opencontainers/runc ~/go/src/github.com/opencontainers/runc
 cd ~/go/src/github.com/opencontainers/runc
-git checkout 96ec2177ae841256168fcf76954f7177af9446eb
-sudo yum install -y libseccomp-static glibc-static
+git checkout 6635b4f0c6af3810594d2770f662f34ddc15b40d
 make static BUILDTAGS='seccomp'
 sudo make BINDIR='/usr/local/bin' install
 
@@ -88,7 +82,7 @@ cd ~
 # Check out firecracker-containerd and build it
 git clone https://github.com/firecracker-microvm/firecracker-containerd.git
 cd firecracker-containerd
-sudo yum install -y device-mapper
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y dmsetup
 make STATIC_AGENT='true'
 sudo cp runtime/containerd-shim-aws-firecracker snapshotter/cmd/{devmapper/devmapper_snapshotter,naive/naive_snapshotter} /usr/local/bin
 
@@ -114,8 +108,8 @@ cd /container
 EOF
 chmod +x fc-agent.start
 truncate --size=+50M hello-rootfs.ext4
-e2fsck -f hello-rootfs.ext4
-resize2fs hello-rootfs.ext4
+/sbin/e2fsck -f hello-rootfs.ext4
+/sbin/resize2fs hello-rootfs.ext4
 sudo mount hello-rootfs.ext4 /tmp/mnt
 sudo cp $(which runc) firecracker-containerd/agent/agent /tmp/mnt/usr/local/bin
 sudo cp fc-agent.start /tmp/mnt/etc/local.d
@@ -156,6 +150,9 @@ sudo tee -a /etc/containerd/firecracker-runtime.json <<EOF
   "metrics_fifo": "/tmp/fc-metrics.fifo"
 }
 EOF
+
+# Enable vhost-vsock
+sudo modprobe vhost-vsock
 ```
 
 4. Open a new terminal and start the `naive_snapshotter` program in the
@@ -163,7 +160,7 @@ EOF
 
 ```bash
 sudo mkdir -p /var/run/firecracker-containerd /var/lib/firecracker-containerd/naive
-sudo /usr/local/bin/naive_snapshotter \
+sudo naive_snapshotter \
      -address /var/run/firecracker-containerd/naive-snapshotter.sock \
      -path /var/lib/firecracker-containerd/naive \
      -debug
@@ -172,16 +169,16 @@ sudo /usr/local/bin/naive_snapshotter \
 5. Open a new terminal and start `containerd` in the foreground
 
 ```bash
-sudo PATH=$PATH /usr/local/bin/containerd
+sudo containerd
 ```
 
 6. Open a new terminal, pull an image, and run a container!
 
 ```bash
-sudo /usr/local/bin/ctr image pull \
+sudo ctr image pull \
      --snapshotter firecracker-naive \
      docker.io/library/debian:latest
-sudo /usr/local/bin/ctr run \
+sudo ctr run \
      --snapshotter firecracker-naive \
      --runtime aws.firecracker \
      --tty \

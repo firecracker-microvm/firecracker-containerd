@@ -39,12 +39,6 @@ fields:
 
 * `RootPath` - a directory where the metadata will be available
 * `PoolName` - a name to use for the devicemapper thin pool
-* `DataDevice` - path to the data volume that should be used by the thin pool
-* `MetadataDevice` - path to the metadata volume that should be used by the thin
-  pool
-* `DataBlockSize` - the size of allocation chunks in data file, between 128
-  sectors (64KB) and and 2097152 sectors (1GB) and a multiple of 128 sectors
-  (64KB)
 * `BaseImageSize` - defines how much space to allocate when creating the base
   device
 

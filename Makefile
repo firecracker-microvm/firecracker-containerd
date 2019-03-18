@@ -27,6 +27,8 @@ proto:
 
 clean:
 	for d in $(SUBDIRS); do $(MAKE) -C $$d clean; done
+	# --force is used to squash errors that pertain to file not existing
+	rm --force sandbox-test-cri-build-stamp
 
 deps:
 	curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $(GOPATH)/bin v1.12.3
@@ -41,8 +43,14 @@ lint:
 install:
 	for d in $(SUBDIRS); do $(MAKE) -C $$d install; done
 
-sandbox-test-cri:
-	docker build -f sandbox/cri/Dockerfile -t "cri" .
+sandbox-test-cri-build: sandbox-test-cri-build-stamp
+
+sandbox-test-cri-build-stamp:
+	docker build -f sandbox/cri/Dockerfile -t "localhost/sandbox-test-cri" .
+	@touch sandbox-test-cri-build-stamp
+
+sandbox-test-cri-run: sandbox-test-cri-build
+	test "$(shell id --user)" -eq 0
 	docker run \
 		--init \
 		--rm \
@@ -50,7 +58,8 @@ sandbox-test-cri:
 		-v /tmp:/foo \
 		--security-opt seccomp=unconfined \
 		--ulimit core=0 \
-		--device=/dev/kvm:/dev/kvm \
-		-t cri
+		localhost/sandbox-test-cri
 
-.PHONY: all $(SUBDIRS) clean proto deps lint install
+sandbox-test-cri: sandbox-test-cri-run
+
+.PHONY: all $(SUBDIRS) clean proto deps lint install sandbox-test-cri-run sandbox-test-cri-build sandbox-test-cri

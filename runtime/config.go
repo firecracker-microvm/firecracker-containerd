@@ -17,6 +17,8 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"os"
+
+	"github.com/pkg/errors"
 )
 
 const (
@@ -53,12 +55,12 @@ func LoadConfig(path string) (*Config, error) {
 
 	data, err := ioutil.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "failed to read config from %q", path)
 	}
 
 	var cfg Config
 	if err := json.Unmarshal(data, &cfg); err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "failed to unmarshal config from %q", path)
 	}
 
 	return &cfg, nil

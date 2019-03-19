@@ -637,7 +637,7 @@ func (s *service) startVM(ctx context.Context,
 	}
 
 	cfg := firecracker.Config{
-		SocketPath:      s.config.SocketPath,
+		SocketPath:      defaultSocketPath,
 		VsockDevices:    []firecracker.VsockDevice{{Path: "root", CID: cid}},
 		KernelImagePath: s.config.KernelImagePath,
 		KernelArgs:      s.config.KernelArgs,
@@ -673,7 +673,7 @@ func (s *service) startVM(ctx context.Context,
 	cfg.Drives = driveBuilder.Build()
 	cmd := firecracker.VMCommandBuilder{}.
 		WithBin(s.config.FirecrackerBinaryPath).
-		WithSocketPath(s.config.SocketPath).
+		WithSocketPath(defaultSocketPath).
 		Build(ctx)
 	machineOpts := []firecracker.Opt{
 		firecracker.WithProcessRunner(cmd),

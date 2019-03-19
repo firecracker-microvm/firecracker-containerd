@@ -38,10 +38,6 @@ configuration file has the following fields:
   `firecracker` located in its working directory.  A fully-qualified path to the
   `firecracker` binary is recommended, as the working directory typically
   changes every execution when run by containerd.
-* `socket_path` (required) - A path where a socket file should be created for
-  communicating with the Firecracker API.  A relative path like
-  `./firecracker.sock` is recommended so that the socket is created in the
-  temporary working directory allocated by containerd.
 * `kernel_image_path` (required) - A path where the kernel image file is
   located.  A fully-qualified path is recommended.
 * `kernel_args` (required) - Arguments for the kernel command line.

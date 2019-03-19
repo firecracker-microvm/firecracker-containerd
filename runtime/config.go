@@ -24,12 +24,12 @@ import (
 const (
 	configPathEnvName = "FIRECRACKER_CONTAINERD_RUNTIME_CONFIG_PATH"
 	defaultConfigPath = "/etc/containerd/firecracker-runtime.json"
+	defaultSocketPath = "./firecracker.sock"
 )
 
 // Config represents runtime configuration parameters
 type Config struct {
 	FirecrackerBinaryPath string            `json:"firecracker_binary_path"`
-	SocketPath            string            `json:"socket_path"`
 	KernelImagePath       string            `json:"kernel_image_path"`
 	KernelArgs            string            `json:"kernel_args"`
 	RootDrive             string            `json:"root_drive"`

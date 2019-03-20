@@ -139,7 +139,6 @@ sudo tee -a /etc/containerd/firecracker-runtime.json <<EOF
 {
   "firecracker_binary_path": "/usr/local/bin/firecracker",
   "kernel_image_path": "/var/lib/firecracker-containerd/runtime/hello-vmlinux.bin",
-  "kernel_args": "console=ttyS0 noapic reboot=k panic=1 pci=off nomodules rw",
   "root_drive": "/var/lib/firecracker-containerd/runtime/hello-rootfs.ext4",
   "cpu_count": 1,
   "cpu_template": "T2",

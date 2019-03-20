@@ -25,6 +25,7 @@ const (
 	configPathEnvName = "FIRECRACKER_CONTAINERD_RUNTIME_CONFIG_PATH"
 	defaultConfigPath = "/etc/containerd/firecracker-runtime.json"
 	defaultSocketPath = "./firecracker.sock"
+	defaultKernelArgs = "console=ttyS0 noapic reboot=k panic=1 pci=off nomodules rw"
 )
 
 // Config represents runtime configuration parameters
@@ -58,10 +59,12 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, errors.Wrapf(err, "failed to read config from %q", path)
 	}
 
-	var cfg Config
-	if err := json.Unmarshal(data, &cfg); err != nil {
+	cfg := &Config{
+		KernelArgs: defaultKernelArgs,
+	}
+	if err := json.Unmarshal(data, cfg); err != nil {
 		return nil, errors.Wrapf(err, "failed to unmarshal config from %q", path)
 	}
 
-	return &cfg, nil
+	return cfg, nil
 }

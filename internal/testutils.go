@@ -18,13 +18,23 @@ import (
 	"testing"
 )
 
-const rootDisableEnvName = "DISABLE_ROOT_TESTS"
+const (
+	rootDisableEnvName         = "DISABLE_ROOT_TESTS"
+	enableIsolatedTestsEnvName = "ENABLE_ISOLATED_TESTS"
+)
 
-var rootDisabled bool
+var (
+	rootDisabled         bool
+	isolatedTestsEnabled bool
+)
 
 func init() {
 	if v := os.Getenv(rootDisableEnvName); len(v) != 0 {
 		rootDisabled = true
+	}
+
+	if v := os.Getenv(enableIsolatedTestsEnvName); len(v) != 0 {
+		isolatedTestsEnabled = true
 	}
 }
 
@@ -40,5 +50,14 @@ func RequiresRoot(t testing.TB) {
 		t.Fatalf("This test must be run as root. To disable tests that "+
 			"require root, run the tests with the %s environment variable set.",
 			rootDisableEnvName)
+	}
+}
+
+// RequiresIsolation will ensure that tests that must be run in an isolated
+// environment are being run with the explicit ENABLE_ISOLATED_TESTS env var.
+// If the env var has not been set, the test will be skipped
+func RequiresIsolation(t testing.TB) {
+	if !isolatedTestsEnabled {
+		t.Skip("skipping test that requires isolation")
 	}
 }

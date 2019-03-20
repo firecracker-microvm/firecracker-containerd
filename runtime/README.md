@@ -40,7 +40,9 @@ configuration file has the following fields:
   changes every execution when run by containerd.
 * `kernel_image_path` (required) - A path where the kernel image file is
   located.  A fully-qualified path is recommended.
-* `kernel_args` (required) - Arguments for the kernel command line.
+* `kernel_args` (optional) - Arguments for the kernel command line.  If left
+  undefined, the runtime specifies "console=ttyS0 noapic reboot=k panic=1
+  pci=off nomodules rw".
 * `root_drive` (required) - A path where the root drive image file is located. A
   fully-qualified path is recommended.
 * `cpu_count` (required) - The number of vCPUs to make available to a microVM.

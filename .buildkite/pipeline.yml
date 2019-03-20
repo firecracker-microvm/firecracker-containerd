@@ -12,27 +12,70 @@
 # permissions and limitations under the License.
 
 steps:
-  - label: ':go: go mod download'
-    command: 'go mod download'
 
-  # We use a "wait" step here, because Go's module logic freaks out when
-  # multiple go builds are downloading to the same cache.
+  - label: ":docker: Build"
+    env:
+      DOCKER_BUILDKIT: "1"
+    command:
+      >
+        docker build \
+          --progress=plain \
+          --file tools/docker/Dockerfile \
+          --target firecracker-containerd-unittest \
+          --tag localhost/firecracker-containerd-unittest:${BUILDKITE_BUILD_NUMBER} .
+
+        docker build \
+          --progress=plain \
+          --file tools/docker/Dockerfile \
+          --target firecracker-containerd-unittest-nonroot \
+          --tag localhost/firecracker-containerd-unittest-nonroot:${BUILDKITE_BUILD_NUMBER} .
+
   - wait
 
-  - label: 'build'
-    command: 'make'
+  - label: ":rotating_light: snapshotter root tests"
+    artifact_paths:
+      - "logs/*"
+    command:
+      >
+        mkdir $(pwd)/logs
+        && docker run --rm \
+          --privileged \
+          --volume /dev:/dev \
+          --volume /sys:/sys \
+          --volume /run/udev/control:/run/udev/control \
+          --volume $(pwd)/logs:/var/log/firecracker-containerd-test \
+          --ipc=host \
+          localhost/firecracker-containerd-unittest:${BUILDKITE_BUILD_NUMBER} \
+          '
+            cd /firecracker-containerd/snapshotter
+            make test EXTRAGOARGS="-v -count=1"
+          '
 
-  - label: ':hammer: snapshotter tests'
-    commands:
-      - "cd snapshotter"
-      - "DISABLE_ROOT_TESTS='true' make test EXTRAGOARGS='-v -count=1'"
+  - label: ":hammer: snapshotter tests"
+    command:
+      >
+        docker run --rm \
+          localhost/firecracker-containerd-unittest-nonroot:${BUILDKITE_BUILD_NUMBER} \
+          '
+            cd /firecracker-containerd/snapshotter
+            DISABLE_ROOT_TESTS='true' make test EXTRAGOARGS="-v -count=1"
+          '
 
-  - label: ':rotating_light: snapshotter *root* tests'
-    commands:
-      - "cd snapshotter"
-      - "sudo make test EXTRAGOARGS='-v -count=1'"
-
-  - label: ':running_shirt_with_sash: runtime tests'
-    commands:
-      - "cd runtime"
-      - "make test EXTRAGOARGS='-v -count=1'"
+  - label: ":running_shirt_with_sash: runtime tests"
+    artifact_paths:
+      - "logs/*"
+    command:
+      >
+        mkdir $(pwd)/logs
+        && docker run --rm \
+          --privileged \
+          --volume /dev:/dev \
+          --volume /sys:/sys \
+          --volume /run/udev/control:/run/udev/control \
+          --volume $(pwd)/logs:/var/log/firecracker-containerd-test \
+          --ipc=host \
+          localhost/firecracker-containerd-unittest:${BUILDKITE_BUILD_NUMBER} \
+          '
+            cd /firecracker-containerd/runtime
+            make test EXTRAGOARGS="-v -count=1"
+          '

@@ -35,7 +35,7 @@ deps:
 
 lint:
 	ltag -t ./.headers -check -v
-	git-validation -run DCO,dangling-whitespace,short-subject -range dd78e4f0182dfff8ef33e5eb7dc925d5f6e84301..HEAD
+	git-validation -run DCO,dangling-whitespace,short-subject -range HEAD~20..HEAD
 	golangci-lint run
 
 install:

@@ -212,13 +212,16 @@ configuration file has the following fields:
   `firecracker` located in its working directory.  A fully-qualified path to the
   `firecracker` binary is recommended, as the working directory typically
   changes every execution when run by containerd.
-* `kernel_image_path` (required) - A path where the kernel image file is
-  located.  A fully-qualified path is recommended.
+* `kernel_image_path` (optional) - A path where the kernel image file is
+  located.  A fully-qualified path is recommended.  If left undefined, the
+  runtime looks for a file named
+  `/var/lib/firecracker-containerd/runtime/default-vmlinux.bin`.
 * `kernel_args` (optional) - Arguments for the kernel command line.  If left
   undefined, the runtime specifies "console=ttyS0 noapic reboot=k panic=1
   pci=off nomodules rw".
-* `root_drive` (required) - A path where the root drive image file is located. A
-  fully-qualified path is recommended.
+* `root_drive` (optional) - A path where the root drive image file is located. A
+  fully-qualified path is recommended.  If left undefined, the runtime looks for
+  a file named `/var/lib/firecracker-containerd/runtime/default-rootfs.img`.
 * `cpu_count` (required) - The number of vCPUs to make available to a microVM.
 * `cpu_template` (required) - The Firecracker CPU emulation template.  Supported
   values are "C3" and "T2".

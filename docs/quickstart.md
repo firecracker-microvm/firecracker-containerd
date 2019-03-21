@@ -142,7 +142,6 @@ sudo tee -a /etc/containerd/firecracker-runtime.json <<EOF
   "root_drive": "/var/lib/firecracker-containerd/runtime/hello-rootfs.ext4",
   "cpu_count": 1,
   "cpu_template": "T2",
-  "console": "stdio",
   "log_fifo": "/tmp/fc-logs.fifo",
   "log_level": "Debug",
   "metrics_fifo": "/tmp/fc-metrics.fifo"

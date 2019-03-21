@@ -26,6 +26,9 @@ const (
 	defaultConfigPath = "/etc/containerd/firecracker-runtime.json"
 	defaultSocketPath = "./firecracker.sock"
 	defaultKernelArgs = "console=ttyS0 noapic reboot=k panic=1 pci=off nomodules rw"
+	defaultFilesPath  = "/var/lib/firecracker-containerd/runtime/"
+	defaultKernelPath = defaultFilesPath + "default-vmlinux.bin"
+	defaultRootfsPath = defaultFilesPath + "default-rootfs.img"
 )
 
 // Config represents runtime configuration parameters
@@ -60,7 +63,9 @@ func LoadConfig(path string) (*Config, error) {
 	}
 
 	cfg := &Config{
-		KernelArgs: defaultKernelArgs,
+		KernelArgs:      defaultKernelArgs,
+		KernelImagePath: defaultKernelPath,
+		RootDrive:       defaultRootfsPath,
 	}
 	if err := json.Unmarshal(data, cfg); err != nil {
 		return nil, errors.Wrapf(err, "failed to unmarshal config from %q", path)

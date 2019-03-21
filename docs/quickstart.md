@@ -133,13 +133,12 @@ cd ~
 
 # Configure the aws.firecracker runtime
 sudo mkdir -p /var/lib/firecracker-containerd/runtime
-sudo cp hello-rootfs.ext4 hello-vmlinux.bin /var/lib/firecracker-containerd/runtime
+sudo cp hello-rootfs.ext4 /var/lib/firecracker-containerd/runtime/default-rootfs.img
+sudo cp hello-vmlinux.bin /var/lib/firecracker-containerd/runtime/default-vmlinux.bin
 sudo mkdir -p /etc/containerd
 sudo tee -a /etc/containerd/firecracker-runtime.json <<EOF
 {
   "firecracker_binary_path": "/usr/local/bin/firecracker",
-  "kernel_image_path": "/var/lib/firecracker-containerd/runtime/hello-vmlinux.bin",
-  "root_drive": "/var/lib/firecracker-containerd/runtime/hello-rootfs.ext4",
   "cpu_count": 1,
   "cpu_template": "T2",
   "log_fifo": "/tmp/fc-logs.fifo",

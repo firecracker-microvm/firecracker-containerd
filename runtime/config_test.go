@@ -27,24 +27,31 @@ func TestLoadConfigDefaults(t *testing.T) {
 	configFile, cleanup := createTempConfig(t, configContent)
 	defer cleanup()
 	cfg, err := LoadConfig(configFile)
-	if err != nil {
-		t.Error(err, "failed to load config")
-	}
+	assert.NoError(t, err, "failed to load config")
 
-	assert.Equal(t, cfg.KernelArgs, defaultKernelArgs, "expected default kernel args")
+	assert.Equal(t, defaultKernelArgs, cfg.KernelArgs, "expected default kernel args")
+	assert.Equal(t, defaultKernelPath, cfg.KernelImagePath, "expected default kernel path")
+	assert.Equal(t, defaultRootfsPath, cfg.RootDrive, "expected default rootfs path")
 }
 
 func TestLoadConfigOverrides(t *testing.T) {
 	overrideKernelArgs := "OVERRIDE KERNEL ARGS"
-	configContent := fmt.Sprintf(`{"kernel_args":"%s"}`, overrideKernelArgs)
+	overrideKernelPath := "OVERRIDE KERNEL PATH"
+	overrideRootfsPath := "OVERRIDE ROOTFS PATH"
+	configContent := fmt.Sprintf(
+		`{
+			"kernel_args":"%s",
+			"kernel_image_path":"%s",
+			"root_drive":"%s"
+		}`, overrideKernelArgs, overrideKernelPath, overrideRootfsPath)
 	configFile, cleanup := createTempConfig(t, configContent)
 	defer cleanup()
 	cfg, err := LoadConfig(configFile)
-	if err != nil {
-		t.Error(err, "failed to load config")
-	}
+	assert.NoError(t, err, "failed to load config")
 
-	assert.Equal(t, cfg.KernelArgs, overrideKernelArgs, "expected overridden kernel args")
+	assert.Equal(t, overrideKernelArgs, cfg.KernelArgs, "expected overridden kernel args")
+	assert.Equal(t, overrideKernelPath, cfg.KernelImagePath, "expected overridden kernel path")
+	assert.Equal(t, overrideRootfsPath, cfg.RootDrive, "expected overridden rootfs path")
 }
 
 func createTempConfig(t *testing.T, contents string) (string, func()) {

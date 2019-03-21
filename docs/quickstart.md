@@ -139,7 +139,6 @@ sudo mkdir -p /etc/containerd
 sudo tee -a /etc/containerd/firecracker-runtime.json <<EOF
 {
   "firecracker_binary_path": "/usr/local/bin/firecracker",
-  "cpu_count": 1,
   "cpu_template": "T2",
   "log_fifo": "/tmp/fc-logs.fifo",
   "log_level": "Debug",

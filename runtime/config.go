@@ -29,6 +29,7 @@ const (
 	defaultFilesPath  = "/var/lib/firecracker-containerd/runtime/"
 	defaultKernelPath = defaultFilesPath + "default-vmlinux.bin"
 	defaultRootfsPath = defaultFilesPath + "default-rootfs.img"
+	defaultCPUCount   = 1
 )
 
 // Config represents runtime configuration parameters
@@ -66,6 +67,7 @@ func LoadConfig(path string) (*Config, error) {
 		KernelArgs:      defaultKernelArgs,
 		KernelImagePath: defaultKernelPath,
 		RootDrive:       defaultRootfsPath,
+		CPUCount:        defaultCPUCount,
 	}
 	if err := json.Unmarshal(data, cfg); err != nil {
 		return nil, errors.Wrapf(err, "failed to unmarshal config from %q", path)

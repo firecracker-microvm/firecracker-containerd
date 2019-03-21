@@ -14,6 +14,8 @@
 steps:
 
   - label: ":docker: Build"
+    agents:
+      queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
     env:
       DOCKER_BUILDKIT: "1"
     command:
@@ -33,6 +35,8 @@ steps:
   - wait
 
   - label: ":rotating_light: snapshotter root tests"
+    agents:
+      queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
     artifact_paths:
       - "logs/*"
     command:
@@ -52,6 +56,8 @@ steps:
           '
 
   - label: ":hammer: snapshotter tests"
+    agents:
+      queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
     command:
       >
         docker run --rm \
@@ -62,6 +68,8 @@ steps:
           '
 
   - label: ":running_shirt_with_sash: runtime tests"
+    agents:
+      queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
     artifact_paths:
       - "logs/*"
     command:

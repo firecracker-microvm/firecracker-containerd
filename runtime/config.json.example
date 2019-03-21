@@ -8,7 +8,6 @@
   "additional_drives": {
     "./shim.img": "rw"
   },
-  "console": "stdio",
   "log_fifo": "/tmp/fc-logs.fifo",
   "log_level": "Debug",
   "metrics_fifo": "/tmp/fc-metrics.fifo",

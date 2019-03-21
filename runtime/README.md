@@ -49,9 +49,6 @@ configuration file has the following fields:
 * `cpu_template` (required) - The Firecracker CPU emulation template.  Supported
   values are "C3" and "T2".
 * `additional_drives` (unused)
-* `console` (optional) - How the console device should be handled.  Supported
-  values are "" (blank), "stdio", and "xterm".  Setting "xterm" will launch a
-  new xterm instance and requires a running X server.
 * `log_fifo` (optional) - Named pipe where Firecracker logs should be delivered.
 * `log_level` (optional) - Log level for the Firecracker logs
 * `metrics_fifo` (optional) - Named pipe where Firecracker metrics should be

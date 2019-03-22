@@ -121,11 +121,31 @@ func (s *Snapshotter) Update(ctx context.Context, info snapshots.Info, fieldpath
 	return info, err
 }
 
-// Usage not yet implemented
+// Usage returns the resource usage of an active or committed snapshot excluding the usage of parent snapshots.
 func (s *Snapshotter) Usage(ctx context.Context, key string) (snapshots.Usage, error) {
 	log.G(ctx).WithField("key", key).Debug("usage")
 
-	return snapshots.Usage{}, errors.New("usage not implemented")
+	var (
+		id    string
+		err   error
+		info  snapshots.Info
+		usage snapshots.Usage
+	)
+
+	err = s.withTransaction(ctx, false, func(ctx context.Context) error {
+		id, info, usage, err = storage.GetInfo(ctx, key)
+		if err != nil {
+			return err
+		}
+
+		if info.Kind == snapshots.KindActive {
+			usage, err = s.getSnapshotUsage(ctx, id, &info)
+		}
+
+		return err
+	})
+
+	return usage, err
 }
 
 // Mounts return the list of mounts for the active or view snapshot
@@ -186,9 +206,44 @@ func (s *Snapshotter) Commit(ctx context.Context, name, key string, opts ...snap
 	log.G(ctx).WithFields(logrus.Fields{"name": name, "key": key}).Debug("commit")
 
 	return s.withTransaction(ctx, true, func(ctx context.Context) error {
-		_, err := storage.CommitActive(ctx, key, name, snapshots.Usage{}, opts...)
+		id, info, _, err := storage.GetInfo(ctx, key)
+		if err != nil {
+			return err
+		}
+
+		usage, err := s.getSnapshotUsage(ctx, id, &info)
+		if err != nil {
+			return err
+		}
+
+		_, err = storage.CommitActive(ctx, key, name, usage, opts...)
 		return err
 	})
+}
+
+// getSnapshotUsage returns data size consumed by snapshot layer itself (excluing parent data usage)
+func (s *Snapshotter) getSnapshotUsage(ctx context.Context, id string, info *snapshots.Info) (snapshots.Usage, error) {
+	deviceName := s.getDeviceName(id)
+	size, err := s.pool.GetUsage(deviceName)
+	if err != nil {
+		return snapshots.Usage{}, err
+	}
+
+	// Subtract parent data usage if any
+	if info.Parent != "" {
+		_, _, usage, err := storage.GetInfo(ctx, info.Parent)
+		if err != nil {
+			return snapshots.Usage{}, err
+		}
+
+		size -= usage.Size
+	}
+
+	usage := snapshots.Usage{
+		Size: size,
+	}
+
+	return usage, nil
 }
 
 // Remove removes thin device and snapshot metadata by key

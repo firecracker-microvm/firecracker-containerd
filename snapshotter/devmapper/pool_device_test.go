@@ -160,6 +160,10 @@ func testCreateThinDevice(t *testing.T, pool *PoolDevice) {
 	assert.NoError(t, err)
 
 	assert.NotEqual(t, deviceInfo1.DeviceID, deviceInfo2.DeviceID, "assigned device ids should be different")
+
+	usage, err := pool.GetUsage(thinDevice1)
+	assert.NoError(t, err)
+	assert.Zero(t, usage)
 }
 
 func testMakeFileSystem(t *testing.T, pool *PoolDevice) {
@@ -172,6 +176,10 @@ func testMakeFileSystem(t *testing.T, pool *PoolDevice) {
 
 	output, err := exec.Command("mkfs.ext4", args...).CombinedOutput()
 	require.NoErrorf(t, err, "failed to make filesystem on '%s': %s", thinDevice1, string(output))
+
+	usage, err := pool.GetUsage(thinDevice1)
+	assert.NoError(t, err)
+	assert.NotZero(t, usage)
 }
 
 func testCreateSnapshot(t *testing.T, pool *PoolDevice) {

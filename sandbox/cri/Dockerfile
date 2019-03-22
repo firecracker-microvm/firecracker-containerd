@@ -1,4 +1,4 @@
-FROM golang:1.12 as base-build
+FROM rust:1.32 as base-build
 
 ENV TMP_BUILD_DIR=/tmp/build
 ENV CARGO_HOME=/usr/local/rust
@@ -12,15 +12,14 @@ ARG FIRECRACKER_VERSION="0.15.0"
 #
 RUN apt-get update \
     && apt-get -y install --no-install-recommends \
-        cmake \
         curl \
         make \
         musl-tools \
         libseccomp-dev \
         btrfs-tools \
         socat \
-	sudo \
-	iptables \
+        sudo \
+        iptables \
     && rm -rf /var/lib/apt/lists/*
 
 # Install the Rust toolchain
@@ -28,8 +27,8 @@ RUN apt-get update \
 # Install 1.32.0 due to Firecracker crashing with 148 code
 RUN mkdir "$TMP_BUILD_DIR" \
     && curl https://sh.rustup.rs -sSf | sh -s -- --verbose -y --default-toolchain "$RUST_VERSION" \
-        && rustup target add x86_64-unknown-linux-musl \
-        && git clone https://github.com/firecracker-microvm/firecracker.git
+    && rustup target add x86_64-unknown-linux-musl \
+    && git clone https://github.com/firecracker-microvm/firecracker.git
 
 WORKDIR firecracker
 RUN git checkout tags/v"$FIRECRACKER_VERSION" \
@@ -50,8 +49,8 @@ RUN apt-get update \
         libseccomp-dev \
         btrfs-tools \
         socat \
-	sudo \
-	iptables \
+        sudo \
+        iptables \
     && rm -rf /var/lib/apt/lists/*
 
 # Install CRI
@@ -78,7 +77,7 @@ RUN mkdir -p /var/lib/firecracker-containerd/runtime \
     && curl -fsSL -o /var/lib/firecracker-containerd/runtime/hello-vmlinux.bin https://s3.amazonaws.com/spec.ccfc.min/img/hello/kernel/hello-vmlinux.bin \
     && curl -fsSL -o /var/lib/firecracker-containerd/runtime/hello-rootfs.ext4 https://s3.amazonaws.com/spec.ccfc.min/img/hello/fsfiles/hello-rootfs.ext4 \
     && e2fsck -f -y /var/lib/firecracker-containerd/runtime/hello-rootfs.ext4 \
-    && resize2fs /var/lib/firecracker-containerd/runtime/hello-rootfs.ext4 1g \
+    && resize2fs /var/lib/firecracker-containerd/runtime/hello-rootfs.ext4 70m \
     && mkdir /var/run/firecracker-containerd
 
 COPY . /firecracker-containerd/

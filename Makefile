@@ -25,11 +25,6 @@ $(SUBDIRS):
 proto:
 	proto/generate.sh
 
-clean:
-	for d in $(SUBDIRS); do $(MAKE) -C $$d clean; done
-	# --force is used to squash errors that pertain to file not existing
-	rm --force sandbox-test-cri-build-stamp
-
 deps:
 	curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $(GOPATH)/bin v1.12.3
 	GO111MODULE=off go get -u github.com/vbatts/git-validation
@@ -61,5 +56,9 @@ sandbox-test-cri-run: sandbox-test-cri-build
 		localhost/sandbox-test-cri
 
 sandbox-test-cri: sandbox-test-cri-run
+
+clean:
+	for d in $(SUBDIRS); do $(MAKE) -C $$d clean; done
+	-rm sandbox-test-cri-build-stamp
 
 .PHONY: all $(SUBDIRS) clean proto deps lint install sandbox-test-cri-run sandbox-test-cri-build sandbox-test-cri

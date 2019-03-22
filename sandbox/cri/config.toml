@@ -2,10 +2,10 @@
 [proxy_plugins]
   [proxy_plugins.firecracker-naive]
     type = "snapshot"
-    address = "/var/run/firecracker-containerd/naive-snapshotter.sock"
+    address = "/var/run/firecracker-containerd/snapshotter.sock"
   [proxy_plugins.firecracker-dm-snapshotter]
     type = "snapshot"
-    address = "/var/run/firecracker-dm-snapshotter.sock"
+    address = "/var/run/firecracker-containerd/snapshotter.sock"
 
 # The "plugins.cri" table contains all of the server options.
 [plugins.cri]

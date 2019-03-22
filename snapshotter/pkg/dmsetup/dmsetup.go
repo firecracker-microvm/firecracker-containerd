@@ -258,6 +258,53 @@ func Version() (string, error) {
 	return dmsetup("version")
 }
 
+// DeviceStatus represents devmapper device status information
+type DeviceStatus struct {
+	Offset int64
+	Length int64
+	Target string
+	Params []string
+}
+
+// Status provides status information for devmapper device
+func Status(deviceName string) (*DeviceStatus, error) {
+	var (
+		err    error
+		status DeviceStatus
+	)
+
+	output, err := dmsetup("status", deviceName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Status output format:
+	//  Offset (int64)
+	//  Length (int64)
+	//  Target type (string)
+	//  Params (Array of strings)
+	const MinParseCount = 4
+	parts := strings.Split(output, " ")
+	if len(parts) < MinParseCount {
+		return nil, errors.Errorf("failed to parse output: %q", output)
+	}
+
+	status.Offset, err = strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to parse offset: %q", parts[0])
+	}
+
+	status.Length, err = strconv.ParseInt(parts[1], 10, 64)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to parse length: %q", parts[1])
+	}
+
+	status.Target = parts[2]
+	status.Params = parts[3:]
+
+	return &status, nil
+}
+
 // GetFullDevicePath returns full path for the given device name (like "/dev/mapper/name")
 func GetFullDevicePath(deviceName string) string {
 	if strings.HasPrefix(deviceName, DevMapperDir) {
@@ -291,7 +338,7 @@ func dmsetup(args ...string) (string, error) {
 		return "", errors.Wrapf(err, "dmsetup %s\nerror: %s\n", strings.Join(args, " "), output)
 	}
 
-	output = strings.TrimSuffix(output, "\n")
+	output = strings.Trim(output, "\n")
 	output = strings.TrimSpace(output)
 
 	return output, nil

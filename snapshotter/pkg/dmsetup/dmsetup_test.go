@@ -20,11 +20,11 @@ import (
 	"testing"
 
 	"github.com/docker/go-units"
-	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
 
+	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/pkg/losetup"
 )
 
@@ -78,6 +78,7 @@ func TestDMSetup(t *testing.T) {
 	t.Run("DeleteSnapshot", testDeleteSnapshot)
 
 	t.Run("ActivateDevice", testActivateDevice)
+	t.Run("DeviceStatus", testDeviceStatus)
 	t.Run("SuspendResumeDevice", testSuspendResumeDevice)
 	t.Run("RemoveDevice", testRemoveDevice)
 
@@ -132,6 +133,16 @@ func testActivateDevice(t *testing.T) {
 	info := list[0]
 	assert.Equal(t, testPoolName, info.Name)
 	assert.True(t, info.TableLive)
+}
+
+func testDeviceStatus(t *testing.T) {
+	status, err := Status(testDeviceName)
+	require.NoError(t, err)
+
+	assert.EqualValues(t, 0, status.Offset)
+	assert.EqualValues(t, 2, status.Length)
+	assert.Equal(t, "thin", status.Target)
+	assert.EqualValues(t, status.Params, []string{"0", "-"})
 }
 
 func testSuspendResumeDevice(t *testing.T) {

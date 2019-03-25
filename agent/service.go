@@ -427,7 +427,7 @@ func (ts *TaskService) Shutdown(ctx context.Context, req *shimapi.ShutdownReques
 
 func (ts *TaskService) cancelAll() {
 	// cancel LIFO order
-	for i := len(ts.cancels); i >= 0; i-- {
+	for i := len(ts.cancels) - 1; i >= 0; i-- {
 		log.G(context.Background()).Debug("Cancelling ", i)
 		ts.cancels[i]()
 	}

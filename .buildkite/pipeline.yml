@@ -87,3 +87,24 @@ steps:
             cd /firecracker-containerd/runtime
             make test EXTRAGOARGS="-v -count=1"
           '
+
+  - label: ":fencer: agent tests"
+    agents:
+      queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
+    artifact_paths:
+      - "logs/*"
+    command:
+      >
+        mkdir $(pwd)/logs
+        && docker run --rm \
+          --privileged \
+          --volume /dev:/dev \
+          --volume /sys:/sys \
+          --volume /run/udev/control:/run/udev/control \
+          --volume $(pwd)/logs:/var/log/firecracker-containerd-test \
+          --ipc=host \
+          localhost/firecracker-containerd-unittest:${BUILDKITE_BUILD_NUMBER} \
+          '
+            cd /firecracker-containerd/agent
+            make test EXTRAGOARGS="-v -count=1"
+          '

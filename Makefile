@@ -50,7 +50,6 @@ sandbox-test-cri-run: sandbox-test-cri-build
 		--init \
 		--rm \
 		--privileged \
-		-v /tmp:/foo \
 		--security-opt seccomp=unconfined \
 		--ulimit core=0 \
 		localhost/sandbox-test-cri

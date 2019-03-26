@@ -139,7 +139,22 @@ func (s *Snapshotter) Usage(ctx context.Context, key string) (snapshots.Usage, e
 		}
 
 		if info.Kind == snapshots.KindActive {
-			usage, err = s.getSnapshotUsage(ctx, id, &info)
+			deviceName := s.getDeviceName(id)
+			usage.Size, err = s.pool.GetUsage(deviceName)
+			if err != nil {
+				return err
+			}
+		}
+
+		if info.Parent != "" {
+			// GetInfo returns total number of bytes used by a snapshot (including parent).
+			// So subtract parent usage in order to get delta consumed by layer itself.
+			_, _, parentUsage, err := storage.GetInfo(ctx, info.Parent)
+			if err != nil {
+				return err
+			}
+
+			usage.Size -= parentUsage.Size
 		}
 
 		return err
@@ -206,44 +221,24 @@ func (s *Snapshotter) Commit(ctx context.Context, name, key string, opts ...snap
 	log.G(ctx).WithFields(logrus.Fields{"name": name, "key": key}).Debug("commit")
 
 	return s.withTransaction(ctx, true, func(ctx context.Context) error {
-		id, info, _, err := storage.GetInfo(ctx, key)
+		id, _, _, err := storage.GetInfo(ctx, key)
 		if err != nil {
 			return err
 		}
 
-		usage, err := s.getSnapshotUsage(ctx, id, &info)
+		deviceName := s.getDeviceName(id)
+		size, err := s.pool.GetUsage(deviceName)
 		if err != nil {
 			return err
+		}
+
+		usage := snapshots.Usage{
+			Size: size,
 		}
 
 		_, err = storage.CommitActive(ctx, key, name, usage, opts...)
 		return err
 	})
-}
-
-// getSnapshotUsage returns data size consumed by snapshot layer itself (excluing parent data usage)
-func (s *Snapshotter) getSnapshotUsage(ctx context.Context, id string, info *snapshots.Info) (snapshots.Usage, error) {
-	deviceName := s.getDeviceName(id)
-	size, err := s.pool.GetUsage(deviceName)
-	if err != nil {
-		return snapshots.Usage{}, err
-	}
-
-	// Subtract parent data usage if any
-	if info.Parent != "" {
-		_, _, usage, err := storage.GetInfo(ctx, info.Parent)
-		if err != nil {
-			return snapshots.Usage{}, err
-		}
-
-		size -= usage.Size
-	}
-
-	usage := snapshots.Usage{
-		Size: size,
-	}
-
-	return usage, nil
 }
 
 // Remove removes thin device and snapshot metadata by key

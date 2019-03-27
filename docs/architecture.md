@@ -30,4 +30,7 @@ There are currently three components in this repository:
 A high-level diagram of the various components and their interactions can be
 seen below:
 
-![firecracker-containerd architecture](architecture-diagram.png)
+![firecracker-containerd architecture](img/architecture-diagram.png)
+
+More details on the architecture of the shims and design decisions behind
+them can be found in the [shim design doc](shim-design.md).

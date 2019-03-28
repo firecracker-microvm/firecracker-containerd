@@ -32,5 +32,6 @@ seen below:
 
 ![firecracker-containerd architecture](img/architecture-diagram.png)
 
-More details on the architecture of the shims and design decisions behind
-them can be found in the [shim design doc](shim-design.md).
+* Overview of possible design approaches can be found in the [design approaches doc](design-approaches.md).
+* More details on the architecture of the shims and design decisions behind
+  them can be found in the [shim design doc](shim-design.md).

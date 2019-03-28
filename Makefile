@@ -23,7 +23,7 @@ $(SUBDIRS):
 	$(MAKE) -C $@
 
 proto:
-	proto/generate.sh
+	$(MAKE) -C proto/ proto
 
 clean:
 	for d in $(SUBDIRS); do $(MAKE) -C $$d clean; done

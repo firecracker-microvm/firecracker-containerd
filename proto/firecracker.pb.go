@@ -3,14 +3,14 @@
 
 package proto
 
+import proto "github.com/gogo/protobuf/proto"
+import fmt "fmt"
+import math "math"
+import empty "github.com/golang/protobuf/ptypes/empty"
+
 import (
-	context "context"
-	fmt "fmt"
-	proto "github.com/golang/protobuf/proto"
+	context "golang.org/x/net/context"
 	grpc "google.golang.org/grpc"
-	protobuf "google/protobuf"
-	io "io"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -22,7 +22,7 @@ var _ = math.Inf
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.ProtoPackageIsVersion2 // please upgrade the proto package
+const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
 // CreateVMRequest specifies creation parameters for a new FC instance
 type CreateVMRequest struct {
@@ -49,28 +49,19 @@ func (m *CreateVMRequest) Reset()         { *m = CreateVMRequest{} }
 func (m *CreateVMRequest) String() string { return proto.CompactTextString(m) }
 func (*CreateVMRequest) ProtoMessage()    {}
 func (*CreateVMRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_a73317e9fb8da571, []int{0}
+	return fileDescriptor_firecracker_73f6b188d2d4dd0e, []int{0}
 }
 func (m *CreateVMRequest) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
+	return xxx_messageInfo_CreateVMRequest.Unmarshal(m, b)
 }
 func (m *CreateVMRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_CreateVMRequest.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
+	return xxx_messageInfo_CreateVMRequest.Marshal(b, m, deterministic)
 }
-func (m *CreateVMRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_CreateVMRequest.Merge(m, src)
+func (dst *CreateVMRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CreateVMRequest.Merge(dst, src)
 }
 func (m *CreateVMRequest) XXX_Size() int {
-	return m.Size()
+	return xxx_messageInfo_CreateVMRequest.Size(m)
 }
 func (m *CreateVMRequest) XXX_DiscardUnknown() {
 	xxx_messageInfo_CreateVMRequest.DiscardUnknown(m)
@@ -138,28 +129,19 @@ func (m *CreateVMResponse) Reset()         { *m = CreateVMResponse{} }
 func (m *CreateVMResponse) String() string { return proto.CompactTextString(m) }
 func (*CreateVMResponse) ProtoMessage()    {}
 func (*CreateVMResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_a73317e9fb8da571, []int{1}
+	return fileDescriptor_firecracker_73f6b188d2d4dd0e, []int{1}
 }
 func (m *CreateVMResponse) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
+	return xxx_messageInfo_CreateVMResponse.Unmarshal(m, b)
 }
 func (m *CreateVMResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_CreateVMResponse.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
+	return xxx_messageInfo_CreateVMResponse.Marshal(b, m, deterministic)
 }
-func (m *CreateVMResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_CreateVMResponse.Merge(m, src)
+func (dst *CreateVMResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CreateVMResponse.Merge(dst, src)
 }
 func (m *CreateVMResponse) XXX_Size() int {
-	return m.Size()
+	return xxx_messageInfo_CreateVMResponse.Size(m)
 }
 func (m *CreateVMResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_CreateVMResponse.DiscardUnknown(m)
@@ -185,28 +167,19 @@ func (m *StopVMRequest) Reset()         { *m = StopVMRequest{} }
 func (m *StopVMRequest) String() string { return proto.CompactTextString(m) }
 func (*StopVMRequest) ProtoMessage()    {}
 func (*StopVMRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_a73317e9fb8da571, []int{2}
+	return fileDescriptor_firecracker_73f6b188d2d4dd0e, []int{2}
 }
 func (m *StopVMRequest) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
+	return xxx_messageInfo_StopVMRequest.Unmarshal(m, b)
 }
 func (m *StopVMRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_StopVMRequest.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
+	return xxx_messageInfo_StopVMRequest.Marshal(b, m, deterministic)
 }
-func (m *StopVMRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_StopVMRequest.Merge(m, src)
+func (dst *StopVMRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StopVMRequest.Merge(dst, src)
 }
 func (m *StopVMRequest) XXX_Size() int {
-	return m.Size()
+	return xxx_messageInfo_StopVMRequest.Size(m)
 }
 func (m *StopVMRequest) XXX_DiscardUnknown() {
 	xxx_messageInfo_StopVMRequest.DiscardUnknown(m)
@@ -232,28 +205,19 @@ func (m *GetVMAddressRequest) Reset()         { *m = GetVMAddressRequest{} }
 func (m *GetVMAddressRequest) String() string { return proto.CompactTextString(m) }
 func (*GetVMAddressRequest) ProtoMessage()    {}
 func (*GetVMAddressRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_a73317e9fb8da571, []int{3}
+	return fileDescriptor_firecracker_73f6b188d2d4dd0e, []int{3}
 }
 func (m *GetVMAddressRequest) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
+	return xxx_messageInfo_GetVMAddressRequest.Unmarshal(m, b)
 }
 func (m *GetVMAddressRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_GetVMAddressRequest.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
+	return xxx_messageInfo_GetVMAddressRequest.Marshal(b, m, deterministic)
 }
-func (m *GetVMAddressRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_GetVMAddressRequest.Merge(m, src)
+func (dst *GetVMAddressRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetVMAddressRequest.Merge(dst, src)
 }
 func (m *GetVMAddressRequest) XXX_Size() int {
-	return m.Size()
+	return xxx_messageInfo_GetVMAddressRequest.Size(m)
 }
 func (m *GetVMAddressRequest) XXX_DiscardUnknown() {
 	xxx_messageInfo_GetVMAddressRequest.DiscardUnknown(m)
@@ -279,28 +243,19 @@ func (m *GetVMAddressResponse) Reset()         { *m = GetVMAddressResponse{} }
 func (m *GetVMAddressResponse) String() string { return proto.CompactTextString(m) }
 func (*GetVMAddressResponse) ProtoMessage()    {}
 func (*GetVMAddressResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_a73317e9fb8da571, []int{4}
+	return fileDescriptor_firecracker_73f6b188d2d4dd0e, []int{4}
 }
 func (m *GetVMAddressResponse) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
+	return xxx_messageInfo_GetVMAddressResponse.Unmarshal(m, b)
 }
 func (m *GetVMAddressResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_GetVMAddressResponse.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
+	return xxx_messageInfo_GetVMAddressResponse.Marshal(b, m, deterministic)
 }
-func (m *GetVMAddressResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_GetVMAddressResponse.Merge(m, src)
+func (dst *GetVMAddressResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetVMAddressResponse.Merge(dst, src)
 }
 func (m *GetVMAddressResponse) XXX_Size() int {
-	return m.Size()
+	return xxx_messageInfo_GetVMAddressResponse.Size(m)
 }
 func (m *GetVMAddressResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_GetVMAddressResponse.DiscardUnknown(m)
@@ -323,40 +278,6 @@ func init() {
 	proto.RegisterType((*GetVMAddressResponse)(nil), "GetVMAddressResponse")
 }
 
-func init() { proto.RegisterFile("firecracker.proto", fileDescriptor_a73317e9fb8da571) }
-
-var fileDescriptor_a73317e9fb8da571 = []byte{
-	// 441 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x7c, 0x52, 0xd1, 0x6e, 0xd3, 0x30,
-	0x14, 0xc5, 0x74, 0x2d, 0xf4, 0x16, 0xb6, 0xd6, 0x0c, 0x88, 0x0a, 0x8a, 0xa2, 0x22, 0x4d, 0xe5,
-	0xc5, 0x45, 0x43, 0xe2, 0x05, 0x21, 0x51, 0x3a, 0x40, 0x05, 0x15, 0x21, 0x4f, 0xea, 0x03, 0x6f,
-	0x26, 0xbd, 0xc9, 0xa2, 0x76, 0x76, 0xb0, 0x1d, 0xd0, 0x1e, 0xf9, 0x0b, 0x7e, 0x82, 0xff, 0xe0,
-	0x91, 0x4f, 0x40, 0xe5, 0x47, 0xd0, 0x9c, 0x55, 0x49, 0xd3, 0x88, 0xa7, 0xc4, 0xe7, 0x9e, 0x63,
-	0x9f, 0x73, 0xef, 0x85, 0x5e, 0x94, 0x68, 0x0c, 0xb5, 0x08, 0x97, 0xa8, 0x59, 0xaa, 0x95, 0x55,
-	0xfd, 0x07, 0xb1, 0x52, 0xf1, 0x0a, 0x47, 0xee, 0xf4, 0x39, 0x8b, 0x46, 0x78, 0x9e, 0xda, 0x8b,
-	0xab, 0x62, 0xc7, 0x5e, 0xa4, 0x68, 0xf2, 0xc3, 0xe0, 0x7b, 0x03, 0x0e, 0x26, 0x1a, 0x85, 0xc5,
-	0xf9, 0x8c, 0xe3, 0x97, 0x0c, 0x8d, 0xa5, 0x2f, 0x01, 0x66, 0x22, 0x3c, 0x4b, 0x24, 0x4e, 0xa2,
-	0xd8, 0x23, 0x01, 0x19, 0x76, 0x8e, 0x03, 0xf6, 0xa6, 0x78, 0x65, 0x53, 0x55, 0x32, 0x4a, 0xe2,
-	0x4c, 0x0b, 0x9b, 0x28, 0xc9, 0x4b, 0x1a, 0x3a, 0x84, 0x83, 0xf7, 0xa8, 0x25, 0xae, 0xa6, 0xe7,
-	0x22, 0xc6, 0x8f, 0xc2, 0x9e, 0x79, 0xd7, 0x03, 0x32, 0x6c, 0xf3, 0x2a, 0x4c, 0x7d, 0x80, 0x1c,
-	0x1a, 0xeb, 0xd8, 0x78, 0x0d, 0x47, 0x2a, 0x21, 0x74, 0x04, 0x6d, 0xae, 0x94, 0x3d, 0xd1, 0xc9,
-	0x57, 0xf4, 0xf6, 0x9c, 0x95, 0x5e, 0xd9, 0x8a, 0x2b, 0xf0, 0x82, 0x43, 0x5f, 0x40, 0x77, 0xbc,
-	0x58, 0x24, 0x97, 0x96, 0xc4, 0xca, 0x41, 0xc6, 0x6b, 0x06, 0x8d, 0x7a, 0xdd, 0x0e, 0x95, 0xbe,
-	0x83, 0xde, 0x07, 0xb4, 0xdf, 0x94, 0x5e, 0x4e, 0xa5, 0x45, 0x1d, 0x89, 0x10, 0x8d, 0xd7, 0x72,
-	0xfa, 0x87, 0x65, 0x7d, 0x95, 0xc4, 0x77, 0x65, 0xf4, 0x08, 0xf6, 0x27, 0x4a, 0x5a, 0x91, 0x48,
-	0xd4, 0x13, 0x95, 0x49, 0xeb, 0xdd, 0x08, 0xc8, 0xb0, 0xc9, 0x2b, 0xe8, 0xe0, 0x08, 0xba, 0xc5,
-	0x08, 0x4c, 0xaa, 0xa4, 0x41, 0x4a, 0x61, 0x6f, 0x3e, 0x9b, 0x9e, 0xb8, 0xee, 0xb7, 0xb9, 0xfb,
-	0x1f, 0x3c, 0x82, 0xdb, 0xa7, 0x56, 0xa5, 0xc5, 0xa0, 0xea, 0x48, 0x8f, 0xe1, 0xce, 0x5b, 0xb4,
-	0xf3, 0xd9, 0x78, 0xb1, 0xd0, 0x68, 0xcc, 0xff, 0xa8, 0xcf, 0xe0, 0x70, 0x9b, 0x7a, 0xf5, 0xb6,
-	0x0f, 0x70, 0xaa, 0xc2, 0x25, 0x5a, 0x37, 0xb8, 0x5c, 0x51, 0x42, 0x8e, 0x7f, 0x12, 0xe8, 0x94,
-	0x5a, 0x41, 0x47, 0x70, 0x73, 0xe3, 0x9f, 0x76, 0x59, 0x65, 0x9b, 0xfa, 0x3d, 0xb6, 0x13, 0xee,
-	0x09, 0xb4, 0xf2, 0x20, 0x74, 0x9f, 0x6d, 0x25, 0xea, 0xdf, 0x63, 0xf9, 0xe6, 0xb2, 0xcd, 0xe6,
-	0xb2, 0xd7, 0x97, 0x9b, 0x4b, 0x9f, 0xc3, 0xad, 0xb2, 0x55, 0x7a, 0xc8, 0x6a, 0x42, 0xf6, 0xef,
-	0xb2, 0xba, 0x3c, 0xaf, 0xee, 0xff, 0x5a, 0xfb, 0xe4, 0xf7, 0xda, 0x27, 0x7f, 0xd6, 0x3e, 0xf9,
-	0xf1, 0xd7, 0xbf, 0xf6, 0xa9, 0x99, 0x5f, 0xdf, 0x72, 0x9f, 0xa7, 0xff, 0x02, 0x00, 0x00, 0xff,
-	0xff, 0x06, 0xff, 0x8d, 0x55, 0x42, 0x03, 0x00, 0x00,
-}
-
 // Reference imports to suppress errors if they are not otherwise used.
 var _ context.Context
 var _ grpc.ClientConn
@@ -372,7 +293,7 @@ type FirecrackerClient interface {
 	// Runs new Firecracker VM instance
 	CreateVM(ctx context.Context, in *CreateVMRequest, opts ...grpc.CallOption) (*CreateVMResponse, error)
 	// Stops existing Firecracker instance by VM ID
-	StopVM(ctx context.Context, in *StopVMRequest, opts ...grpc.CallOption) (*protobuf.Empty, error)
+	StopVM(ctx context.Context, in *StopVMRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Gets VM instance socket file location
 	GetVMAddress(ctx context.Context, in *GetVMAddressRequest, opts ...grpc.CallOption) (*GetVMAddressResponse, error)
 }
@@ -394,8 +315,8 @@ func (c *firecrackerClient) CreateVM(ctx context.Context, in *CreateVMRequest, o
 	return out, nil
 }
 
-func (c *firecrackerClient) StopVM(ctx context.Context, in *StopVMRequest, opts ...grpc.CallOption) (*protobuf.Empty, error) {
-	out := new(protobuf.Empty)
+func (c *firecrackerClient) StopVM(ctx context.Context, in *StopVMRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/Firecracker/StopVM", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -417,7 +338,7 @@ type FirecrackerServer interface {
 	// Runs new Firecracker VM instance
 	CreateVM(context.Context, *CreateVMRequest) (*CreateVMResponse, error)
 	// Stops existing Firecracker instance by VM ID
-	StopVM(context.Context, *StopVMRequest) (*protobuf.Empty, error)
+	StopVM(context.Context, *StopVMRequest) (*empty.Empty, error)
 	// Gets VM instance socket file location
 	GetVMAddress(context.Context, *GetVMAddressRequest) (*GetVMAddressResponse, error)
 }
@@ -501,1053 +422,35 @@ var _Firecracker_serviceDesc = grpc.ServiceDesc{
 	Metadata: "firecracker.proto",
 }
 
-func (m *CreateVMRequest) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
+func init() { proto.RegisterFile("firecracker.proto", fileDescriptor_firecracker_73f6b188d2d4dd0e) }
 
-func (m *CreateVMRequest) MarshalTo(dAtA []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if m.MachineCfg != nil {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintFirecracker(dAtA, i, uint64(m.MachineCfg.Size()))
-		n1, err := m.MachineCfg.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n1
-	}
-	if len(m.KernelImagePath) > 0 {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintFirecracker(dAtA, i, uint64(len(m.KernelImagePath)))
-		i += copy(dAtA[i:], m.KernelImagePath)
-	}
-	if len(m.KernelArgs) > 0 {
-		dAtA[i] = 0x1a
-		i++
-		i = encodeVarintFirecracker(dAtA, i, uint64(len(m.KernelArgs)))
-		i += copy(dAtA[i:], m.KernelArgs)
-	}
-	if m.RootDrive != nil {
-		dAtA[i] = 0x22
-		i++
-		i = encodeVarintFirecracker(dAtA, i, uint64(m.RootDrive.Size()))
-		n2, err := m.RootDrive.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n2
-	}
-	if len(m.AdditionalDrives) > 0 {
-		for _, msg := range m.AdditionalDrives {
-			dAtA[i] = 0x2a
-			i++
-			i = encodeVarintFirecracker(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	if len(m.NetworkInterfaces) > 0 {
-		for _, msg := range m.NetworkInterfaces {
-			dAtA[i] = 0x32
-			i++
-			i = encodeVarintFirecracker(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	if m.ContainerCount != 0 {
-		dAtA[i] = 0x38
-		i++
-		i = encodeVarintFirecracker(dAtA, i, uint64(m.ContainerCount))
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	return i, nil
+var fileDescriptor_firecracker_73f6b188d2d4dd0e = []byte{
+	// 417 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x7c, 0x52, 0xd1, 0x6e, 0xd3, 0x30,
+	0x14, 0x55, 0xe8, 0xda, 0xd1, 0x5b, 0xd8, 0x5a, 0x33, 0x50, 0x14, 0xd0, 0x14, 0x15, 0x69, 0x0a,
+	0x2f, 0x0e, 0x1a, 0x12, 0x2f, 0x08, 0x89, 0x92, 0x01, 0x2a, 0x28, 0x08, 0x79, 0x52, 0x1f, 0x78,
+	0x33, 0xc9, 0x4d, 0x16, 0xb5, 0xb3, 0x83, 0xed, 0x80, 0xf6, 0xc8, 0x07, 0xf1, 0x8f, 0x68, 0xce,
+	0xaa, 0xa4, 0x69, 0xc4, 0x53, 0xe2, 0x73, 0xcf, 0xb1, 0xcf, 0xb9, 0xf7, 0xc2, 0x2c, 0x2b, 0x14,
+	0x26, 0x8a, 0x27, 0x6b, 0x54, 0xb4, 0x54, 0xd2, 0x48, 0xef, 0x69, 0x2e, 0x65, 0xbe, 0xc1, 0xd0,
+	0x9e, 0x7e, 0x54, 0x59, 0x88, 0xd7, 0xa5, 0xb9, 0xb9, 0x2b, 0x4e, 0xcc, 0x4d, 0x89, 0xba, 0x3e,
+	0xcc, 0xff, 0x0c, 0xe0, 0x38, 0x52, 0xc8, 0x0d, 0xae, 0x62, 0x86, 0x3f, 0x2b, 0xd4, 0x86, 0xbc,
+	0x03, 0x88, 0x79, 0x72, 0x55, 0x08, 0x8c, 0xb2, 0xdc, 0x75, 0x7c, 0x27, 0x98, 0x9c, 0xfb, 0xf4,
+	0x63, 0xf3, 0xca, 0xb6, 0x2a, 0x45, 0x56, 0xe4, 0x95, 0xe2, 0xa6, 0x90, 0x82, 0xb5, 0x34, 0x24,
+	0x80, 0xe3, 0x2f, 0xa8, 0x04, 0x6e, 0x96, 0xd7, 0x3c, 0xc7, 0x6f, 0xdc, 0x5c, 0xb9, 0xf7, 0x7c,
+	0x27, 0x18, 0xb3, 0x2e, 0x4c, 0x4e, 0x01, 0x6a, 0x68, 0xa1, 0x72, 0xed, 0x0e, 0x2c, 0xa9, 0x85,
+	0x90, 0x10, 0xc6, 0x4c, 0x4a, 0x73, 0xa1, 0x8a, 0x5f, 0xe8, 0x1e, 0x58, 0x2b, 0xb3, 0xb6, 0x15,
+	0x5b, 0x60, 0x0d, 0x87, 0xbc, 0x85, 0xe9, 0x22, 0x4d, 0x8b, 0x5b, 0x4b, 0x7c, 0x63, 0x21, 0xed,
+	0x0e, 0xfd, 0x41, 0xbf, 0x6e, 0x8f, 0x4a, 0x3e, 0xc3, 0xec, 0x2b, 0x9a, 0xdf, 0x52, 0xad, 0x97,
+	0xc2, 0xa0, 0xca, 0x78, 0x82, 0xda, 0x1d, 0x59, 0xfd, 0xb3, 0xb6, 0xbe, 0x4b, 0x62, 0xfb, 0x32,
+	0x72, 0x06, 0x47, 0x91, 0x14, 0x86, 0x17, 0x02, 0x55, 0x24, 0x2b, 0x61, 0xdc, 0x43, 0xdf, 0x09,
+	0x86, 0xac, 0x83, 0xce, 0xcf, 0x60, 0xda, 0x8c, 0x40, 0x97, 0x52, 0x68, 0x24, 0x04, 0x0e, 0x56,
+	0xf1, 0xf2, 0xc2, 0x76, 0x7f, 0xcc, 0xec, 0xff, 0xfc, 0x39, 0x3c, 0xbc, 0x34, 0xb2, 0x6c, 0x06,
+	0xd5, 0x47, 0x7a, 0x01, 0x8f, 0x3e, 0xa1, 0x59, 0xc5, 0x8b, 0x34, 0x55, 0xa8, 0xf5, 0xff, 0xa8,
+	0xaf, 0xe1, 0x64, 0x97, 0x7a, 0xf7, 0xf6, 0x29, 0xc0, 0xa5, 0x4c, 0xd6, 0x68, 0xec, 0xe0, 0x6a,
+	0x45, 0x0b, 0x39, 0xff, 0xeb, 0xc0, 0xa4, 0xd5, 0x0a, 0x12, 0xc2, 0xfd, 0xad, 0x7f, 0x32, 0xa5,
+	0x9d, 0x6d, 0xf2, 0x66, 0x74, 0x2f, 0xdc, 0x4b, 0x18, 0xd5, 0x41, 0xc8, 0x11, 0xdd, 0x49, 0xe4,
+	0x3d, 0xa1, 0xf5, 0xe6, 0xd2, 0xed, 0xe6, 0xd2, 0x0f, 0xb7, 0x9b, 0x4b, 0xde, 0xc0, 0x83, 0xb6,
+	0x55, 0x72, 0x42, 0x7b, 0x42, 0x7a, 0x8f, 0x69, 0x5f, 0x9e, 0xf7, 0x87, 0xdf, 0x87, 0xf5, 0x75,
+	0x23, 0xfb, 0x79, 0xf5, 0x2f, 0x00, 0x00, 0xff, 0xff, 0x8b, 0x36, 0x3c, 0x79, 0x32, 0x03, 0x00,
+	0x00,
 }
-
-func (m *CreateVMResponse) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *CreateVMResponse) MarshalTo(dAtA []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if len(m.VMID) > 0 {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintFirecracker(dAtA, i, uint64(len(m.VMID)))
-		i += copy(dAtA[i:], m.VMID)
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	return i, nil
-}
-
-func (m *StopVMRequest) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *StopVMRequest) MarshalTo(dAtA []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if len(m.VMID) > 0 {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintFirecracker(dAtA, i, uint64(len(m.VMID)))
-		i += copy(dAtA[i:], m.VMID)
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	return i, nil
-}
-
-func (m *GetVMAddressRequest) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *GetVMAddressRequest) MarshalTo(dAtA []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if len(m.VMID) > 0 {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintFirecracker(dAtA, i, uint64(len(m.VMID)))
-		i += copy(dAtA[i:], m.VMID)
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	return i, nil
-}
-
-func (m *GetVMAddressResponse) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *GetVMAddressResponse) MarshalTo(dAtA []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if len(m.SocketPath) > 0 {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintFirecracker(dAtA, i, uint64(len(m.SocketPath)))
-		i += copy(dAtA[i:], m.SocketPath)
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	return i, nil
-}
-
-func encodeVarintFirecracker(dAtA []byte, offset int, v uint64) int {
-	for v >= 1<<7 {
-		dAtA[offset] = uint8(v&0x7f | 0x80)
-		v >>= 7
-		offset++
-	}
-	dAtA[offset] = uint8(v)
-	return offset + 1
-}
-func (m *CreateVMRequest) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if m.MachineCfg != nil {
-		l = m.MachineCfg.Size()
-		n += 1 + l + sovFirecracker(uint64(l))
-	}
-	l = len(m.KernelImagePath)
-	if l > 0 {
-		n += 1 + l + sovFirecracker(uint64(l))
-	}
-	l = len(m.KernelArgs)
-	if l > 0 {
-		n += 1 + l + sovFirecracker(uint64(l))
-	}
-	if m.RootDrive != nil {
-		l = m.RootDrive.Size()
-		n += 1 + l + sovFirecracker(uint64(l))
-	}
-	if len(m.AdditionalDrives) > 0 {
-		for _, e := range m.AdditionalDrives {
-			l = e.Size()
-			n += 1 + l + sovFirecracker(uint64(l))
-		}
-	}
-	if len(m.NetworkInterfaces) > 0 {
-		for _, e := range m.NetworkInterfaces {
-			l = e.Size()
-			n += 1 + l + sovFirecracker(uint64(l))
-		}
-	}
-	if m.ContainerCount != 0 {
-		n += 1 + sovFirecracker(uint64(m.ContainerCount))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
-	return n
-}
-
-func (m *CreateVMResponse) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	l = len(m.VMID)
-	if l > 0 {
-		n += 1 + l + sovFirecracker(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
-	return n
-}
-
-func (m *StopVMRequest) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	l = len(m.VMID)
-	if l > 0 {
-		n += 1 + l + sovFirecracker(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
-	return n
-}
-
-func (m *GetVMAddressRequest) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	l = len(m.VMID)
-	if l > 0 {
-		n += 1 + l + sovFirecracker(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
-	return n
-}
-
-func (m *GetVMAddressResponse) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	l = len(m.SocketPath)
-	if l > 0 {
-		n += 1 + l + sovFirecracker(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
-	return n
-}
-
-func sovFirecracker(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
-}
-func sozFirecracker(x uint64) (n int) {
-	return sovFirecracker(uint64((x << 1) ^ uint64((int64(x) >> 63))))
-}
-func (m *CreateVMRequest) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowFirecracker
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: CreateVMRequest: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: CreateVMRequest: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field MachineCfg", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowFirecracker
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthFirecracker
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthFirecracker
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.MachineCfg == nil {
-				m.MachineCfg = &FirecrackerMachineConfiguration{}
-			}
-			if err := m.MachineCfg.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field KernelImagePath", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowFirecracker
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthFirecracker
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthFirecracker
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.KernelImagePath = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 3:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field KernelArgs", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowFirecracker
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthFirecracker
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthFirecracker
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.KernelArgs = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 4:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RootDrive", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowFirecracker
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthFirecracker
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthFirecracker
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.RootDrive == nil {
-				m.RootDrive = &FirecrackerDrive{}
-			}
-			if err := m.RootDrive.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 5:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field AdditionalDrives", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowFirecracker
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthFirecracker
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthFirecracker
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.AdditionalDrives = append(m.AdditionalDrives, &FirecrackerDrive{})
-			if err := m.AdditionalDrives[len(m.AdditionalDrives)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 6:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field NetworkInterfaces", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowFirecracker
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthFirecracker
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthFirecracker
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.NetworkInterfaces = append(m.NetworkInterfaces, &FirecrackerNetworkInterface{})
-			if err := m.NetworkInterfaces[len(m.NetworkInterfaces)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 7:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ContainerCount", wireType)
-			}
-			m.ContainerCount = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowFirecracker
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.ContainerCount |= int32(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		default:
-			iNdEx = preIndex
-			skippy, err := skipFirecracker(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthFirecracker
-			}
-			if (iNdEx + skippy) < 0 {
-				return ErrInvalidLengthFirecracker
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *CreateVMResponse) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowFirecracker
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: CreateVMResponse: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: CreateVMResponse: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field VMID", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowFirecracker
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthFirecracker
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthFirecracker
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.VMID = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipFirecracker(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthFirecracker
-			}
-			if (iNdEx + skippy) < 0 {
-				return ErrInvalidLengthFirecracker
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *StopVMRequest) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowFirecracker
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: StopVMRequest: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: StopVMRequest: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field VMID", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowFirecracker
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthFirecracker
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthFirecracker
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.VMID = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipFirecracker(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthFirecracker
-			}
-			if (iNdEx + skippy) < 0 {
-				return ErrInvalidLengthFirecracker
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *GetVMAddressRequest) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowFirecracker
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: GetVMAddressRequest: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: GetVMAddressRequest: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field VMID", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowFirecracker
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthFirecracker
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthFirecracker
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.VMID = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipFirecracker(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthFirecracker
-			}
-			if (iNdEx + skippy) < 0 {
-				return ErrInvalidLengthFirecracker
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *GetVMAddressResponse) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowFirecracker
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: GetVMAddressResponse: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: GetVMAddressResponse: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field SocketPath", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowFirecracker
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthFirecracker
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthFirecracker
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.SocketPath = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipFirecracker(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthFirecracker
-			}
-			if (iNdEx + skippy) < 0 {
-				return ErrInvalidLengthFirecracker
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func skipFirecracker(dAtA []byte) (n int, err error) {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return 0, ErrIntOverflowFirecracker
-			}
-			if iNdEx >= l {
-				return 0, io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		wireType := int(wire & 0x7)
-		switch wireType {
-		case 0:
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return 0, ErrIntOverflowFirecracker
-				}
-				if iNdEx >= l {
-					return 0, io.ErrUnexpectedEOF
-				}
-				iNdEx++
-				if dAtA[iNdEx-1] < 0x80 {
-					break
-				}
-			}
-			return iNdEx, nil
-		case 1:
-			iNdEx += 8
-			return iNdEx, nil
-		case 2:
-			var length int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return 0, ErrIntOverflowFirecracker
-				}
-				if iNdEx >= l {
-					return 0, io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				length |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if length < 0 {
-				return 0, ErrInvalidLengthFirecracker
-			}
-			iNdEx += length
-			if iNdEx < 0 {
-				return 0, ErrInvalidLengthFirecracker
-			}
-			return iNdEx, nil
-		case 3:
-			for {
-				var innerWire uint64
-				var start int = iNdEx
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return 0, ErrIntOverflowFirecracker
-					}
-					if iNdEx >= l {
-						return 0, io.ErrUnexpectedEOF
-					}
-					b := dAtA[iNdEx]
-					iNdEx++
-					innerWire |= (uint64(b) & 0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-				innerWireType := int(innerWire & 0x7)
-				if innerWireType == 4 {
-					break
-				}
-				next, err := skipFirecracker(dAtA[start:])
-				if err != nil {
-					return 0, err
-				}
-				iNdEx = start + next
-				if iNdEx < 0 {
-					return 0, ErrInvalidLengthFirecracker
-				}
-			}
-			return iNdEx, nil
-		case 4:
-			return iNdEx, nil
-		case 5:
-			iNdEx += 4
-			return iNdEx, nil
-		default:
-			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
-		}
-	}
-	panic("unreachable")
-}
-
-var (
-	ErrInvalidLengthFirecracker = fmt.Errorf("proto: negative length found during unmarshaling")
-	ErrIntOverflowFirecracker   = fmt.Errorf("proto: integer overflow")
-)

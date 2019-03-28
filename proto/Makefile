@@ -11,17 +11,17 @@
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
-GOPATH:=$(shell go env GOPATH)
-
-PROTO_SRC:=$(wildcard *.proto)
-PROTO_GEN_SRC:=$(PROTO_SRC:.proto=.pb.go)
+PROTO_SRC := $(wildcard *.proto)
+PROTO_GEN_SRC := $(PROTO_SRC:.proto=.pb.go)
 
 $(PROTO_GEN_SRC): $(PROTO_SRC)
 	protoc \
-		--gofast_out=plugins=grpc:. \
-		-I=. \
-		-I=${GOPATH}/src \
-		-I=${GOPATH}/src/github.com/gogo/protobuf/protobuf \
+		--gogo_out=plugins=grpc,Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types:. \
 		$^
 
 proto: $(PROTO_GEN_SRC)
+
+clean:
+	- rm -f *.pb.go
+
+.PHONY: clean proto

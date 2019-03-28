@@ -32,22 +32,26 @@ steps:
           --target firecracker-containerd-unittest-nonroot \
           --tag localhost/firecracker-containerd-unittest-nonroot:${BUILDKITE_BUILD_NUMBER} .
 
+        docker build \
+          --progress=plain \
+          --file tools/docker/Dockerfile \
+          --target firecracker-containerd-e2etest-naive \
+          --tag localhost/firecracker-containerd-e2etest-naive:${BUILDKITE_BUILD_NUMBER} .
+
   - wait
 
-  - label: ":rotating_light: snapshotter root tests"
+  - label: ":rotating_light: :hammer: snapshotter *root* tests"
     agents:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
     artifact_paths:
       - "logs/*"
     command:
       >
-        mkdir $(pwd)/logs
-        && docker run --rm \
+        docker run --rm \
           --privileged \
           --volume /dev:/dev \
           --volume /sys:/sys \
           --volume /run/udev/control:/run/udev/control \
-          --volume $(pwd)/logs:/var/log/firecracker-containerd-test \
           --ipc=host \
           localhost/firecracker-containerd-unittest:${BUILDKITE_BUILD_NUMBER} \
           '
@@ -67,26 +71,42 @@ steps:
             DISABLE_ROOT_TESTS='true' make test EXTRAGOARGS="-v -count=1"
           '
 
-  - label: ":running_shirt_with_sash: runtime tests"
+  - label: ":running_shirt_with_sash: runtime unit tests"
     agents:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
     artifact_paths:
       - "logs/*"
     command:
       >
-        mkdir $(pwd)/logs
-        && docker run --rm \
+        docker run --rm \
           --privileged \
           --volume /dev:/dev \
-          --volume /sys:/sys \
-          --volume /run/udev/control:/run/udev/control \
-          --volume $(pwd)/logs:/var/log/firecracker-containerd-test \
-          --ipc=host \
           localhost/firecracker-containerd-unittest:${BUILDKITE_BUILD_NUMBER} \
           '
             cd /firecracker-containerd/runtime
             make test EXTRAGOARGS="-v -count=1"
           '
+
+  - label: ":rotating_light: :running_shirt_with_sash: runtime isolated tests"
+    agents:
+      queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
+    artifact_paths:
+      - "logs/*"
+    env:
+      FCCD_PACKAGE_DIR: "runtime"
+      FCCD_TESTNAME_REGEX: "_Isolated"
+    command:
+      >
+        mkdir $(pwd)/logs
+        && .buildkite/run-tests-by-name-regex.sh \
+          "--privileged \
+          --volume /dev:/dev \
+          --volume /sys:/sys \
+          --volume /run/udev/control:/run/udev/control \
+          --volume $(pwd)/logs:/var/log/firecracker-containerd-test \
+          --ipc=host \
+          --env ENABLE_ISOLATED_TESTS=1" \
+          "localhost/firecracker-containerd-e2etest-naive:${BUILDKITE_BUILD_NUMBER}"
 
   - label: ":fencer: agent tests"
     agents:
@@ -106,5 +126,17 @@ steps:
           localhost/firecracker-containerd-unittest:${BUILDKITE_BUILD_NUMBER} \
           '
             cd /firecracker-containerd/agent
+            make test EXTRAGOARGS="-v -count=1"
+          '
+
+  - label: ":exclamation: event tests"
+    agents:
+      queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
+    command:
+      >
+        docker run --rm \
+          localhost/firecracker-containerd-unittest-nonroot:${BUILDKITE_BUILD_NUMBER} \
+          '
+            cd /firecracker-containerd/eventbridge
             make test EXTRAGOARGS="-v -count=1"
           '

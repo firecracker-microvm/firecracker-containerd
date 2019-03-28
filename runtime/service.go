@@ -15,6 +15,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"math"
@@ -26,9 +27,8 @@ import (
 	"time"
 	"unsafe"
 
-	eventstypes "github.com/containerd/containerd/api/events"
-	"github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/containerd/events"
+	"github.com/containerd/containerd/events/exchange"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/runtime"
@@ -37,7 +37,7 @@ import (
 	"github.com/containerd/fifo"
 	"github.com/containerd/ttrpc"
 	"github.com/containerd/typeurl"
-	firecracker "github.com/firecracker-microvm/firecracker-go-sdk"
+	"github.com/firecracker-microvm/firecracker-go-sdk"
 	models "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 	ptypes "github.com/gogo/protobuf/types"
 	"github.com/mdlayher/vsock"
@@ -45,6 +45,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 
+	"github.com/firecracker-microvm/firecracker-containerd/eventbridge"
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 )
@@ -56,9 +57,10 @@ const (
 
 // implements shimapi
 type service struct {
-	server  *ttrpc.Server
-	id      string
-	publish events.Publisher
+	server        *ttrpc.Server
+	id            string
+	publish       events.Publisher
+	eventExchange *exchange.Exchange
 
 	agentStarted bool
 	agentClient  taskAPI.TaskService
@@ -76,7 +78,7 @@ var (
 
 // NewService creates new runtime shim.
 // Matches type Init func(..).. defined https://github.com/containerd/containerd/blob/master/runtime/v2/shim/shim.go#L47
-func NewService(ctx context.Context, id string, publisher events.Publisher) (shim.Shim, error) {
+func NewService(ctx context.Context, id string, remotePublisher events.Publisher) (shim.Shim, error) {
 	server, err := newServer()
 	if err != nil {
 		return nil, err
@@ -93,11 +95,25 @@ func NewService(ctx context.Context, id string, publisher events.Publisher) (shi
 		config.Debug = opts.Debug
 	}
 
+	eventExchange := exchange.NewExchange()
+
+	// Republish each event received on our exchange to the provided remote publisher.
+	// TODO ideally we would be forwarding events instead of re-publishing them, which would preserve the events'
+	// original timestamps and namespaces. However, as of this writing, the containerd v2 runtime model only provides a
+	// shim with a publisher, not a forwarder, so we have to republish for now.
+	go func() {
+		if err := <-eventbridge.Republish(ctx, eventExchange, remotePublisher); err != nil && err != context.Canceled {
+			log.G(ctx).WithError(err).Error("error while republishing events")
+		}
+	}()
+
 	s := &service{
-		server:  server,
-		id:      id,
-		publish: publisher,
-		config:  config,
+		server:        server,
+		id:            id,
+		publish:       remotePublisher,
+		eventExchange: eventExchange,
+
+		config: config,
 	}
 
 	return s, nil
@@ -213,6 +229,7 @@ func (s *service) Create(ctx context.Context, request *taskAPI.CreateTaskRequest
 	s.ctx, s.cancel = context.WithCancel(ctx)
 	go s.proxyStdio(s.ctx, request.Stdin, request.Stdout, request.Stderr, s.machineCID)
 	log.G(ctx).Infof("successfully created task with pid %d", resp.Pid)
+
 	return resp, nil
 }
 
@@ -222,45 +239,8 @@ func (s *service) Start(ctx context.Context, req *taskAPI.StartRequest) (*taskAP
 	if err != nil {
 		return nil, err
 	}
-	// TODO: Do we need to cancel this at some point?
-	go s.monitorState(s.ctx, req.ID, req.ExecID, resp.Pid)
 
 	return resp, nil
-}
-
-func (s *service) monitorState(ctx context.Context, id, execID string, pid uint32) {
-	ticker := time.NewTicker(time.Second)
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			//make a state request
-			req := &taskAPI.StateRequest{
-				ID:     id,
-				ExecID: execID,
-			}
-			resp, err := s.agentClient.State(ctx, req)
-			if err != nil {
-				log.G(ctx).WithError(err).Error("error monitoring state")
-				continue
-			}
-			// if ending state, stop vm and break
-			if resp.Status == task.StatusStopped {
-				s.publish.Publish(ctx, runtime.TaskExitEventTopic, &eventstypes.TaskExit{
-					ContainerID: s.id,
-					ID:          s.id,
-					Pid:         pid,
-					ExitStatus:  resp.ExitStatus,
-					ExitedAt:    time.Now(),
-				})
-				s.Shutdown(ctx, &taskAPI.ShutdownRequest{ID: id})
-				s.server.Close()
-				return
-			}
-		}
-
-	}
 }
 
 func (s *service) proxyStdio(ctx context.Context, stdin, stdout, stderr string, cid uint32) {
@@ -371,19 +351,10 @@ func (s *service) Resume(ctx context.Context, req *taskAPI.ResumeRequest) (*ptyp
 // Kill a process with the provided signal
 func (s *service) Kill(ctx context.Context, req *taskAPI.KillRequest) (*ptypes.Empty, error) {
 	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("kill")
-	// right now we want to kill vm always when kill is called
-	// may not be true in multi-container vm
-	defer func() {
-		log.G(ctx).Debug("Stopping VM during kill")
-		if err := s.stopVM(); err != nil {
-			log.G(ctx).WithError(err).Error("failed to stop VM")
-		}
-	}()
 	resp, err := s.agentClient.Kill(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	s.cancel()
 	return resp, nil
 }
 
@@ -703,8 +674,40 @@ func (s *service) startVM(ctx context.Context,
 	rpcClient := ttrpc.NewClient(conn)
 	rpcClient.OnClose(func() { conn.Close() })
 	apiClient := taskAPI.NewTaskClient(rpcClient)
+	eventBridgeClient := eventbridge.NewGetterClient(rpcClient)
+
+	go func() {
+		// Connect the agent's event exchange to our own own event exchange using the eventbridge client. All events
+		// that are published on the agent's exchange will also be published on our own
+		if err := <-eventbridge.Attach(ctx, eventBridgeClient, s.eventExchange); err != nil && err != context.Canceled {
+			log.G(ctx).WithError(err).Error("error while forwarding events from VM agent")
+		}
+	}()
+
+	go s.monitorTaskExit(ctx)
 
 	return apiClient, nil
+}
+
+func (s *service) monitorTaskExit(ctx context.Context) {
+	exitEvents, exitEventErrs := s.eventExchange.Subscribe(ctx, fmt.Sprintf(`topic=="%s"`, runtime.TaskExitEventTopic))
+
+	var err error
+	defer func() {
+		if err != nil && err != context.Canceled {
+			log.G(ctx).WithError(err).Error("error while waiting for task exit events")
+		}
+	}()
+
+	select {
+	case <-exitEvents:
+		// If the task exits, we shut down the VM and exit this shim. This behavior may change in the future when
+		// we support multiple containers per VM.
+		s.Shutdown(ctx, &taskAPI.ShutdownRequest{ID: s.id})
+	case err = <-exitEventErrs:
+	case <-ctx.Done():
+		err = ctx.Err()
+	}
 }
 
 func (s *service) stopVM() error {

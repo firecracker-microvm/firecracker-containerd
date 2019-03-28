@@ -41,7 +41,6 @@ FROM golang:1.12 as cri-build
 
 RUN apt-get update \
     && apt-get -y install --no-install-recommends \
-        cmake \
         curl \
         make \
         musl-tools \

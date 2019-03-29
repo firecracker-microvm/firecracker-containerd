@@ -20,6 +20,9 @@ DOCKER_IMAGE_TAG?=latest
 GOPATH:=$(shell go env GOPATH)
 BINPATH:=$(abspath ./bin)
 SUBMODULES=_submodules
+RUNC_DIR=$(SUBMODULES)/runc
+RUNC_BIN=$(RUNC_DIR)/runc
+UID:=$(shell id -u)
 
 all: $(SUBDIRS)
 
@@ -32,6 +35,11 @@ proto:
 clean:
 	for d in $(SUBDIRS); do $(MAKE) -C $$d clean; done
 	- rm -rf $(BINPATH)/
+	$(MAKE) -C $(RUNC_DIR) clean
+	rm -f *stamp
+
+distclean: clean
+	docker rmi localhost/runc-builder:latest
 
 lint:
 	$(BINPATH)/ltag -t ./.headers -excludes $(SUBMODULES) -check -v
@@ -43,6 +51,27 @@ deps:
 	$(BINPATH)/golangci-lint --version
 	GOBIN=$(BINPATH) GO111MODULE=off go get -u github.com/vbatts/git-validation
 	GOBIN=$(BINPATH) GO111MODULE=off go get -u github.com/kunalkushwaha/ltag
+
+runc-builder: runc-builder-stamp
+
+runc-builder-stamp: tools/docker/Dockerfile.runc-builder
+	cd tools/docker && docker build -t localhost/runc-builder:latest -f Dockerfile.runc-builder .
+	touch $@
+
+$(RUNC_DIR)/VERSION:
+	git submodule update --init --recursive $(RUNC_DIR)
+
+runc: $(RUNC_BIN)
+
+$(RUNC_BIN): $(RUNC_DIR)/VERSION runc-builder-stamp
+	docker run --rm -it --user $(UID) \
+		--volume $(PWD)/$(RUNC_DIR):/gopath/src/github.com/opencontainers/runc \
+		--volume $(PWD)/deps:/target \
+		-e HOME=/tmp \
+		-e GOPATH=/gopath \
+		--workdir /gopath/src/github.com/opencontainers/runc \
+		localhost/runc-builder:latest \
+		make runc
 
 install:
 	for d in $(SUBDIRS); do $(MAKE) -C $$d install; done
@@ -70,4 +99,4 @@ docker-image-e2etest-naive:
 
 docker-images: | docker-image-e2etest-naive docker-image-unittest-nonroot docker-image-unittest
 
-.PHONY: all $(SUBDIRS) clean proto deps lint install docker-images docker-image-e2etest-naive docker-image-unittest-nonroot docker-image-unittest
+.PHONY: all $(SUBDIRS) clean proto deps lint install docker-images docker-image-e2etest-naive docker-image-unittest-nonroot docker-image-unittest runc-builder runc

@@ -19,6 +19,7 @@ DOCKER_IMAGE_TAG?=latest
 
 GOPATH:=$(shell go env GOPATH)
 BINPATH:=$(abspath ./bin)
+SUBMODULES=_submodules
 
 all: $(SUBDIRS)
 
@@ -33,7 +34,7 @@ clean:
 	- rm -rf $(BINPATH)/
 
 lint:
-	$(BINPATH)/ltag -t ./.headers -check -v
+	$(BINPATH)/ltag -t ./.headers -excludes $(SUBMODULES) -check -v
 	$(BINPATH)/git-validation -run DCO,dangling-whitespace,short-subject -range HEAD~20..HEAD
 	$(BINPATH)/golangci-lint run
 

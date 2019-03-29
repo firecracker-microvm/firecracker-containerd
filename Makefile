@@ -37,12 +37,14 @@ clean:
 	- rm -rf $(BINPATH)/
 	$(MAKE) -C $(RUNC_DIR) clean
 	rm -f *stamp
+	$(MAKE) -C tools/image-builder clean-in-docker
 
 distclean: clean
 	docker rmi localhost/runc-builder:latest
+	$(MAKE) -C tools/image-builder distclean
 
 lint:
-	$(BINPATH)/ltag -t ./.headers -excludes $(SUBMODULES) -check -v
+	$(BINPATH)/ltag -t ./.headers -excludes "tools $(SUBMODULES)" -check -v
 	$(BINPATH)/git-validation -run DCO,dangling-whitespace,short-subject -range HEAD~20..HEAD
 	$(BINPATH)/golangci-lint run
 
@@ -72,6 +74,13 @@ $(RUNC_BIN): $(RUNC_DIR)/VERSION runc-builder-stamp
 		--workdir /gopath/src/github.com/opencontainers/runc \
 		localhost/runc-builder:latest \
 		make runc
+
+image: $(RUNC_BIN) agent
+	mkdir -p tools/image-builder/files_ephemeral/usr/local/bin
+	cp $(RUNC_BIN) tools/image-builder/files_ephemeral/usr/local/bin
+	cp agent/agent tools/image-builder/files_ephemeral/usr/local/bin
+	touch tools/image-builder/files_ephemeral
+	$(MAKE) -C tools/image-builder all-in-docker
 
 install:
 	for d in $(SUBDIRS); do $(MAKE) -C $$d install; done

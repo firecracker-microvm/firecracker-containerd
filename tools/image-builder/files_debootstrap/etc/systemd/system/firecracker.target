@@ -1,0 +1,6 @@
+[Unit]
+Description=Firecracker containerd VM
+Requires=basic.target
+Conflicts=rescue.service rescue.target
+After=basic.target rescue.service rescue.target
+AllowIsolate=yes

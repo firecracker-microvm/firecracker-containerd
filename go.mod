@@ -25,9 +25,8 @@ require (
 	github.com/godbus/dbus v0.0.0-20181025153459-66d97aec3384 // indirect
 	github.com/gogo/googleapis v1.1.0 // indirect
 	github.com/gogo/protobuf v1.1.1
-	github.com/google/go-cmp v0.2.0 // indirect
 	github.com/hashicorp/go-multierror v1.0.0
-	github.com/mdlayher/vsock v0.0.0-20181130155850-676f733b747c
+	github.com/mdlayher/vsock v0.0.0-20190329173812-a92c53d5dcab
 	github.com/opencontainers/go-digest v1.0.0-rc1 // indirect
 	github.com/opencontainers/image-spec v1.0.1 // indirect
 	github.com/opencontainers/runc v0.1.1 // indirect
@@ -39,8 +38,9 @@ require (
 	github.com/stretchr/testify v1.2.2
 	github.com/syndtr/gocapability v0.0.0-20180916011248-d98352740cb2 // indirect
 	go.etcd.io/bbolt v1.3.0
+	golang.org/x/crypto v0.0.0-20190325154230-a5d413f7728c // indirect
 	golang.org/x/sync v0.0.0-20181108010431-42b317875d0f
-	golang.org/x/sys v0.0.0-20181107165924-66b7b1311ac8
+	golang.org/x/sys v0.0.0-20190329044733-9eb1bfa1ce65
 	google.golang.org/genproto v0.0.0-20181109154231-b5d43981345b // indirect
 	google.golang.org/grpc v1.16.0
 	gotest.tools v2.2.0+incompatible

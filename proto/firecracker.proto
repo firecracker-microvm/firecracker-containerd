@@ -12,8 +12,14 @@ service Firecracker {
     // Stops existing Firecracker instance by VM ID
     rpc StopVM(StopVMRequest) returns (google.protobuf.Empty);
 
-    // Gets VM instance socket file location
+    // Gets VM's instance socket file location
     rpc GetVMAddress(GetVMAddressRequest) returns (GetVMAddressResponse);
+
+    // Gets VM's instance FIFO file location
+    rpc GetFifoPath(GetFifoPathRequest) returns (GetFifoPathResponse);
+
+    // Sets VM's instance metadata
+    rpc SetVMMetadata(SetVMMetadataRequest) returns (google.protobuf.Empty);
 }
 
 // CreateVMRequest specifies creation parameters for a new FC instance
@@ -54,4 +60,23 @@ message GetVMAddressRequest {
 
 message GetVMAddressResponse {
     string SocketPath = 1;
+}
+
+enum FifoType {
+    LOG     = 0;
+    METRICS = 1;
+}
+
+message GetFifoPathRequest {
+    string VMID = 1;
+    FifoType FifoType = 2;
+}
+
+message GetFifoPathResponse {
+    string Path = 1;
+}
+
+message SetVMMetadataRequest {
+    string VMID = 1;
+    string Metadata = 2;
 }

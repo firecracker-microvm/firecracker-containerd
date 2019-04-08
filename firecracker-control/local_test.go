@@ -93,10 +93,12 @@ func TestLocal_buildInvalidConfiguration(t *testing.T) {
 
 func TestLocal_makeID(t *testing.T) {
 	obj := local{}
-	id1 := obj.makeID()
+	id1, err := obj.makeID()
+	assert.NoError(t, err)
 	assert.NotEmpty(t, id1)
 
-	id2 := obj.makeID()
+	id2, err := obj.makeID()
+	assert.NoError(t, err)
 	assert.NotEqual(t, id1, id2)
 }
 

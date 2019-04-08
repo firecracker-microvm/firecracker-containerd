@@ -14,8 +14,10 @@
 package service
 
 import (
+	"crypto/rand"
 	"fmt"
-	"math/rand"
+	"math"
+	"math/big"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -81,10 +83,12 @@ func newLocal(ic *plugin.InitContext) (*local, error) {
 
 // CreateVM creates new Firecracker VM instance
 func (s *local) CreateVM(ctx context.Context, req *proto.CreateVMRequest) (*proto.CreateVMResponse, error) {
-	var (
-		id     = s.makeID()
-		logger = log.G(ctx).WithField("vm_id", id)
-	)
+	id, err := s.makeID()
+	if err != nil {
+		return nil, err
+	}
+
+	logger := log.G(ctx).WithField("vm_id", id)
 
 	cfg, err := s.buildVMConfiguration(ctx, id, req)
 	if err != nil {
@@ -120,8 +124,13 @@ func (s *local) CreateVM(ctx context.Context, req *proto.CreateVMRequest) (*prot
 	}, nil
 }
 
-func (s *local) makeID() string {
-	return strconv.Itoa(rand.Int())
+func (s *local) makeID() (string, error) {
+	number, err := rand.Int(rand.Reader, big.NewInt(math.MaxInt32))
+	if err != nil {
+		return "", err
+	}
+
+	return strconv.FormatInt(number.Int64(), 10), nil
 }
 
 func (s *local) buildVMConfiguration(ctx context.Context, id string, req *proto.CreateVMRequest) (*firecracker.Config, error) {

@@ -80,3 +80,13 @@ func (s *service) GetVMAddress(ctx context.Context, req *proto.GetVMAddressReque
 	log.G(ctx).Debugf("get VM address: %+v", req)
 	return s.local.GetVMAddress(ctx, req)
 }
+
+func (s *service) GetFifoPath(ctx context.Context, req *proto.GetFifoPathRequest) (*proto.GetFifoPathResponse, error) {
+	log.G(ctx).Debugf("get fifo path: %+v", req)
+	return s.local.GetFifoPath(ctx, req)
+}
+
+func (s *service) SetVMMetadata(ctx context.Context, req *proto.SetVMMetadataRequest) (*empty.Empty, error) {
+	log.G(ctx).Debugf("set vm metadata: %+v", req)
+	return s.local.SetVMMetadata(ctx, req)
+}

@@ -120,6 +120,7 @@ func NewService(ctx context.Context, id string, remotePublisher events.Publisher
 }
 
 func (s *service) StartShim(ctx context.Context, id, containerdBinary, containerdAddress string) (string, error) {
+	log.G(ctx).WithField("id", id).Debug("StartShim")
 	cmd, err := s.newCommand(ctx, containerdBinary, containerdAddress)
 	if err != nil {
 		return "", err
@@ -135,38 +136,53 @@ func (s *service) StartShim(ctx context.Context, id, containerdBinary, container
 		return "", err
 	}
 
-	defer socket.Close()
+	defer func() {
+		log.G(ctx).WithField("id", id).Debug("closing shim socket")
+		socket.Close()
+	}()
 
 	f, err := socket.File()
 	if err != nil {
 		return "", err
 	}
 
-	defer f.Close()
+	defer func() {
+		log.G(ctx).WithField("id", id).Debug("closing shim socket file")
+		f.Close()
+	}()
 
 	cmd.ExtraFiles = append(cmd.ExtraFiles, f)
 
 	if err := cmd.Start(); err != nil {
+		log.G(ctx).WithError(err).WithField("id", id).Error("Failed to Start()")
 		return "", err
 	}
 
 	defer func() {
 		if err != nil {
+			log.G(ctx).WithError(err).WithField("id", id).Error("killing shim process")
 			cmd.Process.Kill()
 		}
 	}()
 
 	// make sure to wait after start
-	go cmd.Wait()
+	go func() {
+		log.G(ctx).WithField("id", id).Debug("waiting on shim process")
+		waitErr := cmd.Wait()
+		log.G(ctx).WithError(waitErr).WithField("id", id).Debug("completed waiting on shim process")
+	}()
 	if err := shim.WritePidFile("shim.pid", cmd.Process.Pid); err != nil {
+		log.G(ctx).WithError(err).WithField("id", id).Error("failed to write pid file")
 		return "", err
 	}
 
 	if err := shim.WriteAddress("address", address); err != nil {
+		log.G(ctx).WithError(err).WithField("id", id).Error("failed to write address")
 		return "", err
 	}
 
 	if err := shim.SetScore(cmd.Process.Pid); err != nil {
+		log.G(ctx).WithError(err).WithField("id", id).Error("failed to set OOM score on shim")
 		return "", errors.Wrap(err, "failed to set OOM Score on shim")
 	}
 
@@ -201,9 +217,10 @@ func (s *service) Create(ctx context.Context, request *taskAPI.CreateTaskRequest
 	}
 	// TODO: should there be a lock here
 	if !s.agentStarted {
+		log.G(ctx).WithField("id", request.ID).Debug("calling startVM")
 		client, err := s.startVM(ctx, request, firecrackerConfig)
 		if err != nil {
-			log.G(ctx).WithError(err).Error("failed to start VM")
+			log.G(ctx).WithError(err).WithField("id", request.ID).Error("failed to start VM")
 			return nil, err
 		}
 
@@ -211,7 +228,7 @@ func (s *service) Create(ctx context.Context, request *taskAPI.CreateTaskRequest
 		s.agentStarted = true
 	}
 
-	log.G(ctx).Infof("creating task '%s'", request.ID)
+	log.G(ctx).WithField("id", request.ID).Info("creating task")
 
 	// Generate new anyData with bundle/config.json packed inside
 	anyData, err := packBundle(filepath.Join(request.Bundle, "config.json"), runcOpts)
@@ -227,8 +244,8 @@ func (s *service) Create(ctx context.Context, request *taskAPI.CreateTaskRequest
 		return nil, err
 	}
 	s.ctx, s.cancel = context.WithCancel(ctx)
-	go s.proxyStdio(s.ctx, request.Stdin, request.Stdout, request.Stderr, s.machineCID)
-	log.G(ctx).Infof("successfully created task with pid %d", resp.Pid)
+	s.proxyStdio(s.ctx, request.Stdin, request.Stdout, request.Stderr, s.machineCID)
+	log.G(ctx).WithField("id", request.ID).WithField("pid", resp.Pid).Info("successfully created task")
 
 	return resp, nil
 }
@@ -251,17 +268,18 @@ func (s *service) proxyStdio(ctx context.Context, stdin, stdout, stderr string, 
 
 func proxyIO(ctx context.Context, path string, cid, port uint32, in bool) {
 	if path == "" {
+		log.G(ctx).WithField("cid", cid).WithField("port", port).Warn("skipping IO, path is empty")
 		return
 	}
-	log.G(ctx).Debug("setting up IO for " + path)
+	log.G(ctx).WithField("path", path).WithField("cid", cid).WithField("port", port).Debug("setting up IO")
 	f, err := fifo.OpenFifo(ctx, path, syscall.O_RDWR|syscall.O_NONBLOCK, 0700)
 	if err != nil {
-		log.G(ctx).WithError(err).Error("error opening fifo")
+		log.G(ctx).WithError(err).WithField("path", path).Error("error opening fifo")
 		return
 	}
 	conn, err := vsock.Dial(cid, port)
 	if err != nil {
-		log.G(ctx).WithError(err).Error("unable to dial agent vsock")
+		log.G(ctx).WithError(err).WithField("path", path).Error("unable to dial agent vsock IO port")
 		f.Close()
 		return
 	}
@@ -270,7 +288,7 @@ func proxyIO(ctx context.Context, path string, cid, port uint32, in bool) {
 		conn.Close()
 		f.Close()
 	}()
-	log.G(ctx).Debug("begin copying io")
+	log.G(ctx).WithField("path", path).Debug("begin copying io")
 	buf := make([]byte, internal.DefaultBufferSize)
 	if in {
 		_, err = io.CopyBuffer(conn, f, buf)
@@ -278,7 +296,7 @@ func proxyIO(ctx context.Context, path string, cid, port uint32, in bool) {
 		_, err = io.CopyBuffer(f, conn, buf)
 	}
 	if err != nil {
-		log.G(ctx).WithError(err).Error("error with stdio")
+		log.G(ctx).WithError(err).WithField("path", path).Error("error with stdio")
 	}
 }
 

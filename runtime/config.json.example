@@ -5,11 +5,6 @@
   "root_drive": "./vsock.img",
   "cpu_count": 1,
   "cpu_template": "T2",
-  "additional_drives": {
-    "./shim.img": "rw"
-  },
-  "log_fifo": "/tmp/fc-logs.fifo",
   "log_level": "Debug",
-  "metrics_fifo": "/tmp/fc-metrics.fifo",
   "ht_enabled": false
 }

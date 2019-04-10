@@ -20,12 +20,7 @@ linters:
     - scopelint
     - gocritic
     - interfacer # Suggests narrower interface types
-    - gocyclo
     - scopelint # Checks for unpinned variables
-
-linters-settings:
-  gocyclo:
-    min-complexity: 15
 
 issues:
   exclude-use-default: false

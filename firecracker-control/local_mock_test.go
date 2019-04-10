@@ -5,6 +5,7 @@
 package service
 
 import (
+	firecracker_go_sdk "github.com/firecracker-microvm/firecracker-go-sdk"
 	gomock "github.com/golang/mock/gomock"
 	context "golang.org/x/net/context"
 	reflect "reflect"
@@ -57,6 +58,18 @@ func (mr *MockmachineIfaceMockRecorder) StopVMM() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StopVMM", reflect.TypeOf((*MockmachineIface)(nil).StopVMM))
 }
 
+// Shutdown mocks base method
+func (m *MockmachineIface) Shutdown(arg0 context.Context) error {
+	ret := m.ctrl.Call(m, "Shutdown", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Shutdown indicates an expected call of Shutdown
+func (mr *MockmachineIfaceMockRecorder) Shutdown(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Shutdown", reflect.TypeOf((*MockmachineIface)(nil).Shutdown), arg0)
+}
+
 // Wait mocks base method
 func (m *MockmachineIface) Wait(arg0 context.Context) error {
 	ret := m.ctrl.Call(m, "Wait", arg0)
@@ -79,4 +92,21 @@ func (m *MockmachineIface) SetMetadata(arg0 context.Context, arg1 interface{}) e
 // SetMetadata indicates an expected call of SetMetadata
 func (mr *MockmachineIfaceMockRecorder) SetMetadata(arg0, arg1 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetMetadata", reflect.TypeOf((*MockmachineIface)(nil).SetMetadata), arg0, arg1)
+}
+
+// UpdateGuestDrive mocks base method
+func (m *MockmachineIface) UpdateGuestDrive(arg0 context.Context, arg1, arg2 string, arg3 ...firecracker_go_sdk.PatchGuestDriveByIDOpt) error {
+	varargs := []interface{}{arg0, arg1, arg2}
+	for _, a := range arg3 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UpdateGuestDrive", varargs...)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateGuestDrive indicates an expected call of UpdateGuestDrive
+func (mr *MockmachineIfaceMockRecorder) UpdateGuestDrive(arg0, arg1, arg2 interface{}, arg3 ...interface{}) *gomock.Call {
+	varargs := append([]interface{}{arg0, arg1, arg2}, arg3...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateGuestDrive", reflect.TypeOf((*MockmachineIface)(nil).UpdateGuestDrive), varargs...)
 }

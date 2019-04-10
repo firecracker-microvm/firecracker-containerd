@@ -25,7 +25,7 @@ import (
 
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/plugin"
-	"github.com/firecracker-microvm/firecracker-go-sdk"
+	firecracker "github.com/firecracker-microvm/firecracker-go-sdk"
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -48,13 +48,9 @@ func init() {
 	})
 }
 
-// TODO: Remove this interface after merging PR #91
-// See https://github.com/firecracker-microvm/firecracker-go-sdk/pull/91
+// Wrap interface in order to properly generate mock with mockgen
 type machineIface interface {
-	Start(context.Context) error
-	StopVMM() error
-	Wait(context.Context) error
-	SetMetadata(context.Context, interface{}) error
+	firecracker.MachineIface
 }
 
 type instance struct {

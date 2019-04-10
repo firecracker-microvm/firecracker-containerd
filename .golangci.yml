@@ -19,6 +19,8 @@ linters:
     - prealloc
     - scopelint
     - gocritic
+    - interfacer # Suggests narrower interface types
+    - scopelint # Checks for unpinned variables
 
 issues:
   exclude-use-default: false

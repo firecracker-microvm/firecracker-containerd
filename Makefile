@@ -27,16 +27,20 @@ proto:
 
 clean:
 	for d in $(SUBDIRS); do $(MAKE) -C $$d clean; done
+	- rm -rf bin/
 
-deps:
-	curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $(GOPATH)/bin v1.12.3
-	GO111MODULE=off go get -u github.com/vbatts/git-validation
-	GO111MODULE=off go get -u github.com/kunalkushwaha/ltag
+GOLANGCI:=./bin/golangci-lint
 
 lint:
 	ltag -t ./.headers -check -v
 	git-validation -run DCO,dangling-whitespace,short-subject -range HEAD~20..HEAD
-	golangci-lint run
+	$(GOLANGCI) run
+
+deps:
+	curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b ./bin v1.16.0
+	$(GOLANGCI) --version
+	GO111MODULE=off go get -u github.com/vbatts/git-validation
+	GO111MODULE=off go get -u github.com/kunalkushwaha/ltag
 
 install:
 	for d in $(SUBDIRS); do $(MAKE) -C $$d install; done

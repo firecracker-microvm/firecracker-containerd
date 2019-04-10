@@ -17,6 +17,7 @@ package service
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -44,10 +45,10 @@ func TestLocal_buildVMConfiguration(t *testing.T) {
 
 	obj := &local{
 		rootPath:    "/",
-		findVsockFn: func(context.Context) (uint32, error) { return 3, nil },
+		findVsockFn: func(context.Context) (*os.File, uint32, error) { return nil, 3, nil },
 	}
 
-	config, err := obj.buildVMConfiguration(testCtx, "1", request)
+	config, err := obj.buildVMConfiguration(testCtx, "1", 3, request)
 	assert.NoError(t, err)
 	assert.NotNil(t, config)
 
@@ -78,16 +79,16 @@ func TestLocal_buildVMConfiguration(t *testing.T) {
 func TestLocal_buildInvalidConfiguration(t *testing.T) {
 	obj := &local{
 		rootPath:    "/",
-		findVsockFn: func(context.Context) (uint32, error) { return 3, nil },
+		findVsockFn: func(context.Context) (*os.File, uint32, error) { return nil, 3, nil },
 	}
 
 	request := &proto.CreateVMRequest{}
 
-	_, err := obj.buildVMConfiguration(testCtx, "1", request)
+	_, err := obj.buildVMConfiguration(testCtx, "1", 3, request)
 	assert.EqualError(t, err, "invalid machine configuration")
 
 	request.MachineCfg = &proto.FirecrackerMachineConfiguration{}
-	_, err = obj.buildVMConfiguration(testCtx, "1", request)
+	_, err = obj.buildVMConfiguration(testCtx, "1", 3, request)
 	assert.EqualError(t, err, "root drive can't be empty")
 }
 

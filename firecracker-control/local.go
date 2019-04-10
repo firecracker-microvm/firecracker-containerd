@@ -66,7 +66,7 @@ type local struct {
 	vm          map[string]*instance
 	vmLock      sync.RWMutex
 	rootPath    string
-	findVsockFn func(context.Context) (uint32, error)
+	findVsockFn func(context.Context) (*os.File, uint32, error)
 }
 
 func newLocal(ic *plugin.InitContext) (*local, error) {
@@ -90,7 +90,14 @@ func (s *local) CreateVM(ctx context.Context, req *proto.CreateVMRequest) (*prot
 
 	logger := log.G(ctx).WithField("vm_id", id)
 
-	cfg, err := s.buildVMConfiguration(ctx, id, req)
+	vsockDescriptor, cid, err := s.findVsockFn(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to find available cid for vsock")
+	}
+
+	defer vsockDescriptor.Close()
+
+	cfg, err := s.buildVMConfiguration(ctx, id, cid, req)
 	if err != nil {
 		return nil, err
 	}
@@ -102,6 +109,9 @@ func (s *local) CreateVM(ctx context.Context, req *proto.CreateVMRequest) (*prot
 		logger.WithError(err).Error("failed to create new machine instance")
 		return nil, err
 	}
+
+	// Release vsock CID so Firecracker instance can reacquire it.
+	vsockDescriptor.Close()
 
 	if err := s.startMachine(ctx, id, machine); err != nil {
 		logger.WithError(err).Error("failed to start VM instance")
@@ -133,13 +143,11 @@ func (s *local) makeID() (string, error) {
 	return strconv.FormatInt(number.Int64(), 10), nil
 }
 
-func (s *local) buildVMConfiguration(ctx context.Context, id string, req *proto.CreateVMRequest) (*firecracker.Config, error) {
-	logger := log.G(ctx).WithField("vm_id", id)
-
-	cid, err := s.findVsockFn(ctx)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to find available cid for vsock")
-	}
+func (s *local) buildVMConfiguration(ctx context.Context, id string, cid uint32, req *proto.CreateVMRequest) (*firecracker.Config, error) {
+	var (
+		err    error
+		logger = log.G(ctx).WithField("vm_id", id)
+	)
 
 	vsockDevices := []firecracker.VsockDevice{
 		{Path: "root", CID: cid},

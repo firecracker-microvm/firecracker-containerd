@@ -16,6 +16,7 @@ export INSTALLROOT?=/usr/local
 export STATIC_AGENT
 
 GOPATH:=$(shell go env GOPATH)
+BINPATH:=$(abspath ./bin)
 
 all: $(SUBDIRS)
 
@@ -27,20 +28,18 @@ proto:
 
 clean:
 	for d in $(SUBDIRS); do $(MAKE) -C $$d clean; done
-	- rm -rf bin/
-
-GOLANGCI:=./bin/golangci-lint
+	- rm -rf $(BINPATH)/
 
 lint:
-	ltag -t ./.headers -check -v
-	git-validation -run DCO,dangling-whitespace,short-subject -range HEAD~20..HEAD
-	$(GOLANGCI) run
+	$(BINPATH)/ltag -t ./.headers -check -v
+	$(BINPATH)/git-validation -run DCO,dangling-whitespace,short-subject -range HEAD~20..HEAD
+	$(BINPATH)/golangci-lint run
 
 deps:
-	curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b ./bin v1.16.0
-	$(GOLANGCI) --version
-	GO111MODULE=off go get -u github.com/vbatts/git-validation
-	GO111MODULE=off go get -u github.com/kunalkushwaha/ltag
+	curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b $(BINPATH) v1.16.0
+	$(BINPATH)/golangci-lint --version
+	GOBIN=$(BINPATH) GO111MODULE=off go get -u github.com/vbatts/git-validation
+	GOBIN=$(BINPATH) GO111MODULE=off go get -u github.com/kunalkushwaha/ltag
 
 install:
 	for d in $(SUBDIRS); do $(MAKE) -C $$d install; done

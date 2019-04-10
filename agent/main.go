@@ -46,7 +46,6 @@ const (
 	enableSubreaper = 1
 )
 
-//nolint:gocyclo
 func main() {
 	var (
 		id    string

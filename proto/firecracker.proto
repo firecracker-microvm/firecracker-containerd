@@ -7,7 +7,7 @@ option go_package = "proto";
 
 service Firecracker {
     // Runs new Firecracker VM instance
-    rpc CreateVM(CreateVMRequest) returns (CreateVMResponse);
+    rpc CreateVM(CreateVMRequest) returns (google.protobuf.Empty);
 
     // Stops existing Firecracker instance by VM ID
     rpc StopVM(StopVMRequest) returns (google.protobuf.Empty);
@@ -24,30 +24,29 @@ service Firecracker {
 
 // CreateVMRequest specifies creation parameters for a new FC instance
 message CreateVMRequest {
+    // VM identifier to assign
+    string VMID = 1;
+
     // Specifies the machine configuration for the VM
-    FirecrackerMachineConfiguration MachineCfg = 1;
+    FirecrackerMachineConfiguration MachineCfg = 2;
 
     // Specifies the file path where the kernel image is located
-    string KernelImagePath = 2;
+    string KernelImagePath = 3;
 
     // Specifies the commandline arguments that should be passed to the kernel
-    string KernelArgs = 3;
+    string KernelArgs = 4;
 
     // Specifies the root block device for the VM
-    FirecrackerDrive RootDrive = 4;
+    FirecrackerDrive RootDrive = 5;
 
     // Specifies the additional block device config for the VM.
-    repeated FirecrackerDrive AdditionalDrives = 5;
+    repeated FirecrackerDrive AdditionalDrives = 6;
 
     // Specifies the networking configuration for a VM
-    repeated FirecrackerNetworkInterface NetworkInterfaces = 6;
+    repeated FirecrackerNetworkInterface NetworkInterfaces = 7;
 
     // The number of dummy drives to reserve in advance before running FC instance.
-    int32 ContainerCount = 7;
-}
-
-message CreateVMResponse {
-    string VMID = 1;
+    int32 ContainerCount = 8;
 }
 
 message StopVMRequest {

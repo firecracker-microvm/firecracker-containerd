@@ -92,17 +92,6 @@ func TestLocal_buildInvalidConfiguration(t *testing.T) {
 	assert.EqualError(t, err, "root drive can't be empty")
 }
 
-func TestLocal_makeID(t *testing.T) {
-	obj := local{}
-	id1, err := obj.makeID()
-	assert.NoError(t, err)
-	assert.NotEmpty(t, id1)
-
-	id2, err := obj.makeID()
-	assert.NoError(t, err)
-	assert.NotEqual(t, id1, id2)
-}
-
 func TestLocal_startMachine(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

@@ -14,13 +14,9 @@
 package service
 
 import (
-	"crypto/rand"
 	"fmt"
-	"math"
-	"math/big"
 	"os"
 	"path/filepath"
-	"strconv"
 	"sync"
 
 	"github.com/containerd/containerd/log"
@@ -78,13 +74,24 @@ func newLocal(ic *plugin.InitContext) (*local, error) {
 }
 
 // CreateVM creates new Firecracker VM instance
-func (s *local) CreateVM(ctx context.Context, req *proto.CreateVMRequest) (*proto.CreateVMResponse, error) {
-	id, err := s.makeID()
-	if err != nil {
-		return nil, err
+func (s *local) CreateVM(ctx context.Context, req *proto.CreateVMRequest) (*empty.Empty, error) {
+	var (
+		id     = req.GetVMID()
+		logger = log.G(ctx).WithField("vm_id", id)
+	)
+
+	if id == "" {
+		return nil, errors.New("invalid VM ID")
 	}
 
-	logger := log.G(ctx).WithField("vm_id", id)
+	// TODO: this makes running VMs sequential, consider optimizing locking mechanism
+	s.vmLock.Lock()
+	defer s.vmLock.Unlock()
+
+	// Make sure VM ID unique
+	if _, ok := s.vm[id]; ok {
+		return nil, errors.Errorf("VM with id %q already exists", id)
+	}
 
 	vsockDescriptor, cid, err := s.findVsockFn(ctx)
 	if err != nil {
@@ -121,22 +128,8 @@ func (s *local) CreateVM(ctx context.Context, req *proto.CreateVMRequest) (*prot
 		machine: machine,
 	}
 
-	s.vmLock.Lock()
 	s.vm[id] = newInstance
-	s.vmLock.Unlock()
-
-	return &proto.CreateVMResponse{
-		VMID: id,
-	}, nil
-}
-
-func (s *local) makeID() (string, error) {
-	number, err := rand.Int(rand.Reader, big.NewInt(math.MaxInt32))
-	if err != nil {
-		return "", err
-	}
-
-	return strconv.FormatInt(number.Int64(), 10), nil
+	return &empty.Empty{}, nil
 }
 
 func (s *local) buildVMConfiguration(ctx context.Context, id string, cid uint32, req *proto.CreateVMRequest) (*firecracker.Config, error) {
@@ -310,6 +303,7 @@ func (s *local) getVM(id string) (*instance, error) {
 	s.vmLock.RUnlock()
 
 	if !ok {
+		log.L.Warnf("attempt to get not existing VM id: %s", id)
 		return nil, ErrVMNotFound
 	}
 

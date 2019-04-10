@@ -15,7 +15,7 @@ package service
 
 import (
 	"context"
-	"errors"
+	"fmt"
 
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/plugin"
@@ -28,15 +28,35 @@ import (
 func init() {
 	plugin.Register(&plugin.Registration{
 		Type: plugin.GRPCPlugin,
-		ID:   "fc-control",
+		ID:   grpcPluginID,
+		Requires: []plugin.Type{
+			plugin.ServicePlugin,
+		},
 		InitFn: func(ic *plugin.InitContext) (interface{}, error) {
-			log.G(ic.Context).Debug("initializing fc-control plugin")
-			return &service{}, nil
+			log.G(ic.Context).Debugf("initializing %s plugin", grpcPluginID)
+
+			list, err := ic.GetByType(plugin.ServicePlugin)
+			if err != nil {
+				return nil, err
+			}
+
+			item, ok := list[localPluginID]
+			if !ok {
+				return nil, fmt.Errorf("service %q not found", localPluginID)
+			}
+
+			instance, err := item.Instance()
+			if err != nil {
+				return nil, err
+			}
+
+			return &service{local: instance.(proto.FirecrackerServer)}, nil
 		},
 	})
 }
 
 type service struct {
+	local proto.FirecrackerServer
 }
 
 var _ proto.FirecrackerServer = (*service)(nil)
@@ -47,16 +67,26 @@ func (s *service) Register(server *grpc.Server) error {
 }
 
 func (s *service) CreateVM(ctx context.Context, req *proto.CreateVMRequest) (*proto.CreateVMResponse, error) {
-	log.G(ctx).Debug("create VM request: %+v", req)
-	return nil, errors.New("not implemented")
+	log.G(ctx).Debugf("create VM request: %+v", req)
+	return s.local.CreateVM(ctx, req)
 }
 
 func (s *service) StopVM(ctx context.Context, req *proto.StopVMRequest) (*empty.Empty, error) {
-	log.G(ctx).Debug("stop VM: %+v", req)
-	return nil, errors.New("not implemented")
+	log.G(ctx).Debugf("stop VM: %+v", req)
+	return s.local.StopVM(ctx, req)
 }
 
 func (s *service) GetVMAddress(ctx context.Context, req *proto.GetVMAddressRequest) (*proto.GetVMAddressResponse, error) {
-	log.G(ctx).Debug("get VM address: %+v", req)
-	return nil, errors.New("not implemented")
+	log.G(ctx).Debugf("get VM address: %+v", req)
+	return s.local.GetVMAddress(ctx, req)
+}
+
+func (s *service) GetFifoPath(ctx context.Context, req *proto.GetFifoPathRequest) (*proto.GetFifoPathResponse, error) {
+	log.G(ctx).Debugf("get fifo path: %+v", req)
+	return s.local.GetFifoPath(ctx, req)
+}
+
+func (s *service) SetVMMetadata(ctx context.Context, req *proto.SetVMMetadataRequest) (*empty.Empty, error) {
+	log.G(ctx).Debugf("set vm metadata: %+v", req)
+	return s.local.SetVMMetadata(ctx, req)
 }

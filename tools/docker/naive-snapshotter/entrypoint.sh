@@ -12,6 +12,6 @@ chmod a+rw ${FICD_SNAPSHOTTER_OUTFILE}
 
 touch ${FICD_CONTAINERD_OUTFILE}
 chmod a+rw ${FICD_CONTAINERD_OUTFILE}
-/usr/local/bin/containerd &>> ${FICD_CONTAINERD_OUTFILE} &
+/usr/local/bin/containerd --log-level debug &>> ${FICD_CONTAINERD_OUTFILE} &
 
 exec /bin/bash -c "$@"

@@ -24,7 +24,6 @@ import (
 const (
 	configPathEnvName = "FIRECRACKER_CONTAINERD_RUNTIME_CONFIG_PATH"
 	defaultConfigPath = "/etc/containerd/firecracker-runtime.json"
-	defaultSocketPath = "./firecracker.sock"
 	defaultKernelArgs = "console=ttyS0 noapic reboot=k panic=1 pci=off nomodules rw"
 	defaultFilesPath  = "/var/lib/firecracker-containerd/runtime/"
 	defaultKernelPath = defaultFilesPath + "default-vmlinux.bin"
@@ -34,18 +33,15 @@ const (
 
 // Config represents runtime configuration parameters
 type Config struct {
-	FirecrackerBinaryPath string            `json:"firecracker_binary_path"`
-	KernelImagePath       string            `json:"kernel_image_path"`
-	KernelArgs            string            `json:"kernel_args"`
-	RootDrive             string            `json:"root_drive"`
-	CPUCount              int               `json:"cpu_count"`
-	CPUTemplate           string            `json:"cpu_template"`
-	AdditionalDrives      map[string]string `json:"additional_drives"`
-	LogFifo               string            `json:"log_fifo"`
-	LogLevel              string            `json:"log_level"`
-	MetricsFifo           string            `json:"metrics_fifo"`
-	HtEnabled             bool              `json:"ht_enabled"`
-	Debug                 bool              `json:"debug"`
+	FirecrackerBinaryPath string `json:"firecracker_binary_path"`
+	KernelImagePath       string `json:"kernel_image_path"`
+	KernelArgs            string `json:"kernel_args"`
+	RootDrive             string `json:"root_drive"`
+	CPUCount              int    `json:"cpu_count"`
+	CPUTemplate           string `json:"cpu_template"`
+	LogLevel              string `json:"log_level"`
+	HtEnabled             bool   `json:"ht_enabled"`
+	Debug                 bool   `json:"debug"`
 }
 
 // LoadConfig loads configuration from JSON file at 'path'

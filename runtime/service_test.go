@@ -38,11 +38,11 @@ func TestFindNextAvailableVsockCID(t *testing.T) {
 		sysCall = syscall.Syscall
 	}()
 
-	cid, err := findNextAvailableVsockCID(context.Background())
+	_, err := findNextAvailableVsockCID(context.Background())
 	require.NoError(t, err,
 		"Do you have permission to interact with /dev/vhost-vsock?\n"+
 			"Grant yourself permission with `sudo setfacl -m u:${USER}:rw /dev/vhost-vsock`")
-	require.EqualValues(t, uint32(3), cid)
+	// we generate a random CID, so it's not possible to make assertions on its value
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

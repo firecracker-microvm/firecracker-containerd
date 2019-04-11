@@ -15,14 +15,23 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"math"
+	"strings"
+
+	// disable gosec check for math/rand. We just need a random starting
+	// place to start looking for CIDs; no need for cryptographically
+	// secure randomness
+	"math/rand" // #nosec
+
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 	"unsafe"
@@ -39,6 +48,7 @@ import (
 	"github.com/containerd/typeurl"
 	"github.com/firecracker-microvm/firecracker-go-sdk"
 	models "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
+	"github.com/gofrs/uuid"
 	ptypes "github.com/gogo/protobuf/types"
 	"github.com/mdlayher/vsock"
 	"github.com/pkg/errors"
@@ -48,20 +58,41 @@ import (
 	"github.com/firecracker-microvm/firecracker-containerd/eventbridge"
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
+	"github.com/firecracker-microvm/firecracker-containerd/runtime/firecrackeroci"
 )
+
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
 
 const (
 	defaultVsockPort     = 10789
 	supportedMountFSType = "ext4"
+
+	vmIDEnvVarKey = "FIRECRACKER_VM_ID"
+
+	varRunDir                  = "/var/run/firecracker-containerd"
+	firecrackerSockName        = "firecracker.sock"
+	firecrackerLogFifoName     = "fc-logs.fifo"
+	firecrackerMetricsFifoName = "fc-metrics.fifo"
+
+	// TODO these strings are hardcoded throughout the containerd codebase, it may
+	// be worth sending them a PR to define them as constants accessible to shim
+	// implementations like our own
+	shimAddrFileName = "address"
+	shimLogFifoName  = "log"
+	ociConfigName    = "config.json"
 )
 
 // implements shimapi
 type service struct {
 	server        *ttrpc.Server
 	id            string
+	vmID          string
 	publish       events.Publisher
 	eventExchange *exchange.Exchange
 
+	startVMMutex sync.Mutex
 	agentStarted bool
 	agentClient  taskAPI.TaskService
 	config       *Config
@@ -76,8 +107,78 @@ var (
 	sysCall = syscall.Syscall
 )
 
+func shimOpts(ctx context.Context) (*shim.Opts, error) {
+	opts, ok := ctx.Value(shim.OptsKey{}).(shim.Opts)
+	if !ok {
+		return nil, errors.New("failed to parse containerd shim opts from context")
+	}
+
+	return &opts, nil
+}
+
+// The bundle dir for the container can be provided by a containerd-defined flag, or, if that's
+// not set, it's assumed to be the current working directory of this process (as set by the
+// containerd parent process).
+func resolveBundleDir(ctx context.Context) (string, error) {
+	// Check to see if it was set by command line flag
+	opts, err := shimOpts(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	if opts.BundlePath != "" {
+		return opts.BundlePath, nil
+	}
+
+	// If no command line flag, this must be a shim start routine, so we can assume it's the
+	// current working directory
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", errors.Wrap(err, "failed to read bundle dir path")
+	}
+
+	return cwd, nil
+}
+
+// If the VMID was provided by the client, we'll find it in the OCI config Annotations section.
+// If, however, no VMID was provided in the OCI config, we it may have been set by a "shim start"
+// parent process as an env var. resolveVMID checks those two locations and returns the VMID
+// if found in either.
+func resolveVMID(ctx context.Context) (string, error) {
+	// If the vmID is provided via env var, use that
+	if vmID := os.Getenv(vmIDEnvVarKey); vmID != "" {
+		return vmID, nil
+	}
+
+	// if no env var, check the OCI config annotation section
+	bundleDir, err := resolveBundleDir(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	specPath := filepath.Join(bundleDir, ociConfigName)
+	ociConfigFile, err := os.Open(specPath)
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to open OCI config file %s", specPath)
+	}
+
+	defer ociConfigFile.Close()
+	var ociConfig struct {
+		Annotations map[string]string `json:"annotations,omitempty"`
+	}
+
+	if err := json.NewDecoder(ociConfigFile).Decode(&ociConfig); err != nil {
+		return "", errors.Wrapf(err, "failed to parse Annotations section of OCI config file %s", specPath)
+	}
+
+	// This will return empty string if the key is not present in the OCI config, which the caller can decided
+	// how to deal with
+	return ociConfig.Annotations[firecrackeroci.VMIDAnnotationKey], nil
+}
+
+var _ shim.Init = NewService
+
 // NewService creates new runtime shim.
-// Matches type Init func(..).. defined https://github.com/containerd/containerd/blob/master/runtime/v2/shim/shim.go#L47
 func NewService(ctx context.Context, id string, remotePublisher events.Publisher) (shim.Shim, error) {
 	server, err := newServer()
 	if err != nil {
@@ -90,8 +191,11 @@ func NewService(ctx context.Context, id string, remotePublisher events.Publisher
 	}
 
 	if !config.Debug {
-		// Check if containerd is running in debug mode
-		opts := ctx.Value(shim.OptsKey{}).(shim.Opts)
+		opts, err := shimOpts(ctx)
+		if err != nil {
+			return nil, err
+		}
+
 		config.Debug = opts.Debug
 	}
 
@@ -107,9 +211,25 @@ func NewService(ctx context.Context, id string, remotePublisher events.Publisher
 		}
 	}()
 
+	vmID, err := resolveVMID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// If no VMID was provided by the client or already auto-generated by a parent "shim start", generate a new random one.
+	// This results in a default behavior of running each container in its own VM.
+	if vmID == "" {
+		uuid, err := uuid.NewV4()
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to generate UUID for VMID")
+		}
+		vmID = uuid.String()
+	}
+
 	s := &service{
 		server:        server,
 		id:            id,
+		vmID:          vmID,
 		publish:       remotePublisher,
 		eventExchange: eventExchange,
 
@@ -119,41 +239,161 @@ func NewService(ctx context.Context, id string, remotePublisher events.Publisher
 	return s, nil
 }
 
+// vmDir holds files, sockets and FIFOs scoped to a single given VM
+func (s *service) vmDir() string {
+	return filepath.Join(varRunDir, s.vmID)
+}
+
+// shimAddrFilePath is the path to the shim address file as found in the vmDir. The
+// address file holds the abstract unix socket path at which the shim serves its API.
+// It's read by containerd to find the shim.
+func (s *service) shimAddrFilePath() string {
+	return filepath.Join(s.vmDir(), shimAddrFileName)
+}
+
+// bundleAddrFilePath is the path to the address file as found in the bundleDir.
+// Even though the shim address is set per-VM, not per-container, containerd expects
+// to find the shim addr file in the bundle dir, so we still have to create it or
+// symlink it to the shimAddrFilePath
+func (s *service) bundleAddrFilePath(ctx context.Context) (string, error) {
+	bundleDir, err := resolveBundleDir(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(bundleDir, shimAddrFileName), nil
+}
+
+// shimLogFifoPath is a path to a FIFO for writing shim logs as found in the vmDir.
+func (s *service) shimLogFifoPath() string {
+	return filepath.Join(s.vmDir(), shimLogFifoName)
+}
+
+// bundleLogFifoPath is a path to a FIFO for writing shim logs as found in the bundleDir.
+// It is the path created by containerd for us, the shimLogFifoPath is just a symlink to one.
+func (s *service) bundleLogFifoPath(ctx context.Context) (string, error) {
+	bundleDir, err := resolveBundleDir(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(bundleDir, shimLogFifoName), nil
+}
+
+// shimSocketAddress is the abstract unix socket path at which our shim serves its API
+// It is unique per-VM.
+func (s *service) shimSocketAddress(ctx context.Context) (string, error) {
+	return shim.SocketAddress(ctx, s.vmID)
+}
+
+// firecrackerSockPath is the path to the firecracker VMM's API socket
+func (s *service) firecrackerSockPath() string {
+	return filepath.Join(s.vmDir(), firecrackerSockName)
+}
+
+// firecrackerLogFifoPath is the path to the firecracker VMM's log fifo
+func (s *service) firecrackerLogFifoPath() string {
+	return filepath.Join(s.vmDir(), firecrackerLogFifoName)
+}
+
+// firecrackerMetricsFifoPath is the path to the firecracker VMM's metrics fifo
+func (s *service) firecrackerMetricsFifoPath() string {
+	return filepath.Join(s.vmDir(), firecrackerMetricsFifoName)
+}
+
+// containerd expects there to be a file named "address" in the container bundle directory (it contains the
+// unix abstract address at which the shim managing that container can be found). We create that file in the
+// shim's VM directory and then symlink to it from each container's bundle dir.
+func (s *service) createAddressSymlink(ctx context.Context) error {
+	bundleAddrFilePath, err := s.bundleAddrFilePath(ctx)
+	if err != nil {
+		return err
+	}
+
+	err = os.Symlink(s.shimAddrFilePath(), bundleAddrFilePath)
+	if err != nil {
+		return errors.Wrapf(err, `failed to create shim address file symlink from "%s"->"%s"`, bundleAddrFilePath, s.shimAddrFilePath())
+	}
+
+	return nil
+}
+
+// containerd creates a fifo for writing shim logs every time it spins up a container in the container's bundle dir.
+// Code defined as part containerd packages also assume there to be a fifo name "log" in the current working directory
+// of the shim. Our shim's working directory after initialization is the vmID dir, so we create a symlink from
+// <vmdir>/log to the log fifo of the first container spun up for the shim.
+func (s *service) createShimLogFifoSymlink(ctx context.Context) error {
+	bundleLogFifoPath, err := s.bundleLogFifoPath(ctx)
+	if err != nil {
+		return err
+	}
+
+	err = os.Symlink(bundleLogFifoPath, s.shimLogFifoPath())
+	if err != nil {
+		return errors.Wrapf(err, `failed to create shim log fifo symlink from "%s"->"%s"`, s.shimLogFifoPath(), bundleLogFifoPath)
+	}
+
+	return nil
+}
+
+func isEADDRINUSE(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "address already in use")
+}
+
 func (s *service) StartShim(ctx context.Context, id, containerdBinary, containerdAddress string) (string, error) {
 	log.G(ctx).WithField("id", id).Debug("StartShim")
-	cmd, err := s.newCommand(ctx, containerdBinary, containerdAddress)
+
+	shimSocketAddress, err := s.shimSocketAddress(ctx)
 	if err != nil {
 		return "", err
 	}
 
-	address, err := shim.SocketAddress(ctx, id)
-	if err != nil {
-		return "", err
+	// We determine if there is already a shim managing a VM with the current VMID by attempting
+	// to listen on the abstract socket address (which is parameterized by VMID). If we get
+	// EADDRINUSE, then we assume there is already a shim for the VM and just hand off to that
+	// one. This is in line with the approach used by containerd's reference runC shim v2
+	// implementation (which is also designed to manage multiple containers from a single shim
+	// process)
+	shimSocket, err := shim.NewSocket(shimSocketAddress)
+	if isEADDRINUSE(err) {
+		// There's already a shim for this VMID, so just hand off to it
+		err = s.createAddressSymlink(ctx)
+		if err != nil {
+			return "", err
+		}
+
+		return shimSocketAddress, nil
+	} else if err != nil {
+		return "", errors.Wrapf(err, "failed to create new shim socket at address \"%s\"", shimSocketAddress)
 	}
 
-	socket, err := shim.NewSocket(address)
-	if err != nil {
-		return "", err
-	}
-
+	// If we're here, there is no pre-existing shim for this VMID, so we spawn a new one
 	defer func() {
 		log.G(ctx).WithField("id", id).Debug("closing shim socket")
-		socket.Close()
+		shimSocket.Close()
 	}()
 
-	f, err := socket.File()
+	err = os.MkdirAll(s.vmDir(), 0700)
 	if err != nil {
 		return "", err
 	}
 
+	shimSocketFile, err := shimSocket.File()
+	if err != nil {
+		return "", err
+	}
 	defer func() {
 		log.G(ctx).WithField("id", id).Debug("closing shim socket file")
-		f.Close()
+		shimSocketFile.Close()
 	}()
 
-	cmd.ExtraFiles = append(cmd.ExtraFiles, f)
+	cmd, err := s.newCommand(ctx, id, containerdBinary, containerdAddress, shimSocketFile)
+	if err != nil {
+		return "", err
+	}
 
-	if err := cmd.Start(); err != nil {
+	err = cmd.Start()
+	if err != nil {
 		log.G(ctx).WithError(err).WithField("id", id).Error("Failed to Start()")
 		return "", err
 	}
@@ -171,22 +411,30 @@ func (s *service) StartShim(ctx context.Context, id, containerdBinary, container
 		waitErr := cmd.Wait()
 		log.G(ctx).WithError(waitErr).WithField("id", id).Debug("completed waiting on shim process")
 	}()
-	if err := shim.WritePidFile("shim.pid", cmd.Process.Pid); err != nil {
-		log.G(ctx).WithError(err).WithField("id", id).Error("failed to write pid file")
-		return "", err
-	}
 
-	if err := shim.WriteAddress("address", address); err != nil {
+	err = shim.WriteAddress(s.shimAddrFilePath(), shimSocketAddress)
+	if err != nil {
 		log.G(ctx).WithError(err).WithField("id", id).Error("failed to write address")
 		return "", err
 	}
 
-	if err := shim.SetScore(cmd.Process.Pid); err != nil {
+	err = s.createAddressSymlink(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	err = s.createShimLogFifoSymlink(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	err = shim.SetScore(cmd.Process.Pid)
+	if err != nil {
 		log.G(ctx).WithError(err).WithField("id", id).Error("failed to set OOM score on shim")
 		return "", errors.Wrap(err, "failed to set OOM Score on shim")
 	}
 
-	return address, nil
+	return shimSocketAddress, nil
 }
 
 func (s *service) Create(ctx context.Context, request *taskAPI.CreateTaskRequest) (*taskAPI.CreateTaskResponse, error) {
@@ -215,11 +463,14 @@ func (s *service) Create(ctx context.Context, request *taskAPI.CreateTaskRequest
 			return nil, errors.Wrapf(err, "unmarshaling task create request options")
 		}
 	}
-	// TODO: should there be a lock here
+
+	// TODO: handle case where VM is pre-created
+	s.startVMMutex.Lock()
 	if !s.agentStarted {
 		log.G(ctx).WithField("id", request.ID).Debug("calling startVM")
 		client, err := s.startVM(ctx, request, firecrackerConfig)
 		if err != nil {
+			s.startVMMutex.Unlock()
 			log.G(ctx).WithError(err).WithField("id", request.ID).Error("failed to start VM")
 			return nil, err
 		}
@@ -227,6 +478,7 @@ func (s *service) Create(ctx context.Context, request *taskAPI.CreateTaskRequest
 		s.agentClient = client
 		s.agentStarted = true
 	}
+	s.startVMMutex.Unlock()
 
 	log.G(ctx).WithField("id", request.ID).Info("creating task")
 
@@ -425,11 +677,18 @@ func (s *service) Shutdown(ctx context.Context, req *taskAPI.ShutdownRequest) (*
 	if _, err := s.agentClient.Shutdown(ctx, req); err != nil {
 		log.G(ctx).WithError(err).Error("failed to shutdown agent")
 	}
+
 	log.G(ctx).Debug("stopping VM")
 	if err := s.stopVM(); err != nil {
 		log.G(ctx).WithError(err).Error("failed to stop VM")
 		return nil, err
 	}
+
+	if err := os.RemoveAll(s.vmDir()); err != nil {
+		log.G(ctx).WithError(err).Errorf("failed to remove VM dir %s", s.vmDir())
+		return nil, err
+	}
+
 	s.cancel()
 	// Exit to avoid 'zombie' shim processes
 	defer os.Exit(0)
@@ -479,7 +738,7 @@ func (s *service) Cleanup(ctx context.Context) (*taskAPI.DeleteResponse, error) 
 	}, nil
 }
 
-func (s *service) newCommand(ctx context.Context, containerdBinary, containerdAddress string) (*exec.Cmd, error) {
+func (s *service) newCommand(ctx context.Context, id, containerdBinary, containerdAddress string, shimSocketFile *os.File) (*exec.Cmd, error) {
 	ns, err := namespaces.NamespaceRequired(ctx)
 	if err != nil {
 		return nil, err
@@ -490,13 +749,15 @@ func (s *service) newCommand(ctx context.Context, containerdBinary, containerdAd
 		return nil, err
 	}
 
-	cwd, err := os.Getwd()
+	bundleDir, err := resolveBundleDir(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	args := []string{
 		"-namespace", ns,
+		"-bundle", bundleDir,
+		"-id", id,
 		"-address", containerdAddress,
 		"-publish-binary", containerdBinary,
 	}
@@ -506,8 +767,11 @@ func (s *service) newCommand(ctx context.Context, containerdBinary, containerdAd
 	}
 
 	cmd := exec.Command(self, args...)
-	cmd.Dir = cwd
-	cmd.Env = append(os.Environ(), "GOMAXPROCS=2")
+	cmd.Dir = s.vmDir()
+	cmd.Env = append(os.Environ(),
+		"GOMAXPROCS=2",
+		fmt.Sprintf("%s=%s", vmIDEnvVarKey, s.vmID))
+	cmd.ExtraFiles = append(cmd.ExtraFiles, shimSocketFile)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Setpgid: true,
 	}
@@ -556,7 +820,7 @@ func findNextAvailableVsockCID(ctx context.Context) (uint32, error) {
 		// Corresponds to VHOST_VSOCK_SET_GUEST_CID in vhost.h
 		ioctlVsockSetGuestCID = uintptr(0x4008AF60)
 		// 0, 1 and 2 are reserved CIDs, see http://man7.org/linux/man-pages/man7/vsock.7.html
-		startCID        = 3
+		minCID          = 3
 		maxCID          = math.MaxUint32
 		vsockDevicePath = "/dev/vhost-vsock"
 	)
@@ -565,15 +829,18 @@ func findNextAvailableVsockCID(ctx context.Context) (uint32, error) {
 	if err != nil {
 		return 0, errors.Wrap(err, "failed to open vsock device")
 	}
-
 	defer file.Close()
 
-	for contextID := startCID; contextID < maxCID; contextID++ {
+	// Start at a random ID to minimize chances of conflicts when shims are racing each other here
+	// TODO the actual fix to this problem will come when the shim is updated to just use the FC-control plugin,
+	// this current implementation is a very short-term bandaid.
+	start := rand.Intn(maxCID - minCID)
+	for n := 0; n < maxCID-minCID; n++ {
+		cid := minCID + ((start + n) % (maxCID - minCID))
 		select {
 		case <-ctx.Done():
 			return 0, ctx.Err()
 		default:
-			cid := contextID
 			_, _, err = sysCall(
 				unix.SYS_IOCTL,
 				file.Fd(),
@@ -582,7 +849,7 @@ func findNextAvailableVsockCID(ctx context.Context) (uint32, error) {
 
 			switch err {
 			case unix.Errno(0):
-				return uint32(contextID), nil
+				return uint32(cid), nil
 			case unix.EADDRINUSE:
 				// ID is already taken, try next one
 				continue
@@ -614,6 +881,7 @@ func parseCreateTaskOpts(ctx context.Context, opts *ptypes.Any) (*proto.Firecrac
 	return nil, opts, nil
 }
 
+// TODO: replace startVM with calls to the FC-control plugin
 func (s *service) startVM(ctx context.Context,
 	request *taskAPI.CreateTaskRequest,
 	vmConfig *proto.FirecrackerConfig,
@@ -626,7 +894,7 @@ func (s *service) startVM(ctx context.Context,
 	}
 
 	cfg := firecracker.Config{
-		SocketPath:      defaultSocketPath,
+		SocketPath:      s.firecrackerSockPath(),
 		VsockDevices:    []firecracker.VsockDevice{{Path: "root", CID: cid}},
 		KernelImagePath: s.config.KernelImagePath,
 		KernelArgs:      s.config.KernelArgs,
@@ -635,9 +903,9 @@ func (s *service) startVM(ctx context.Context,
 			CPUTemplate: models.CPUTemplate(s.config.CPUTemplate),
 			MemSizeMib:  256,
 		},
-		LogFifo:     s.config.LogFifo,
+		LogFifo:     s.firecrackerLogFifoPath(),
 		LogLevel:    s.config.LogLevel,
-		MetricsFifo: s.config.MetricsFifo,
+		MetricsFifo: s.firecrackerMetricsFifoPath(),
 		Debug:       s.config.Debug,
 	}
 
@@ -659,10 +927,11 @@ func (s *service) startVM(ctx context.Context,
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build VM options")
 	}
+
 	cfg.Drives = driveBuilder.Build()
 	cmd := firecracker.VMCommandBuilder{}.
 		WithBin(s.config.FirecrackerBinaryPath).
-		WithSocketPath(defaultSocketPath).
+		WithSocketPath(s.firecrackerSockPath()).
 		Build(ctx)
 	machineOpts := []firecracker.Opt{
 		firecracker.WithProcessRunner(cmd),

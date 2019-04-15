@@ -53,3 +53,8 @@ require (
 	google.golang.org/grpc v1.16.0
 	gotest.tools v2.2.0+incompatible
 )
+
+// Workaround issues pulling specific commits of /x/sys experienced by our build
+// instances. The commit ID was the HEAD of the release 1.12 branch at the time
+// of this commit.
+replace golang.org/x/sys => golang.org/x/sys v0.0.0-20190209173611-3b5209105503

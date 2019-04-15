@@ -14,18 +14,15 @@
 package service
 
 import (
-	"crypto/rand"
 	"fmt"
-	"math"
-	"math/big"
 	"os"
 	"path/filepath"
-	"strconv"
 	"sync"
 
+	"github.com/containerd/containerd/events"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/plugin"
-	"github.com/firecracker-microvm/firecracker-go-sdk"
+	firecracker "github.com/firecracker-microvm/firecracker-go-sdk"
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -48,25 +45,31 @@ func init() {
 	})
 }
 
-// TODO: Remove this interface after merging PR #91
-// See https://github.com/firecracker-microvm/firecracker-go-sdk/pull/91
-type machineIface interface {
-	Start(context.Context) error
-	StopVMM() error
-	Wait(context.Context) error
-	SetMetadata(context.Context, interface{}) error
+const (
+	startEventName = "/firecracker-vm/start"
+	stopEventName  = "/firecracker-vm/stop"
+)
+
+// Wrap interface in order to properly generate mock with mockgen
+type machine interface {
+	firecracker.MachineIface
+}
+
+type publisher interface {
+	events.Publisher
 }
 
 type instance struct {
 	cfg     *firecracker.Config
-	machine machineIface
+	machine machine
 }
 
 type local struct {
 	vm          map[string]*instance
 	vmLock      sync.RWMutex
 	rootPath    string
-	findVsockFn func(context.Context) (uint32, error)
+	publisher   publisher
+	findVsockFn func(context.Context) (*os.File, uint32, error)
 }
 
 func newLocal(ic *plugin.InitContext) (*local, error) {
@@ -77,20 +80,39 @@ func newLocal(ic *plugin.InitContext) (*local, error) {
 	return &local{
 		vm:          make(map[string]*instance),
 		rootPath:    ic.Root,
+		publisher:   ic.Events,
 		findVsockFn: findNextAvailableVsockCID,
 	}, nil
 }
 
 // CreateVM creates new Firecracker VM instance
-func (s *local) CreateVM(ctx context.Context, req *proto.CreateVMRequest) (*proto.CreateVMResponse, error) {
-	id, err := s.makeID()
-	if err != nil {
-		return nil, err
+func (s *local) CreateVM(ctx context.Context, req *proto.CreateVMRequest) (*empty.Empty, error) {
+	var (
+		id     = req.GetVMID()
+		logger = log.G(ctx).WithField("vm_id", id)
+	)
+
+	if id == "" {
+		return nil, errors.New("invalid VM ID")
 	}
 
-	logger := log.G(ctx).WithField("vm_id", id)
+	// TODO: this makes running VMs sequential, consider optimizing locking mechanism
+	s.vmLock.Lock()
+	defer s.vmLock.Unlock()
 
-	cfg, err := s.buildVMConfiguration(ctx, id, req)
+	// Make sure VM ID unique
+	if _, ok := s.vm[id]; ok {
+		return nil, errors.Errorf("VM with id %q already exists", id)
+	}
+
+	vsockDescriptor, cid, err := s.findVsockFn(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to find available cid for vsock")
+	}
+
+	defer vsockDescriptor.Close()
+
+	cfg, err := s.buildVMConfiguration(ctx, id, cid, req)
 	if err != nil {
 		return nil, err
 	}
@@ -102,6 +124,9 @@ func (s *local) CreateVM(ctx context.Context, req *proto.CreateVMRequest) (*prot
 		logger.WithError(err).Error("failed to create new machine instance")
 		return nil, err
 	}
+
+	// Release vsock CID so Firecracker instance can reacquire it.
+	vsockDescriptor.Close()
 
 	if err := s.startMachine(ctx, id, machine); err != nil {
 		logger.WithError(err).Error("failed to start VM instance")
@@ -115,31 +140,15 @@ func (s *local) CreateVM(ctx context.Context, req *proto.CreateVMRequest) (*prot
 		machine: machine,
 	}
 
-	s.vmLock.Lock()
 	s.vm[id] = newInstance
-	s.vmLock.Unlock()
-
-	return &proto.CreateVMResponse{
-		VMID: id,
-	}, nil
+	return &empty.Empty{}, nil
 }
 
-func (s *local) makeID() (string, error) {
-	number, err := rand.Int(rand.Reader, big.NewInt(math.MaxInt32))
-	if err != nil {
-		return "", err
-	}
-
-	return strconv.FormatInt(number.Int64(), 10), nil
-}
-
-func (s *local) buildVMConfiguration(ctx context.Context, id string, req *proto.CreateVMRequest) (*firecracker.Config, error) {
-	logger := log.G(ctx).WithField("vm_id", id)
-
-	cid, err := s.findVsockFn(ctx)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to find available cid for vsock")
-	}
+func (s *local) buildVMConfiguration(ctx context.Context, id string, cid uint32, req *proto.CreateVMRequest) (*firecracker.Config, error) {
+	var (
+		err    error
+		logger = log.G(ctx).WithField("vm_id", id)
+	)
 
 	vsockDevices := []firecracker.VsockDevice{
 		{Path: "root", CID: cid},
@@ -193,7 +202,7 @@ func (s *local) buildVMConfiguration(ctx context.Context, id string, req *proto.
 }
 
 // startMachine attempts to start an instance within timeout and runs a goroutine to monitor VM exit event
-func (s *local) startMachine(ctx context.Context, id string, machine machineIface) error {
+func (s *local) startMachine(ctx context.Context, id string, machine machine) error {
 	logger := log.G(ctx).WithField("vm_id", id)
 
 	logger.Info("starting VM instance")
@@ -206,9 +215,20 @@ func (s *local) startMachine(ctx context.Context, id string, machine machineIfac
 		return err
 	}
 
+	if err := s.publisher.Publish(ctx, startEventName, &proto.VMStart{VMID: id}); err != nil {
+		logger.WithError(err).Error("failed to publish start event")
+		return err
+	}
+
 	go func() {
-		if err := machine.Wait(context.Background()); err != nil {
+		ctx := context.Background()
+
+		if err := machine.Wait(ctx); err != nil {
 			logger.WithError(err).Error("failed to wait the VM")
+		}
+
+		if err := s.publisher.Publish(ctx, stopEventName, &proto.VMStop{VMID: id}); err != nil {
+			logger.WithError(err).Error("failed to publish stop event")
 		}
 
 		logger.Debug("removing machine")

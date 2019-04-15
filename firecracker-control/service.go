@@ -66,7 +66,7 @@ func (s *service) Register(server *grpc.Server) error {
 	return nil
 }
 
-func (s *service) CreateVM(ctx context.Context, req *proto.CreateVMRequest) (*proto.CreateVMResponse, error) {
+func (s *service) CreateVM(ctx context.Context, req *proto.CreateVMRequest) (*empty.Empty, error) {
 	log.G(ctx).Debugf("create VM request: %+v", req)
 	return s.local.CreateVM(ctx, req)
 }

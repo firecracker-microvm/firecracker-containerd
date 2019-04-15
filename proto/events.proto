@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+message VMStart {
+    string VMID = 1;
+}
+
+message VMStop {
+    string VMID = 1;
+}

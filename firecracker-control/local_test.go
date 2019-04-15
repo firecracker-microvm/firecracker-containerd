@@ -17,6 +17,7 @@ package service
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -44,10 +45,10 @@ func TestLocal_buildVMConfiguration(t *testing.T) {
 
 	obj := &local{
 		rootPath:    "/",
-		findVsockFn: func(context.Context) (uint32, error) { return 3, nil },
+		findVsockFn: func(context.Context) (*os.File, uint32, error) { return nil, 3, nil },
 	}
 
-	config, err := obj.buildVMConfiguration(testCtx, "1", request)
+	config, err := obj.buildVMConfiguration(testCtx, "1", 3, request)
 	assert.NoError(t, err)
 	assert.NotNil(t, config)
 
@@ -78,40 +79,34 @@ func TestLocal_buildVMConfiguration(t *testing.T) {
 func TestLocal_buildInvalidConfiguration(t *testing.T) {
 	obj := &local{
 		rootPath:    "/",
-		findVsockFn: func(context.Context) (uint32, error) { return 3, nil },
+		findVsockFn: func(context.Context) (*os.File, uint32, error) { return nil, 3, nil },
 	}
 
 	request := &proto.CreateVMRequest{}
 
-	_, err := obj.buildVMConfiguration(testCtx, "1", request)
+	_, err := obj.buildVMConfiguration(testCtx, "1", 3, request)
 	assert.EqualError(t, err, "invalid machine configuration")
 
 	request.MachineCfg = &proto.FirecrackerMachineConfiguration{}
-	_, err = obj.buildVMConfiguration(testCtx, "1", request)
+	_, err = obj.buildVMConfiguration(testCtx, "1", 3, request)
 	assert.EqualError(t, err, "root drive can't be empty")
-}
-
-func TestLocal_makeID(t *testing.T) {
-	obj := local{}
-	id1, err := obj.makeID()
-	assert.NoError(t, err)
-	assert.NotEmpty(t, id1)
-
-	id2, err := obj.makeID()
-	assert.NoError(t, err)
-	assert.NotEqual(t, id1, id2)
 }
 
 func TestLocal_startMachine(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	machine := NewMockmachineIface(ctrl)
+	machine := NewMockmachine(ctrl)
 	machine.EXPECT().Start(gomock.Any()).Times(1).Return(nil)
 	machine.EXPECT().Wait(gomock.Any()).Times(1).Return(nil)
 
+	publisher := NewMockpublisher(ctrl)
+	publisher.EXPECT().Publish(gomock.Any(), startEventName, gomock.Eq(&proto.VMStart{VMID: "1"})).Return(nil)
+	publisher.EXPECT().Publish(gomock.Any(), stopEventName, gomock.Eq(&proto.VMStop{VMID: "1"})).Return(nil)
+
 	obj := &local{
-		vm: map[string]*instance{"1": {}},
+		vm:        map[string]*instance{"1": {}},
+		publisher: publisher,
 	}
 
 	err := obj.startMachine(testCtx, "1", machine)
@@ -124,7 +119,7 @@ func TestLocal_StopVM(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	machine := NewMockmachineIface(ctrl)
+	machine := NewMockmachine(ctrl)
 	machine.EXPECT().StopVMM().Times(1).Return(nil)
 
 	obj := &local{
@@ -170,7 +165,7 @@ func TestLocal_SetVMMetadata(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	machine := NewMockmachineIface(ctrl)
+	machine := NewMockmachine(ctrl)
 	machine.EXPECT().SetMetadata(gomock.Any(), gomock.Eq("test")).Times(1).Return(nil)
 
 	obj := &local{

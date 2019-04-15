@@ -50,6 +50,8 @@ github.com/docker/go-units v0.3.3 h1:Xk8S3Xj5sLGlG5g67hJmYMmUgXv5N4PhkjJHHqrwnTk
 github.com/docker/go-units v0.3.3/go.mod h1:fgPhTUdO+D/Jk86RDLlptpiXQzgHJF7gydDDbaIK4Dk=
 github.com/firecracker-microvm/firecracker-go-sdk v0.15.2-0.20190321195537-b704cc3feb1e h1:LQKqzqwiUYtucykGP3WDaH8wfULY8v86HFSW95T+k+E=
 github.com/firecracker-microvm/firecracker-go-sdk v0.15.2-0.20190321195537-b704cc3feb1e/go.mod h1:QcNsz2gYkcTI/zAQl3dYeLwf7KxtjKnt7aGklhn9yYk=
+github.com/firecracker-microvm/firecracker-go-sdk v0.15.2-0.20190410183546-4f11ac73a965 h1:QKioOzqmg7DY/YDhGLYZsP8bq2T3BahVHdyPsf0uq/E=
+github.com/firecracker-microvm/firecracker-go-sdk v0.15.2-0.20190410183546-4f11ac73a965/go.mod h1:QcNsz2gYkcTI/zAQl3dYeLwf7KxtjKnt7aGklhn9yYk=
 github.com/globalsign/mgo v0.0.0-20180905125535-1ca0a4f7cbcb h1:D4uzjWwKYQ5XnAvUbuvHW93esHg7F8N/OYeBBcJoTr0=
 github.com/globalsign/mgo v0.0.0-20180905125535-1ca0a4f7cbcb/go.mod h1:xkRDCp4j0OGD1HRkm4kmhM+pmpv3AKq5SU7GMg4oO/Q=
 github.com/go-ole/go-ole v1.2.4 h1:nNBDSCOigTSiarFpYE9J/KtEA1IOW4CNeqT9TQDqCxI=

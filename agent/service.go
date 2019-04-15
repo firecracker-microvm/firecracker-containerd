@@ -15,30 +15,29 @@ package main
 
 import (
 	"context"
-	"io"
-	"io/ioutil"
 	"net"
-	"os"
 	"path/filepath"
-	"syscall"
+	"runtime/debug"
+	"time"
 
 	"github.com/containerd/containerd/cio"
+	"github.com/containerd/containerd/events/exchange"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/namespaces"
-	"github.com/containerd/containerd/runtime/v2/shim"
-	shimapi "github.com/containerd/containerd/runtime/v2/task"
-	"github.com/containerd/fifo"
+	"github.com/containerd/containerd/runtime/v2/runc"
+	taskAPI "github.com/containerd/containerd/runtime/v2/task"
 	"github.com/gogo/protobuf/types"
 	"github.com/mdlayher/vsock"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
-	"github.com/firecracker-microvm/firecracker-containerd/internal"
+	"github.com/firecracker-microvm/firecracker-containerd/internal/bundle"
+	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
 	proto "github.com/firecracker-microvm/firecracker-containerd/proto/grpc"
 )
 
 const (
-	bundleMountPath  = "/container"
-	defaultStdioPath = "/container/fifo"
+	containerRootDir = "/container"
 )
 
 // TaskService represents inner shim wrapper over runc in order to:
@@ -46,134 +45,165 @@ const (
 // - Add debug logging to simplify debugging
 // - Make place for future extensions as needed
 type TaskService struct {
-	runc    shim.Shim
-	cancels []context.CancelFunc
-	io      *cio.FIFOSet
+	taskManager vm.TaskManager
+
+	eventExchange *exchange.Exchange
+	cancel        func()
 }
 
 // NewTaskService creates new runc shim wrapper
-func NewTaskService(runc shim.Shim, cancel context.CancelFunc) shimapi.TaskService {
+func NewTaskService(eventExchange *exchange.Exchange, cancel context.CancelFunc) taskAPI.TaskService {
 	return &TaskService{
-		runc:    runc,
-		cancels: []context.CancelFunc{cancel},
+		taskManager: vm.NewTaskManager(),
+
+		eventExchange: eventExchange,
+		cancel:        cancel,
 	}
+}
+
+func logPanicAndDie(logger *logrus.Entry) {
+	if err := recover(); err != nil {
+		logger.WithError(err.(error)).Fatalf("panic: %s", string(debug.Stack()))
+	}
+}
+
+func unmarshalExtraData(marshalled *types.Any) (*proto.ExtraData, error) {
+	// get json bytes from task request
+	extraData := &proto.ExtraData{}
+	err := types.UnmarshalAny(marshalled, extraData)
+	if err != nil {
+		return nil, err
+	}
+
+	return extraData, nil
 }
 
 // Create creates a new initial process and container using runc
-func (ts *TaskService) Create(ctx context.Context, req *shimapi.CreateTaskRequest) (*shimapi.CreateTaskResponse, error) {
-	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "bundle": req.Bundle}).Info("create")
+func (ts *TaskService) Create(ctx context.Context, req *taskAPI.CreateTaskRequest) (*taskAPI.CreateTaskResponse, error) {
+	defer logPanicAndDie(log.G(ctx))
+	logger := log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "bundle": req.Bundle})
+	logger.Info("create")
 
-	// Passthrough runcOptions
-	opts, err := unpackBundle(filepath.Join(bundleMountPath, "config.json"), req.Options)
+	extraData, err := unmarshalExtraData(req.Options)
 	if err != nil {
 		return nil, err
 	}
-	req.Options = opts
-	// Use mount path instead of bundle path inside the VM
-	req.Bundle = bundleMountPath
 
-	// Do not pass any mounts to runc, everything is already mounted for us
+	bundleDir := bundle.Dir(filepath.Join(containerRootDir, req.ID))
+	err = bundleDir.Create()
+	if err != nil {
+		return nil, err
+	}
+
+	err = bundleDir.OCIConfig().Write(extraData.JsonSpec)
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO replace with proper drive mounting once that PR is merged. Right now, all containers in
+	// this VM start up with the same rootfs image no matter their configuration
+	err = bundleDir.MountRootfs("/dev/vdb", "ext4", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a runc shim to manage this task
+	// TODO if we update to the v2 runc implementation in containerd, we can use a single
+	// runc service instance to manage all tasks instead of creating a new one for each
+	runcService, err := runc.New(ctx, req.ID, ts.eventExchange)
+	if err != nil {
+		return nil, err
+	}
+
+	// Override the incoming stdio FIFOs, which have paths from the host that we can't use
+	fifoSet, err := cio.NewFIFOSetInDir(bundleDir.RootPath(), req.ID, req.Terminal)
+	if err != nil {
+		log.G(ctx).WithError(err).Error("failed opening stdio FIFOs")
+		return nil, err
+	}
+
+	// Don't try to connect any io streams that weren't requested by the client
+	if req.Stdin == "" {
+		fifoSet.Stdin = ""
+	}
+
+	if req.Stdout == "" {
+		fifoSet.Stdout = ""
+	}
+
+	if req.Stderr == "" {
+		fifoSet.Stderr = ""
+	}
+
+	task, err := ts.taskManager.AddTask(ctx, req.ID, runcService, bundleDir, extraData, fifoSet)
+	if err != nil {
+		return nil, err
+	}
+
+	logger.Debug("calling runc create")
+
+	// Override some of the incoming paths, which were set on the Host and thus not valid here in the Guest
+	req.Bundle = bundleDir.RootPath()
 	req.Rootfs = nil
-	// handle STDIO
-	ts.io, err = cio.NewFIFOSetInDir(defaultStdioPath, req.ID, req.Terminal)
-	if err != nil {
-		log.G(ctx).WithError(err).Error("error proxying io")
-		return nil, err
-	}
-	req.Stdin = ts.io.Stdin
-	req.Stderr = ts.io.Stderr
-	req.Stdout = ts.io.Stdout
-	ioctx, cancel := context.WithCancel(ctx)
-	ts.cancels = append(ts.cancels, cancel)
-	ts.proxyStdio(ioctx, req.Stdin, req.Stdout, req.Stderr)
-	// before create call ensure we remove any existing .init.pid file
-	// We can ignore errors since it's valid for the file to not be present
-	os.Remove(".init.pid")
-	log.G(ctx).Debug("calling runc create")
-	resp, err := ts.runc.Create(ctx, req)
+	req.Stdin = fifoSet.Stdin
+	req.Stdout = fifoSet.Stdout
+	req.Stderr = fifoSet.Stderr
 
+	// Just provide runc the options it knows about, not our wrapper
+	req.Options = task.ExtraData().GetRuncOptions()
+
+	// Start the io proxy and wait for initialization to complete before starting
+	// the task to ensure we capture all task output
+	err = <-task.StartStdioProxy(ctx, vm.VSockToFIFO, acceptVSock)
 	if err != nil {
-		log.G(ctx).WithError(err).Error("error creating container")
 		return nil, err
 	}
 
-	log.G(ctx).WithField("pid", resp.Pid).Debugf("create succeeded")
+	resp, err := task.Create(ctx, req)
+	if err != nil {
+		logger.WithError(err).Error("error creating container")
+		return nil, err
+	}
+
+	logger.WithField("pid", resp.Pid).Debugf("create succeeded")
 	return resp, nil
 }
 
-func (ts *TaskService) proxyStdio(ctx context.Context, stdin, stdout, stderr string) {
-	go proxyIO(ctx, stdin, internal.StdinPort, true)
-	go proxyIO(ctx, stdout, internal.StdoutPort, false)
-	go proxyIO(ctx, stderr, internal.StderrPort, false)
-}
+var _ vm.VSockConnector = acceptVSock
 
-func proxyIO(ctx context.Context, path string, port uint32, in bool) {
-	if path == "" {
-		return
-	}
-	log.G(ctx).Debug("setting up IO for " + path)
-	f, err := fifo.OpenFifo(ctx, path, syscall.O_RDWR|syscall.O_NONBLOCK|syscall.O_CREAT, 0700)
-	if err != nil {
-		log.G(ctx).WithError(err).Error("error opening fifo")
-		return
-	}
+func acceptVSock(ctx context.Context, port uint32) (net.Conn, error) {
 	listener, err := vsock.Listen(port)
 	if err != nil {
-		log.G(ctx).WithError(err).Error("unable to listen on vsock")
-		f.Close()
-		return
+		return nil, errors.Wrap(err, "unable to listen on vsock")
 	}
 
 	var conn net.Conn
-	for {
-		// accept is non-blocking so try to accept until we get
-		// a connection
+	for range time.Tick(10 * time.Millisecond) {
+		// accept is non-blocking so try to accept until we get a connection
 		// TODO: investigate if there is a way to distinguish
 		// transient errors from permanent ones.
 		conn, err = listener.Accept()
-		if err != nil {
-			continue
+		if err == nil {
+			break
 		}
-		break
+		log.G(ctx).WithError(err).Debug("stdio vsock accept failure")
 	}
-	go func() {
-		<-ctx.Done()
-		conn.Close()
-		f.Close()
-	}()
-	log.G(ctx).Debug("begin copying io")
-	buf := make([]byte, internal.DefaultBufferSize)
-	if in {
-		_, err = io.CopyBuffer(f, conn, buf)
-	} else {
-		_, err = io.CopyBuffer(conn, f, buf)
-	}
-	if err != nil {
-		log.G(ctx).WithError(err).Error("error with stdio")
-	}
-}
 
-func unpackBundle(path string, bundle *types.Any) (*types.Any, error) {
-	// get json bytes from task request
-	extraData := &proto.ExtraData{}
-	err := types.UnmarshalAny(bundle, extraData)
-	if err != nil {
-		return nil, err
-	}
-	// write bundle/config.json bytes
-	err = ioutil.WriteFile(path, extraData.JsonSpec, 0644)
-	if err != nil {
-		return nil, err
-	}
-	return extraData.RuncOptions, nil
+	return conn, nil
 }
 
 // State returns process state information
-func (ts *TaskService) State(ctx context.Context, req *shimapi.StateRequest) (*shimapi.StateResponse, error) {
+func (ts *TaskService) State(ctx context.Context, req *taskAPI.StateRequest) (*taskAPI.StateResponse, error) {
+	defer logPanicAndDie(log.G(ctx))
+
 	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("state")
+	task, err := ts.taskManager.Task(req.ID)
+	if err != nil {
+		return nil, err
+	}
 
 	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
-	resp, err := ts.runc.State(ctx, req)
+	resp, err := task.State(ctx, req)
 	if err != nil {
 		log.G(ctx).WithError(err).Error("state failed")
 		return nil, err
@@ -189,11 +219,17 @@ func (ts *TaskService) State(ctx context.Context, req *shimapi.StateRequest) (*s
 }
 
 // Start starts a process
-func (ts *TaskService) Start(ctx context.Context, req *shimapi.StartRequest) (*shimapi.StartResponse, error) {
+func (ts *TaskService) Start(ctx context.Context, req *taskAPI.StartRequest) (*taskAPI.StartResponse, error) {
+	defer logPanicAndDie(log.G(ctx))
+
 	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("start")
+	task, err := ts.taskManager.Task(req.ID)
+	if err != nil {
+		return nil, err
+	}
 
 	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
-	resp, err := ts.runc.Start(ctx, req)
+	resp, err := task.Start(ctx, req)
 	if err != nil {
 		log.G(ctx).WithError(err).Error("start failed")
 		return nil, err
@@ -204,11 +240,17 @@ func (ts *TaskService) Start(ctx context.Context, req *shimapi.StartRequest) (*s
 }
 
 // Delete deletes the initial process and container
-func (ts *TaskService) Delete(ctx context.Context, req *shimapi.DeleteRequest) (*shimapi.DeleteResponse, error) {
+func (ts *TaskService) Delete(ctx context.Context, req *taskAPI.DeleteRequest) (*taskAPI.DeleteResponse, error) {
+	defer logPanicAndDie(log.G(ctx))
+
 	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("delete")
+	task, err := ts.taskManager.Task(req.ID)
+	if err != nil {
+		return nil, err
+	}
 
 	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
-	resp, err := ts.runc.Delete(ctx, req)
+	resp, err := task.Delete(ctx, req)
 	if err != nil {
 		log.G(ctx).WithError(err).Error("delete failed")
 		return nil, err
@@ -222,11 +264,17 @@ func (ts *TaskService) Delete(ctx context.Context, req *shimapi.DeleteRequest) (
 }
 
 // Pids returns all pids inside the container
-func (ts *TaskService) Pids(ctx context.Context, req *shimapi.PidsRequest) (*shimapi.PidsResponse, error) {
+func (ts *TaskService) Pids(ctx context.Context, req *taskAPI.PidsRequest) (*taskAPI.PidsResponse, error) {
+	defer logPanicAndDie(log.G(ctx))
+
 	log.G(ctx).WithField("id", req.ID).Debug("pids")
+	task, err := ts.taskManager.Task(req.ID)
+	if err != nil {
+		return nil, err
+	}
 
 	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
-	resp, err := ts.runc.Pids(ctx, req)
+	resp, err := task.Pids(ctx, req)
 	if err != nil {
 		log.G(ctx).WithError(err).Error("pids failed")
 		return nil, err
@@ -237,11 +285,17 @@ func (ts *TaskService) Pids(ctx context.Context, req *shimapi.PidsRequest) (*shi
 }
 
 // Pause pauses the container
-func (ts *TaskService) Pause(ctx context.Context, req *shimapi.PauseRequest) (*types.Empty, error) {
+func (ts *TaskService) Pause(ctx context.Context, req *taskAPI.PauseRequest) (*types.Empty, error) {
+	defer logPanicAndDie(log.G(ctx))
+
 	log.G(ctx).WithField("id", req.ID).Debug("pause")
+	task, err := ts.taskManager.Task(req.ID)
+	if err != nil {
+		return nil, err
+	}
 
 	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
-	resp, err := ts.runc.Pause(ctx, req)
+	resp, err := task.Pause(ctx, req)
 	if err != nil {
 		log.G(ctx).WithError(err).Error("pause failed")
 		return nil, err
@@ -252,11 +306,17 @@ func (ts *TaskService) Pause(ctx context.Context, req *shimapi.PauseRequest) (*t
 }
 
 // Resume resumes the container
-func (ts *TaskService) Resume(ctx context.Context, req *shimapi.ResumeRequest) (*types.Empty, error) {
+func (ts *TaskService) Resume(ctx context.Context, req *taskAPI.ResumeRequest) (*types.Empty, error) {
+	defer logPanicAndDie(log.G(ctx))
+
 	log.G(ctx).WithField("id", req.ID).Debug("resume")
+	task, err := ts.taskManager.Task(req.ID)
+	if err != nil {
+		return nil, err
+	}
 
 	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
-	resp, err := ts.runc.Resume(ctx, req)
+	resp, err := task.Resume(ctx, req)
 	if err != nil {
 		log.G(ctx).WithError(err).Debug("resume failed")
 		return nil, err
@@ -267,26 +327,38 @@ func (ts *TaskService) Resume(ctx context.Context, req *shimapi.ResumeRequest) (
 }
 
 // Checkpoint saves the state of the container instance
-func (ts *TaskService) Checkpoint(ctx context.Context, req *shimapi.CheckpointTaskRequest) (*types.Empty, error) {
+func (ts *TaskService) Checkpoint(ctx context.Context, req *taskAPI.CheckpointTaskRequest) (*types.Empty, error) {
+	defer logPanicAndDie(log.G(ctx))
+
 	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "path": req.Path}).Info("checkpoint")
+	task, err := ts.taskManager.Task(req.ID)
+	if err != nil {
+		return nil, err
+	}
 
 	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
-	resp, err := ts.runc.Checkpoint(ctx, req)
+	resp, err := task.Checkpoint(ctx, req)
 	if err != nil {
 		log.G(ctx).WithError(err).Error("checkout failed")
 		return nil, err
 	}
 
-	log.G(ctx).Debug("checkpoint succeeded")
+	log.G(ctx).Debug("checkpoint sutaskAPI")
 	return resp, nil
 }
 
 // Kill kills a process with the provided signal
-func (ts *TaskService) Kill(ctx context.Context, req *shimapi.KillRequest) (*types.Empty, error) {
+func (ts *TaskService) Kill(ctx context.Context, req *taskAPI.KillRequest) (*types.Empty, error) {
+	defer logPanicAndDie(log.G(ctx))
+
 	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("kill")
+	task, err := ts.taskManager.Task(req.ID)
+	if err != nil {
+		return nil, err
+	}
 
 	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
-	resp, err := ts.runc.Kill(ctx, req)
+	resp, err := task.Kill(ctx, req)
 	if err != nil {
 		log.G(ctx).WithError(err).Error("kill failed")
 		return nil, err
@@ -297,11 +369,17 @@ func (ts *TaskService) Kill(ctx context.Context, req *shimapi.KillRequest) (*typ
 }
 
 // Exec runs an additional process inside the container
-func (ts *TaskService) Exec(ctx context.Context, req *shimapi.ExecProcessRequest) (*types.Empty, error) {
+func (ts *TaskService) Exec(ctx context.Context, req *taskAPI.ExecProcessRequest) (*types.Empty, error) {
+	defer logPanicAndDie(log.G(ctx))
+
 	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("exec")
+	task, err := ts.taskManager.Task(req.ID)
+	if err != nil {
+		return nil, err
+	}
 
 	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
-	resp, err := ts.runc.Exec(ctx, req)
+	resp, err := task.Exec(ctx, req)
 	if err != nil {
 		log.G(ctx).WithError(err).Error("exec failed")
 		return nil, err
@@ -312,11 +390,17 @@ func (ts *TaskService) Exec(ctx context.Context, req *shimapi.ExecProcessRequest
 }
 
 // ResizePty resizes pty
-func (ts *TaskService) ResizePty(ctx context.Context, req *shimapi.ResizePtyRequest) (*types.Empty, error) {
+func (ts *TaskService) ResizePty(ctx context.Context, req *taskAPI.ResizePtyRequest) (*types.Empty, error) {
+	defer logPanicAndDie(log.G(ctx))
+
 	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("resize_pty")
+	task, err := ts.taskManager.Task(req.ID)
+	if err != nil {
+		return nil, err
+	}
 
 	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
-	resp, err := ts.runc.ResizePty(ctx, req)
+	resp, err := task.ResizePty(ctx, req)
 	if err != nil {
 		log.G(ctx).WithError(err).Error("resize_pty failed")
 		return nil, err
@@ -327,11 +411,17 @@ func (ts *TaskService) ResizePty(ctx context.Context, req *shimapi.ResizePtyRequ
 }
 
 // CloseIO closes all IO inside container
-func (ts *TaskService) CloseIO(ctx context.Context, req *shimapi.CloseIORequest) (*types.Empty, error) {
+func (ts *TaskService) CloseIO(ctx context.Context, req *taskAPI.CloseIORequest) (*types.Empty, error) {
+	defer logPanicAndDie(log.G(ctx))
+
 	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("close_io")
+	task, err := ts.taskManager.Task(req.ID)
+	if err != nil {
+		return nil, err
+	}
 
 	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
-	resp, err := ts.runc.CloseIO(ctx, req)
+	resp, err := task.CloseIO(ctx, req)
 	if err != nil {
 		log.G(ctx).WithError(err).Error("close io failed")
 		return nil, err
@@ -342,11 +432,17 @@ func (ts *TaskService) CloseIO(ctx context.Context, req *shimapi.CloseIORequest)
 }
 
 // Update updates running container
-func (ts *TaskService) Update(ctx context.Context, req *shimapi.UpdateTaskRequest) (*types.Empty, error) {
+func (ts *TaskService) Update(ctx context.Context, req *taskAPI.UpdateTaskRequest) (*types.Empty, error) {
+	defer logPanicAndDie(log.G(ctx))
+
 	log.G(ctx).WithField("id", req.ID).Debug("update")
+	task, err := ts.taskManager.Task(req.ID)
+	if err != nil {
+		return nil, err
+	}
 
 	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
-	resp, err := ts.runc.Update(ctx, req)
+	resp, err := task.Update(ctx, req)
 	if err != nil {
 		log.G(ctx).WithError(err).Error("update failed")
 		return nil, err
@@ -357,11 +453,17 @@ func (ts *TaskService) Update(ctx context.Context, req *shimapi.UpdateTaskReques
 }
 
 // Wait waits for a process to exit
-func (ts *TaskService) Wait(ctx context.Context, req *shimapi.WaitRequest) (*shimapi.WaitResponse, error) {
+func (ts *TaskService) Wait(ctx context.Context, req *taskAPI.WaitRequest) (*taskAPI.WaitResponse, error) {
+	defer logPanicAndDie(log.G(ctx))
+
 	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("wait")
+	task, err := ts.taskManager.Task(req.ID)
+	if err != nil {
+		return nil, err
+	}
 
 	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
-	resp, err := ts.runc.Wait(ctx, req)
+	resp, err := task.Wait(ctx, req)
 	if err != nil {
 		log.G(ctx).WithError(err).Error("wait failed")
 		return nil, err
@@ -372,11 +474,17 @@ func (ts *TaskService) Wait(ctx context.Context, req *shimapi.WaitRequest) (*shi
 }
 
 // Stats returns a process stats
-func (ts *TaskService) Stats(ctx context.Context, req *shimapi.StatsRequest) (*shimapi.StatsResponse, error) {
+func (ts *TaskService) Stats(ctx context.Context, req *taskAPI.StatsRequest) (*taskAPI.StatsResponse, error) {
+	defer logPanicAndDie(log.G(ctx))
+
 	log.G(ctx).WithField("id", req.ID).Debug("stats")
+	task, err := ts.taskManager.Task(req.ID)
+	if err != nil {
+		return nil, err
+	}
 
 	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
-	resp, err := ts.runc.Stats(ctx, req)
+	resp, err := task.Stats(ctx, req)
 	if err != nil {
 		log.G(ctx).WithError(err).Error("stats failed")
 		return nil, err
@@ -386,12 +494,18 @@ func (ts *TaskService) Stats(ctx context.Context, req *shimapi.StatsRequest) (*s
 	return resp, nil
 }
 
-// Connect returns shim information such as the shim's pid
-func (ts *TaskService) Connect(ctx context.Context, req *shimapi.ConnectRequest) (*shimapi.ConnectResponse, error) {
+// taskAPI returns shim information such as the shim's pid
+func (ts *TaskService) Connect(ctx context.Context, req *taskAPI.ConnectRequest) (*taskAPI.ConnectResponse, error) {
+	defer logPanicAndDie(log.G(ctx))
+
 	log.G(ctx).WithField("id", req.ID).Debug("connect")
+	task, err := ts.taskManager.Task(req.ID)
+	if err != nil {
+		return nil, err
+	}
 
 	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
-	resp, err := ts.runc.Connect(ctx, req)
+	resp, err := task.Connect(ctx, req)
 	if err != nil {
 		log.G(ctx).WithError(err).Error("connect failed")
 		return nil, err
@@ -406,27 +520,17 @@ func (ts *TaskService) Connect(ctx context.Context, req *shimapi.ConnectRequest)
 }
 
 // Shutdown cleanups runc resources ans gracefully shutdowns ttrpc server
-func (ts *TaskService) Shutdown(ctx context.Context, req *shimapi.ShutdownRequest) (*types.Empty, error) {
+func (ts *TaskService) Shutdown(ctx context.Context, req *taskAPI.ShutdownRequest) (*types.Empty, error) {
+	defer logPanicAndDie(log.G(ctx))
+
 	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "now": req.Now}).Debug("shutdown")
 	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
 
-	_, err := ts.runc.Cleanup(ctx)
-	if err != nil {
-		log.G(ctx).WithError(err).Warn("error cleaning up")
-	}
-
 	// We don't want to call runc.Shutdown here as it just os.Exits behind.
 	// calling all cancels here for graceful shutdown instead and call runc Shutdown at end.
-	ts.cancelAll()
+	ts.taskManager.RemoveAll(ctx)
+	ts.cancel()
 
 	log.G(ctx).Debug("going to gracefully shutdown agent")
 	return &types.Empty{}, nil
-}
-
-func (ts *TaskService) cancelAll() {
-	// cancel LIFO order
-	for i := len(ts.cancels) - 1; i >= 0; i-- {
-		log.G(context.Background()).Debug("Cancelling ", i)
-		ts.cancels[i]()
-	}
 }

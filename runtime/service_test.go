@@ -20,8 +20,8 @@ import (
 
 	"github.com/containerd/typeurl"
 	proto "github.com/firecracker-microvm/firecracker-containerd/proto/grpc"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gotest.tools/assert"
 )
 
 const (

@@ -11,20 +11,8 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package main
-
-import (
-	"context"
-	"testing"
-)
-
-func TestCancelAll(t *testing.T) {
-	ts := &TaskService{
-		cancels: []context.CancelFunc{
-			func() {},
-			func() {},
-		},
-	}
-
-	ts.cancelAll()
-}
+/*
+Package bundle implements some helper functions for firecracker-containerd's interaction
+with bundle dirs, both inside the VM and outside on the host.
+*/
+package bundle

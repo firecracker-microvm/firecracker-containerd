@@ -63,13 +63,21 @@ steps:
       - "runtime/logs/*"
     command: 'cd runtime && make test-docker-isolated'
 
-  - label: ":fencer: agent tests"
+  - label: ":fencer: agent unit tests"
     agents:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
     env:
       DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
       EXTRAGOARGS: "-v -count=1"
     command: 'cd agent && make test-docker-unit'
+
+  - label: ":gear: vm task unit tests"
+    agents:
+      queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
+    env:
+      DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
+      EXTRAGOARGS: "-v -count=1"
+    command: 'cd internal/vm && make test-docker-unit'
 
   - label: ":exclamation: event tests"
     agents:

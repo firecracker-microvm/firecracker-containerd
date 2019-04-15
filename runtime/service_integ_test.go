@@ -60,7 +60,7 @@ const (
 func TestShimExitsUponContainerKill_Isolated(t *testing.T) {
 	internal.RequiresIsolation(t)
 
-	ctx := namespaces.WithNamespace(context.Background(), "default")
+	ctx := namespaces.WithNamespace(context.Background(), namespaces.Default)
 
 	client, err := containerd.New(containerdSockPath)
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
@@ -130,10 +130,10 @@ func TestShimExitsUponContainerKill_Isolated(t *testing.T) {
 		err = internal.WaitForPidToExit(testCtx, time.Second, shimProcess.Pid)
 		require.NoError(t, err, "failed waiting for shim process \"%s\" to exit", shimProcessName)
 
-		varRunFCContents, err := ioutil.ReadDir(varRunDir)
-		require.NoError(t, err, `failed to list directory "%s"`, varRunDir)
-		// there should just be one file left in the directory for the naive snapshotter socket
-		require.Len(t, varRunFCContents, 1, "expect %s to be cleared after shims shutdown", varRunDir)
+		namespaceVarRunDir := filepath.Join(varRunDir, namespaces.Default)
+		varRunFCContents, err := ioutil.ReadDir(namespaceVarRunDir)
+		require.NoError(t, err, `failed to list directory "%s"`, namespaceVarRunDir)
+		require.Len(t, varRunFCContents, 0, "expect %s to be cleared after shims shutdown", namespaceVarRunDir)
 	case err = <-exitEventErrCh:
 		require.Fail(t, "unexpected error", "unexpectedly received on task exit error channel: %s", err.Error())
 	case <-testCtx.Done():
@@ -179,9 +179,8 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 	internal.RequiresIsolation(t)
 
 	const (
-		numVMs = 5
-		// TODO update with multiple containers per-VM once that PR is merged
-		containersPerVM = 1
+		numVMs          = 3
+		containersPerVM = 3
 	)
 
 	ctx := namespaces.WithNamespace(context.Background(), "default")
@@ -229,7 +228,10 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 						containerd.WithSnapshotter(naiveSnapshotterName),
 						containerd.WithNewSnapshot(snapshotName, image),
 						containerd.WithNewSpec(
-							oci.WithProcessArgs("cat", fmt.Sprintf("/sys/class/net/%s/address", defaultVMNetDevName)),
+							oci.WithProcessArgs("sh", "-c", fmt.Sprintf("%s && %s",
+								fmt.Sprintf("cat /sys/class/net/%s/address", defaultVMNetDevName),
+								fmt.Sprintf("sleep %d", 10),
+							)),
 							oci.WithHostNamespace(specs.NetworkNamespace),
 							firecrackeroci.WithVMID(strconv.Itoa(vmID)),
 						),
@@ -259,11 +261,11 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 						})
 					require.NoError(t, err, "failed to create task for container %s", containerName)
 
-					err = newTask.Start(ctx)
-					require.NoError(t, err, "failed to start task for container %s", containerName)
-
 					exitCh, err := newTask.Wait(ctx)
 					require.NoError(t, err, "failed to wait on task for container %s", containerName)
+
+					err = newTask.Start(ctx)
+					require.NoError(t, err, "failed to start task for container %s", containerName)
 
 					select {
 					case exitStatus := <-exitCh:

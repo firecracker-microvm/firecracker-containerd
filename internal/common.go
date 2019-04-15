@@ -22,4 +22,16 @@ const (
 	StderrPort = 11002
 	// DefaultBufferSize represents buffer size in bytes to used for IO between runtime and agent
 	DefaultBufferSize = 1024
+
+	FirecrackerSockName        = "firecracker.sock"
+	FirecrackerLogFifoName     = "fc-logs.fifo"
+	FirecrackerMetricsFifoName = "fc-metrics.fifo"
+
+	// TODO these strings are hardcoded throughout the containerd codebase, it may
+	// be worth sending them a PR to define them as constants accessible to shim
+	// implementations like our own
+	ShimAddrFileName = "address"
+	ShimLogFifoName  = "log"
+	OCIConfigName    = "config.json"
+	BundleRootfsName = "rootfs"
 )

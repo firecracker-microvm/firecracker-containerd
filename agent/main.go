@@ -24,9 +24,8 @@ import (
 	"github.com/containerd/containerd/events/exchange"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/namespaces"
-	"github.com/containerd/containerd/runtime/v2/runc"
 	"github.com/containerd/containerd/runtime/v2/shim"
-	shimapi "github.com/containerd/containerd/runtime/v2/task"
+	taskAPI "github.com/containerd/containerd/runtime/v2/task"
 	"github.com/containerd/containerd/sys"
 	"github.com/containerd/ttrpc"
 	"github.com/mdlayher/vsock"
@@ -88,19 +87,14 @@ func main() {
 	log.G(ctx).WithField("id", id).Info("creating runc shim")
 
 	eventExchange := exchange.NewExchange()
-	runcTaskService, err := runc.New(ctx, id, eventExchange)
-	if err != nil {
-		log.G(ctx).WithError(err).Fatal("failed to create runc shim")
-	}
-
-	taskService := NewTaskService(runcTaskService, cancel)
+	taskService := NewTaskService(eventExchange, cancel)
 
 	server, err := ttrpc.NewServer()
 	if err != nil {
 		log.G(ctx).WithError(err).Fatal("failed to create ttrpc server")
 	}
 
-	shimapi.RegisterTaskService(server, taskService)
+	taskAPI.RegisterTaskService(server, taskService)
 	eventbridge.RegisterGetterService(server, eventbridge.NewGetterService(ctx, eventExchange))
 
 	// Run ttrpc over vsock
@@ -141,12 +135,11 @@ func main() {
 		}
 	})
 
-	if err := group.Wait(); err != nil {
-		log.G(ctx).WithError(err).Warn("shim error")
-	}
-
+	err = group.Wait()
 	log.G(ctx).Info("shutting down agent")
-	if _, err := runcTaskService.Shutdown(ctx, &shimapi.ShutdownRequest{ID: id, Now: true}); err != nil {
-		log.G(ctx).WithError(err).Error("runc shutdown error")
+
+	if err != nil {
+		log.G(ctx).WithError(err).Error("shim error")
+		os.Exit(1)
 	}
 }

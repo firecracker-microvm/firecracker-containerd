@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/containerd/containerd/events"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/plugin"
 	firecracker "github.com/firecracker-microvm/firecracker-go-sdk"
@@ -44,20 +45,30 @@ func init() {
 	})
 }
 
+const (
+	startEventName = "/firecracker-vm/start"
+	stopEventName  = "/firecracker-vm/stop"
+)
+
 // Wrap interface in order to properly generate mock with mockgen
-type machineIface interface {
+type machine interface {
 	firecracker.MachineIface
+}
+
+type publisher interface {
+	events.Publisher
 }
 
 type instance struct {
 	cfg     *firecracker.Config
-	machine machineIface
+	machine machine
 }
 
 type local struct {
 	vm          map[string]*instance
 	vmLock      sync.RWMutex
 	rootPath    string
+	publisher   publisher
 	findVsockFn func(context.Context) (*os.File, uint32, error)
 }
 
@@ -69,6 +80,7 @@ func newLocal(ic *plugin.InitContext) (*local, error) {
 	return &local{
 		vm:          make(map[string]*instance),
 		rootPath:    ic.Root,
+		publisher:   ic.Events,
 		findVsockFn: findNextAvailableVsockCID,
 	}, nil
 }
@@ -190,7 +202,7 @@ func (s *local) buildVMConfiguration(ctx context.Context, id string, cid uint32,
 }
 
 // startMachine attempts to start an instance within timeout and runs a goroutine to monitor VM exit event
-func (s *local) startMachine(ctx context.Context, id string, machine machineIface) error {
+func (s *local) startMachine(ctx context.Context, id string, machine machine) error {
 	logger := log.G(ctx).WithField("vm_id", id)
 
 	logger.Info("starting VM instance")
@@ -203,9 +215,20 @@ func (s *local) startMachine(ctx context.Context, id string, machine machineIfac
 		return err
 	}
 
+	if err := s.publisher.Publish(ctx, startEventName, &proto.VMStart{VMID: id}); err != nil {
+		logger.WithError(err).Error("failed to publish start event")
+		return err
+	}
+
 	go func() {
-		if err := machine.Wait(context.Background()); err != nil {
+		ctx := context.Background()
+
+		if err := machine.Wait(ctx); err != nil {
 			logger.WithError(err).Error("failed to wait the VM")
+		}
+
+		if err := s.publisher.Publish(ctx, stopEventName, &proto.VMStop{VMID: id}); err != nil {
+			logger.WithError(err).Error("failed to publish stop event")
 		}
 
 		logger.Debug("removing machine")
@@ -303,7 +326,6 @@ func (s *local) getVM(id string) (*instance, error) {
 	s.vmLock.RUnlock()
 
 	if !ok {
-		log.L.Warnf("attempt to get not existing VM id: %s", id)
 		return nil, ErrVMNotFound
 	}
 

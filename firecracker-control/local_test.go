@@ -96,12 +96,17 @@ func TestLocal_startMachine(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	machine := NewMockmachineIface(ctrl)
+	machine := NewMockmachine(ctrl)
 	machine.EXPECT().Start(gomock.Any()).Times(1).Return(nil)
 	machine.EXPECT().Wait(gomock.Any()).Times(1).Return(nil)
 
+	publisher := NewMockpublisher(ctrl)
+	publisher.EXPECT().Publish(gomock.Any(), startEventName, gomock.Eq(&proto.VMStart{VMID: "1"})).Return(nil)
+	publisher.EXPECT().Publish(gomock.Any(), stopEventName, gomock.Eq(&proto.VMStop{VMID: "1"})).Return(nil)
+
 	obj := &local{
-		vm: map[string]*instance{"1": {}},
+		vm:        map[string]*instance{"1": {}},
+		publisher: publisher,
 	}
 
 	err := obj.startMachine(testCtx, "1", machine)
@@ -114,7 +119,7 @@ func TestLocal_StopVM(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	machine := NewMockmachineIface(ctrl)
+	machine := NewMockmachine(ctrl)
 	machine.EXPECT().StopVMM().Times(1).Return(nil)
 
 	obj := &local{
@@ -160,7 +165,7 @@ func TestLocal_SetVMMetadata(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	machine := NewMockmachineIface(ctrl)
+	machine := NewMockmachine(ctrl)
 	machine.EXPECT().SetMetadata(gomock.Any(), gomock.Eq("test")).Times(1).Return(nil)
 
 	obj := &local{

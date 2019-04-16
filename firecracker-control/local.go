@@ -87,23 +87,41 @@ func newLocal(ic *plugin.InitContext) (*local, error) {
 
 // CreateVM creates new Firecracker VM instance
 func (s *local) CreateVM(ctx context.Context, req *proto.CreateVMRequest) (*empty.Empty, error) {
-	var (
-		id     = req.GetVMID()
-		logger = log.G(ctx).WithField("vm_id", id)
-	)
-
+	id := req.GetVMID()
 	if id == "" {
 		return nil, errors.New("invalid VM ID")
 	}
 
-	// TODO: this makes running VMs sequential, consider optimizing locking mechanism
 	s.vmLock.Lock()
-	defer s.vmLock.Unlock()
 
 	// Make sure VM ID unique
 	if _, ok := s.vm[id]; ok {
+		s.vmLock.Unlock()
 		return nil, errors.Errorf("VM with id %q already exists", id)
 	}
+
+	// Reserve this ID while we're creating an instance in order to avoid race conditions
+	s.vm[id] = &instance{}
+	s.vmLock.Unlock()
+
+	instance, err := s.newInstance(ctx, id, req)
+
+	s.vmLock.Lock()
+	defer s.vmLock.Unlock()
+
+	if err != nil {
+		log.G(ctx).WithError(err).WithField("vm_id", id).Error("failed to create VM")
+		delete(s.vm, id)
+
+		return nil, err
+	}
+
+	s.vm[id] = instance
+	return &empty.Empty{}, nil
+}
+
+func (s *local) newInstance(ctx context.Context, id string, req *proto.CreateVMRequest) (*instance, error) {
+	logger := log.G(ctx).WithField("vm_id", id)
 
 	vsockDescriptor, cid, err := s.findVsockFn(ctx)
 	if err != nil {
@@ -140,8 +158,7 @@ func (s *local) CreateVM(ctx context.Context, req *proto.CreateVMRequest) (*empt
 		machine: machine,
 	}
 
-	s.vm[id] = newInstance
-	return &empty.Empty{}, nil
+	return newInstance, nil
 }
 
 func (s *local) buildVMConfiguration(ctx context.Context, id string, cid uint32, req *proto.CreateVMRequest) (*firecracker.Config, error) {

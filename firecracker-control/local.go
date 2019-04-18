@@ -22,10 +22,12 @@ import (
 
 	"github.com/containerd/containerd/events"
 	"github.com/containerd/containerd/log"
+	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/plugin"
-	firecracker "github.com/firecracker-microvm/firecracker-go-sdk"
+	"github.com/firecracker-microvm/firecracker-go-sdk"
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 )
@@ -162,54 +164,53 @@ func (s *local) newInstance(ctx context.Context, id string, req *proto.CreateVMR
 }
 
 func (s *local) buildVMConfiguration(ctx context.Context, id string, cid uint32, req *proto.CreateVMRequest) (*firecracker.Config, error) {
-	var (
-		err    error
-		logger = log.G(ctx).WithField("vm_id", id)
-	)
-
-	vsockDevices := []firecracker.VsockDevice{
-		{Path: "root", CID: cid},
-	}
-
-	logger.Debugf("using cid: %d", cid)
+	logger := log.G(ctx).WithFields(logrus.Fields{
+		"vm_id":  id,
+		"vm_cid": cid,
+	})
 
 	cfg := &firecracker.Config{
-		SocketPath:      filepath.Join(s.rootPath, fmt.Sprintf("vm_%s.socket", id)),
-		LogFifo:         filepath.Join(s.rootPath, fmt.Sprintf("vm_%s_log.fifo", id)),
-		MetricsFifo:     filepath.Join(s.rootPath, fmt.Sprintf("vm_%s_metrics.fifo", id)),
-		KernelImagePath: req.GetKernelImagePath(),
-		KernelArgs:      req.GetKernelArgs(),
-		VsockDevices:    vsockDevices,
+		SocketPath:   filepath.Join(s.rootPath, fmt.Sprintf("vm_%s.socket", id)),
+		LogFifo:      filepath.Join(s.rootPath, fmt.Sprintf("vm_%s_log.fifo", id)),
+		MetricsFifo:  filepath.Join(s.rootPath, fmt.Sprintf("vm_%s_metrics.fifo", id)),
+		VsockDevices: []firecracker.VsockDevice{{Path: "root", CID: cid}},
+		MachineCfg:   machineConfigurationFromProto(req.GetMachineCfg()),
 	}
 
 	logger.Debugf("using socket path: %s", cfg.SocketPath)
 
-	machineCfg := req.GetMachineCfg()
-	if machineCfg == nil {
-		return nil, errors.New("invalid machine configuration")
+	// Kernel configuration
+
+	if val := req.GetKernelArgs(); val != "" {
+		cfg.KernelArgs = val
+	} else {
+		cfg.KernelArgs = defaultKernelArgs
 	}
 
-	cfg.MachineCfg, err = machineConfigFromProto(machineCfg)
-	if err != nil {
-		return nil, err
+	if val := req.GetKernelImagePath(); val != "" {
+		cfg.KernelImagePath = val
+	} else {
+		cfg.KernelImagePath = defaultKernelPath
 	}
 
-	// TODO: Specify default Firecracker configuration here?
+	// Drives configuration
 
-	rootDrive := req.GetRootDrive()
-	if rootDrive == nil {
-		return nil, errors.Errorf("root drive can't be empty")
+	var driveBuilder firecracker.DrivesBuilder
+	if root := req.GetRootDrive(); root != nil {
+		driveBuilder = firecracker.NewDrivesBuilder(root.GetPathOnHost())
+	} else {
+		driveBuilder = firecracker.NewDrivesBuilder(defaultRootfsPath)
 	}
-
-	driveBuilder := drivesBuilderFromProto(rootDrive, firecracker.DrivesBuilder{}, true)
 
 	for _, drive := range req.GetAdditionalDrives() {
-		driveBuilder = drivesBuilderFromProto(drive, driveBuilder, false)
+		driveBuilder = addDriveFromProto(driveBuilder, drive)
 	}
 
 	// TODO: Reserve fake drives here (https://github.com/firecracker-microvm/firecracker-containerd/pull/154)
 
 	cfg.Drives = driveBuilder.Build()
+
+	// Setup network interfaces
 
 	for _, ni := range req.GetNetworkInterfaces() {
 		cfg.NetworkInterfaces = append(cfg.NetworkInterfaces, networkConfigFromProto(ni))
@@ -227,6 +228,13 @@ func (s *local) startMachine(ctx context.Context, id string, machine machine) er
 	ctx, cancel := context.WithTimeout(ctx, firecrackerStartTimeout)
 	defer cancel()
 
+	ns, err := namespaces.NamespaceRequired(ctx)
+	if err != nil {
+		return err
+	}
+
+	logger.Debugf("using namespace: %s", ns)
+
 	if err := machine.Start(ctx); err != nil {
 		logger.WithError(err).Error("failed to start the VM")
 		return err
@@ -238,7 +246,7 @@ func (s *local) startMachine(ctx context.Context, id string, machine machine) er
 	}
 
 	go func() {
-		ctx := context.Background()
+		ctx := namespaces.WithNamespace(context.Background(), ns)
 
 		if err := machine.Wait(ctx); err != nil {
 			logger.WithError(err).Error("failed to wait the VM")

@@ -15,6 +15,8 @@ SUBDIRS:=agent runtime snapshotter examples
 export INSTALLROOT?=/usr/local
 export STATIC_AGENT
 
+DOCKER_IMAGE_TAG?=latest
+
 GOPATH:=$(shell go env GOPATH)
 BINPATH:=$(abspath ./bin)
 
@@ -44,4 +46,27 @@ deps:
 install:
 	for d in $(SUBDIRS); do $(MAKE) -C $$d install; done
 
-.PHONY: all $(SUBDIRS) clean proto deps lint install
+docker-image-unittest:
+	docker build \
+		--progress=plain \
+		--file tools/docker/Dockerfile \
+		--target firecracker-containerd-unittest \
+		--tag localhost/firecracker-containerd-unittest:${DOCKER_IMAGE_TAG} .
+
+docker-image-unittest-nonroot:
+	docker build \
+		--progress=plain \
+		--file tools/docker/Dockerfile \
+		--target firecracker-containerd-unittest-nonroot \
+		--tag localhost/firecracker-containerd-unittest-nonroot:${DOCKER_IMAGE_TAG} .
+
+docker-image-e2etest-naive:
+	docker build \
+		--progress=plain \
+		--file tools/docker/Dockerfile \
+		--target firecracker-containerd-e2etest-naive \
+		--tag localhost/firecracker-containerd-e2etest-naive:${DOCKER_IMAGE_TAG} .
+
+docker-images: | docker-image-e2etest-naive docker-image-unittest-nonroot docker-image-unittest
+
+.PHONY: all $(SUBDIRS) clean proto deps lint install docker-images docker-image-e2etest-naive docker-image-unittest-nonroot docker-image-unittest

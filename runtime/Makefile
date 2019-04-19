@@ -12,11 +12,12 @@
 # permissions and limitations under the License.
 
 # Set this to pass additional commandline flags to the go compiler, e.g. "make test EXTRAGOARGS=-v"
-EXTRAGOARGS:=
+EXTRAGOARGS?=
 
 SOURCES:=$(shell find . -name '*.go')
 GOMOD := $(shell go env GOMOD)
 GOSUM := $(GOMOD:.mod=.sum)
+DOCKER_IMAGE_TAG?=latest
 
 all: runtime
 
@@ -30,6 +31,29 @@ install: containerd-shim-aws-firecracker
 
 test: $(SOURCES)
 	go test ./... $(EXTRAGOARGS)
+
+test-docker-unit: $(SOURCES) $(GOMOD) $(GOSUM)
+	docker run --rm \
+		--privileged \
+		--device=/dev/vhost-vsock \
+		--env EXTRAGOARGS="${EXTRAGOARGS}" \
+		--workdir="/firecracker-containerd/runtime" \
+		localhost/firecracker-containerd-unittest:${DOCKER_IMAGE_TAG} \
+		"make test"
+
+test-docker-isolated: $(SOURCES) $(GOMOD) $(GOSUM)
+	mkdir -p $(PWD)/logs
+	FCCD_PACKAGE_DIR=runtime \
+	FCCD_TESTNAME_REGEX=_Isolated \
+	FCCD_DOCKER_IMAGE=localhost/firecracker-containerd-e2etest-naive:${DOCKER_IMAGE_TAG} \
+	FCCD_DOCKER_RUN_ARGS="--privileged \
+		--ipc=host \
+		--volume /dev:/dev \
+		--volume /sys:/sys \
+		--volume /run/udev/control:/run/udev/control \
+		--volume $(PWD)/logs:/var/log/firecracker-containerd-test \
+		--env ENABLE_ISOLATED_TESTS=1 \
+	" ../tools/run-tests-by-name-regex.sh
 
 clean:
 	- rm -f containerd-shim-aws-firecracker

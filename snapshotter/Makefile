@@ -12,12 +12,13 @@
 # permissions and limitations under the License.
 
 # Set this to pass additional commandline flags to the go compiler, e.g. "make test EXTRAGOARGS=-v"
-EXTRAGOARGS:=
+EXTRAGOARGS?=
 
 SUBDIRS:=cmd/devmapper cmd/naive
 SOURCES:=$(shell find . -name '*.go')
 GOMOD := $(shell go env GOMOD)
 GOSUM := $(GOMOD:.mod=.sum)
+DOCKER_IMAGE_TAG?=latest
 
 all: $(SUBDIRS)
 
@@ -29,6 +30,27 @@ install: $(SUBDIRS)
 
 test: $(SOURCES) $(GOMOD) $(GOSUM)
 	go test ./... $(EXTRAGOARGS)
+
+test-docker-all: $(SOURCES) $(GOMOD) $(GOSUM)
+	docker run --rm \
+		--privileged \
+		--volume /dev:/dev \
+		--volume /sys:/sys \
+		--volume /run/udev/control:/run/udev/control \
+		--ipc=host \
+		--env EXTRAGOARGS="${EXTRAGOARGS}" \
+		--workdir="/firecracker-containerd/snapshotter" \
+		localhost/firecracker-containerd-unittest:${DOCKER_IMAGE_TAG} \
+		"make test"
+
+test-docker-unit: $(SOURCES) $(GOMOD) $(GOSUM)
+	docker run --rm \
+		--env EXTRAGOARGS="${EXTRAGOARGS}" \
+		--env DISABLE_ROOT_TESTS="true" \
+		--workdir="/firecracker-containerd/snapshotter" \
+		localhost/firecracker-containerd-unittest-nonroot:${DOCKER_IMAGE_TAG} \
+		"make test"
+
 
 clean:
 	for d in $(SUBDIRS); do $(MAKE) -C $$d clean; done

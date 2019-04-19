@@ -935,6 +935,7 @@ func (s *service) startVM(ctx context.Context,
 		Build(ctx)
 	machineOpts := []firecracker.Opt{
 		firecracker.WithProcessRunner(cmd),
+		firecracker.WithLogger(log.G(ctx)),
 	}
 
 	vmmCtx, vmmCancel := context.WithCancel(context.Background())

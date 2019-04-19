@@ -28,10 +28,9 @@ require (
 	github.com/gogo/protobuf v1.2.1
 	github.com/golang/mock v1.1.1
 	github.com/golang/protobuf v1.2.0
-	github.com/google/go-cmp v0.2.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0 // indirect
 	github.com/hashicorp/go-multierror v1.0.0
-	github.com/mdlayher/vsock v0.0.0-20181130155850-676f733b747c
+	github.com/mdlayher/vsock v0.0.0-20190329173812-a92c53d5dcab
 	github.com/opencontainers/go-digest v1.0.0-rc1 // indirect
 	github.com/opencontainers/image-spec v1.0.1 // indirect
 	github.com/opencontainers/runc v0.1.1 // indirect
@@ -46,9 +45,9 @@ require (
 	github.com/urfave/cli v1.20.0 // indirect
 	go.etcd.io/bbolt v1.3.1-etcd.8
 	golang.org/x/crypto v0.0.0-20190325154230-a5d413f7728c // indirect
-	golang.org/x/net v0.0.0-20190327214358-63eda1eb0650
+	golang.org/x/net v0.0.0-20190328230028-74de082e2cca
 	golang.org/x/sync v0.0.0-20181108010431-42b317875d0f
-	golang.org/x/sys v0.0.0-20190322080309-f49334f85ddc
+	golang.org/x/sys v0.0.0-20190329044733-9eb1bfa1ce65
 	google.golang.org/genproto v0.0.0-20181109154231-b5d43981345b // indirect
 	google.golang.org/grpc v1.16.0
 	gotest.tools v2.2.0+incompatible

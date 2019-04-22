@@ -23,15 +23,27 @@ const (
 	// DefaultBufferSize represents buffer size in bytes to used for IO between runtime and agent
 	DefaultBufferSize = 1024
 
-	FirecrackerSockName        = "firecracker.sock"
-	FirecrackerLogFifoName     = "fc-logs.fifo"
+	// FirecrackerSockName is the name of the Firecracker VMM API socket
+	FirecrackerSockName = "firecracker.sock"
+	// FirecrackerLogFifoName is the name of the Firecracker VMM log FIFO
+	FirecrackerLogFifoName = "fc-logs.fifo"
+	// FirecrackerMetricsFifoName is the name of the Firecracker VMM metrics FIFO
 	FirecrackerMetricsFifoName = "fc-metrics.fifo"
 
 	// TODO these strings are hardcoded throughout the containerd codebase, it may
 	// be worth sending them a PR to define them as constants accessible to shim
 	// implementations like our own
+
+	// ShimAddrFileName is the name of the file in which a shim's API address can be found, used by
+	// containerd to reconnect after it restarts
 	ShimAddrFileName = "address"
-	ShimLogFifoName  = "log"
-	OCIConfigName    = "config.json"
+
+	// ShimLogFifoName is the name of the FIFO created by containerd for a shim to write its logs to
+	ShimLogFifoName = "log"
+
+	// OCIConfigName is the name of the OCI bundle's config field
+	OCIConfigName = "config.json"
+
+	// BundleRootfsName is the name of the bundle's directory for holding the container's rootfs
 	BundleRootfsName = "rootfs"
 )

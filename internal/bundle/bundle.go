@@ -26,7 +26,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// bundle.Dir represent the root of a container bundle dir. It's just a type wrapper
+// Dir represents the root of a container bundle dir. It's just a type wrapper
 // around a string, where the string is the path of the bundle dir.
 type Dir string
 

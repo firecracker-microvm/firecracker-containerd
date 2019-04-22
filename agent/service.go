@@ -169,6 +169,14 @@ func (ts *TaskService) Create(ctx context.Context, req *taskAPI.CreateTaskReques
 	return resp, nil
 }
 
+func isTemporaryNetErr(err error) bool {
+	terr, ok := err.(interface {
+		Temporary() bool
+	})
+
+	return err != nil && ok && terr.Temporary()
+}
+
 var _ vm.VSockConnector = acceptVSock
 
 func acceptVSock(ctx context.Context, port uint32) (net.Conn, error) {
@@ -177,19 +185,23 @@ func acceptVSock(ctx context.Context, port uint32) (net.Conn, error) {
 		return nil, errors.Wrap(err, "unable to listen on vsock")
 	}
 
-	var conn net.Conn
 	for range time.Tick(10 * time.Millisecond) {
 		// accept is non-blocking so try to accept until we get a connection
-		// TODO: investigate if there is a way to distinguish
-		// transient errors from permanent ones.
-		conn, err = listener.Accept()
+		conn, err := listener.Accept()
 		if err == nil {
-			break
+			return conn, nil
 		}
-		log.G(ctx).WithError(err).Debug("stdio vsock accept failure")
+
+		if isTemporaryNetErr(err) {
+			log.G(ctx).WithError(err).Debug("temporary stdio vsock accept failure")
+			continue
+		}
+
+		log.G(ctx).WithError(err).Error("non-temporary stdio vsock accept failure")
+		return nil, err
 	}
 
-	return conn, nil
+	panic("unreachable code") // appeases the compiler, which doesn't know the for loop is infinite
 }
 
 // State returns process state information
@@ -494,7 +506,7 @@ func (ts *TaskService) Stats(ctx context.Context, req *taskAPI.StatsRequest) (*t
 	return resp, nil
 }
 
-// taskAPI returns shim information such as the shim's pid
+// Connect returns shim information such as the shim's pid
 func (ts *TaskService) Connect(ctx context.Context, req *taskAPI.ConnectRequest) (*taskAPI.ConnectResponse, error) {
 	defer logPanicAndDie(log.G(ctx))
 

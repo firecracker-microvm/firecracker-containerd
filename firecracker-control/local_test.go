@@ -136,29 +136,26 @@ func TestLocal_StopInvalidVM(t *testing.T) {
 	assert.Equal(t, ErrVMNotFound, err)
 }
 
-func TestLocal_GetVMAddress(t *testing.T) {
-	obj := &local{
-		vm: map[string]*instance{"1": {cfg: &firecracker.Config{SocketPath: "2"}}},
+func TestLocal_GetVMInfo(t *testing.T) {
+	cfg := &firecracker.Config{
+		VsockDevices: []firecracker.VsockDevice{{CID: 123}},
+		SocketPath:   "socket",
+		LogFifo:      "logs",
+		MetricsFifo:  "metrics",
 	}
 
-	response, err := obj.GetVMAddress(testCtx, &proto.GetVMAddressRequest{VMID: "1"})
+	obj := &local{
+		vm: map[string]*instance{"1": {cfg: cfg}},
+	}
+
+	response, err := obj.GetVMInfo(testCtx, &proto.GetVMInfoRequest{VMID: "1"})
 	assert.NoError(t, err)
 	assert.NotNil(t, response)
-	assert.Equal(t, "2", response.SocketPath)
-}
 
-func TestLocal_GetFifoPath(t *testing.T) {
-	obj := &local{
-		vm: map[string]*instance{"1": {cfg: &firecracker.Config{LogFifo: "logs", MetricsFifo: "metrics"}}},
-	}
-
-	response, err := obj.GetFifoPath(testCtx, &proto.GetFifoPathRequest{VMID: "1", FifoType: proto.FifoType_LOG})
-	assert.NoError(t, err)
-	assert.Equal(t, "logs", response.Path)
-
-	response, err = obj.GetFifoPath(testCtx, &proto.GetFifoPathRequest{VMID: "1", FifoType: proto.FifoType_METRICS})
-	assert.NoError(t, err)
-	assert.Equal(t, "metrics", response.Path)
+	assert.EqualValues(t, 123, response.ContextID)
+	assert.Equal(t, "socket", response.SocketPath)
+	assert.Equal(t, "logs", response.LogFifoPath)
+	assert.Equal(t, "metrics", response.MetricsFifoPath)
 }
 
 func TestLocal_SetVMMetadata(t *testing.T) {

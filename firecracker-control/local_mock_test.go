@@ -5,10 +5,10 @@
 package service
 
 import (
+	context "context"
 	events "github.com/containerd/containerd/events"
 	firecracker_go_sdk "github.com/firecracker-microvm/firecracker-go-sdk"
 	gomock "github.com/golang/mock/gomock"
-	context "golang.org/x/net/context"
 	reflect "reflect"
 )
 

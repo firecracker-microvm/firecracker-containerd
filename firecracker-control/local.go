@@ -14,6 +14,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -25,7 +26,6 @@ import (
 	firecracker "github.com/firecracker-microvm/firecracker-go-sdk"
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 )
@@ -278,43 +278,27 @@ func (s *local) StopVM(ctx context.Context, req *proto.StopVMRequest) (*empty.Em
 	return &empty.Empty{}, nil
 }
 
-// GetVMAddress returns a socket file location of the VM instance
-func (s *local) GetVMAddress(_ context.Context, req *proto.GetVMAddressRequest) (*proto.GetVMAddressResponse, error) {
-	instance, err := s.getVM(req.GetVMID())
-	if err != nil {
-		return nil, err
-	}
-
-	return &proto.GetVMAddressResponse{
-		SocketPath: instance.cfg.SocketPath,
-	}, nil
-}
-
-// GetFifoPath returns FIFO file location of the VM instance
-func (s *local) GetFifoPath(ctx context.Context, req *proto.GetFifoPathRequest) (*proto.GetFifoPathResponse, error) {
-	var (
-		id       = req.GetVMID()
-		fifoType = req.GetFifoType()
-	)
-
+func (s *local) GetVMInfo(ctx context.Context, req *proto.GetVMInfoRequest) (*proto.GetVMInfoResponse, error) {
+	id := req.GetVMID()
 	instance, err := s.getVM(id)
 	if err != nil {
 		return nil, err
 	}
 
-	var path string
-	switch fifoType {
-	case proto.FifoType_LOG:
-		path = instance.cfg.LogFifo
-	case proto.FifoType_METRICS:
-		path = instance.cfg.MetricsFifo
-	default:
-		return nil, fmt.Errorf("unsupported fifo type %q", fifoType.String())
+	var cid uint32
+	if len(instance.cfg.VsockDevices) > 0 {
+		cid = instance.cfg.VsockDevices[0].CID
 	}
 
-	return &proto.GetFifoPathResponse{
-		Path: path,
-	}, nil
+	resp := &proto.GetVMInfoResponse{
+		VMID:            id,
+		ContextID:       cid,
+		SocketPath:      instance.cfg.SocketPath,
+		LogFifoPath:     instance.cfg.LogFifo,
+		MetricsFifoPath: instance.cfg.MetricsFifo,
+	}
+
+	return resp, nil
 }
 
 // SetVMMetadata sets Firecracker instance metadata

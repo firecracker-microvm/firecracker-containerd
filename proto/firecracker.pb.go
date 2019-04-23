@@ -24,29 +24,6 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
-type FifoType int32
-
-const (
-	FifoType_LOG     FifoType = 0
-	FifoType_METRICS FifoType = 1
-)
-
-var FifoType_name = map[int32]string{
-	0: "LOG",
-	1: "METRICS",
-}
-var FifoType_value = map[string]int32{
-	"LOG":     0,
-	"METRICS": 1,
-}
-
-func (x FifoType) String() string {
-	return proto.EnumName(FifoType_name, int32(x))
-}
-func (FifoType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_firecracker_abf7bcabf5d4fa05, []int{0}
-}
-
 // CreateVMRequest specifies creation parameters for a new FC instance
 type CreateVMRequest struct {
 	// VM identifier to assign
@@ -74,7 +51,7 @@ func (m *CreateVMRequest) Reset()         { *m = CreateVMRequest{} }
 func (m *CreateVMRequest) String() string { return proto.CompactTextString(m) }
 func (*CreateVMRequest) ProtoMessage()    {}
 func (*CreateVMRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_firecracker_abf7bcabf5d4fa05, []int{0}
+	return fileDescriptor_firecracker_7b3f3f0a94e95e55, []int{0}
 }
 func (m *CreateVMRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_CreateVMRequest.Unmarshal(m, b)
@@ -161,7 +138,7 @@ func (m *StopVMRequest) Reset()         { *m = StopVMRequest{} }
 func (m *StopVMRequest) String() string { return proto.CompactTextString(m) }
 func (*StopVMRequest) ProtoMessage()    {}
 func (*StopVMRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_firecracker_abf7bcabf5d4fa05, []int{1}
+	return fileDescriptor_firecracker_7b3f3f0a94e95e55, []int{1}
 }
 func (m *StopVMRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_StopVMRequest.Unmarshal(m, b)
@@ -188,162 +165,110 @@ func (m *StopVMRequest) GetVMID() string {
 	return ""
 }
 
-type GetVMAddressRequest struct {
+type GetVMInfoRequest struct {
 	VMID                 string   `protobuf:"bytes,1,opt,name=VMID,proto3" json:"VMID,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *GetVMAddressRequest) Reset()         { *m = GetVMAddressRequest{} }
-func (m *GetVMAddressRequest) String() string { return proto.CompactTextString(m) }
-func (*GetVMAddressRequest) ProtoMessage()    {}
-func (*GetVMAddressRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_firecracker_abf7bcabf5d4fa05, []int{2}
+func (m *GetVMInfoRequest) Reset()         { *m = GetVMInfoRequest{} }
+func (m *GetVMInfoRequest) String() string { return proto.CompactTextString(m) }
+func (*GetVMInfoRequest) ProtoMessage()    {}
+func (*GetVMInfoRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_firecracker_7b3f3f0a94e95e55, []int{2}
 }
-func (m *GetVMAddressRequest) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_GetVMAddressRequest.Unmarshal(m, b)
+func (m *GetVMInfoRequest) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_GetVMInfoRequest.Unmarshal(m, b)
 }
-func (m *GetVMAddressRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_GetVMAddressRequest.Marshal(b, m, deterministic)
+func (m *GetVMInfoRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_GetVMInfoRequest.Marshal(b, m, deterministic)
 }
-func (dst *GetVMAddressRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_GetVMAddressRequest.Merge(dst, src)
+func (dst *GetVMInfoRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetVMInfoRequest.Merge(dst, src)
 }
-func (m *GetVMAddressRequest) XXX_Size() int {
-	return xxx_messageInfo_GetVMAddressRequest.Size(m)
+func (m *GetVMInfoRequest) XXX_Size() int {
+	return xxx_messageInfo_GetVMInfoRequest.Size(m)
 }
-func (m *GetVMAddressRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_GetVMAddressRequest.DiscardUnknown(m)
+func (m *GetVMInfoRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetVMInfoRequest.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_GetVMAddressRequest proto.InternalMessageInfo
+var xxx_messageInfo_GetVMInfoRequest proto.InternalMessageInfo
 
-func (m *GetVMAddressRequest) GetVMID() string {
+func (m *GetVMInfoRequest) GetVMID() string {
 	if m != nil {
 		return m.VMID
 	}
 	return ""
 }
 
-type GetVMAddressResponse struct {
-	SocketPath           string   `protobuf:"bytes,1,opt,name=SocketPath,proto3" json:"SocketPath,omitempty"`
+type GetVMInfoResponse struct {
+	VMID                 string   `protobuf:"bytes,1,opt,name=VMID,proto3" json:"VMID,omitempty"`
+	ContextID            uint32   `protobuf:"varint,2,opt,name=ContextID,proto3" json:"ContextID,omitempty"`
+	SocketPath           string   `protobuf:"bytes,3,opt,name=SocketPath,proto3" json:"SocketPath,omitempty"`
+	LogFifoPath          string   `protobuf:"bytes,4,opt,name=LogFifoPath,proto3" json:"LogFifoPath,omitempty"`
+	MetricsFifoPath      string   `protobuf:"bytes,5,opt,name=MetricsFifoPath,proto3" json:"MetricsFifoPath,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *GetVMAddressResponse) Reset()         { *m = GetVMAddressResponse{} }
-func (m *GetVMAddressResponse) String() string { return proto.CompactTextString(m) }
-func (*GetVMAddressResponse) ProtoMessage()    {}
-func (*GetVMAddressResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_firecracker_abf7bcabf5d4fa05, []int{3}
+func (m *GetVMInfoResponse) Reset()         { *m = GetVMInfoResponse{} }
+func (m *GetVMInfoResponse) String() string { return proto.CompactTextString(m) }
+func (*GetVMInfoResponse) ProtoMessage()    {}
+func (*GetVMInfoResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_firecracker_7b3f3f0a94e95e55, []int{3}
 }
-func (m *GetVMAddressResponse) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_GetVMAddressResponse.Unmarshal(m, b)
+func (m *GetVMInfoResponse) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_GetVMInfoResponse.Unmarshal(m, b)
 }
-func (m *GetVMAddressResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_GetVMAddressResponse.Marshal(b, m, deterministic)
+func (m *GetVMInfoResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_GetVMInfoResponse.Marshal(b, m, deterministic)
 }
-func (dst *GetVMAddressResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_GetVMAddressResponse.Merge(dst, src)
+func (dst *GetVMInfoResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetVMInfoResponse.Merge(dst, src)
 }
-func (m *GetVMAddressResponse) XXX_Size() int {
-	return xxx_messageInfo_GetVMAddressResponse.Size(m)
+func (m *GetVMInfoResponse) XXX_Size() int {
+	return xxx_messageInfo_GetVMInfoResponse.Size(m)
 }
-func (m *GetVMAddressResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_GetVMAddressResponse.DiscardUnknown(m)
+func (m *GetVMInfoResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetVMInfoResponse.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_GetVMAddressResponse proto.InternalMessageInfo
+var xxx_messageInfo_GetVMInfoResponse proto.InternalMessageInfo
 
-func (m *GetVMAddressResponse) GetSocketPath() string {
+func (m *GetVMInfoResponse) GetVMID() string {
+	if m != nil {
+		return m.VMID
+	}
+	return ""
+}
+
+func (m *GetVMInfoResponse) GetContextID() uint32 {
+	if m != nil {
+		return m.ContextID
+	}
+	return 0
+}
+
+func (m *GetVMInfoResponse) GetSocketPath() string {
 	if m != nil {
 		return m.SocketPath
 	}
 	return ""
 }
 
-type GetFifoPathRequest struct {
-	VMID                 string   `protobuf:"bytes,1,opt,name=VMID,proto3" json:"VMID,omitempty"`
-	FifoType             FifoType `protobuf:"varint,2,opt,name=FifoType,proto3,enum=FifoType" json:"FifoType,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
-}
-
-func (m *GetFifoPathRequest) Reset()         { *m = GetFifoPathRequest{} }
-func (m *GetFifoPathRequest) String() string { return proto.CompactTextString(m) }
-func (*GetFifoPathRequest) ProtoMessage()    {}
-func (*GetFifoPathRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_firecracker_abf7bcabf5d4fa05, []int{4}
-}
-func (m *GetFifoPathRequest) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_GetFifoPathRequest.Unmarshal(m, b)
-}
-func (m *GetFifoPathRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_GetFifoPathRequest.Marshal(b, m, deterministic)
-}
-func (dst *GetFifoPathRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_GetFifoPathRequest.Merge(dst, src)
-}
-func (m *GetFifoPathRequest) XXX_Size() int {
-	return xxx_messageInfo_GetFifoPathRequest.Size(m)
-}
-func (m *GetFifoPathRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_GetFifoPathRequest.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_GetFifoPathRequest proto.InternalMessageInfo
-
-func (m *GetFifoPathRequest) GetVMID() string {
+func (m *GetVMInfoResponse) GetLogFifoPath() string {
 	if m != nil {
-		return m.VMID
+		return m.LogFifoPath
 	}
 	return ""
 }
 
-func (m *GetFifoPathRequest) GetFifoType() FifoType {
+func (m *GetVMInfoResponse) GetMetricsFifoPath() string {
 	if m != nil {
-		return m.FifoType
-	}
-	return FifoType_LOG
-}
-
-type GetFifoPathResponse struct {
-	Path                 string   `protobuf:"bytes,1,opt,name=Path,proto3" json:"Path,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
-}
-
-func (m *GetFifoPathResponse) Reset()         { *m = GetFifoPathResponse{} }
-func (m *GetFifoPathResponse) String() string { return proto.CompactTextString(m) }
-func (*GetFifoPathResponse) ProtoMessage()    {}
-func (*GetFifoPathResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_firecracker_abf7bcabf5d4fa05, []int{5}
-}
-func (m *GetFifoPathResponse) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_GetFifoPathResponse.Unmarshal(m, b)
-}
-func (m *GetFifoPathResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_GetFifoPathResponse.Marshal(b, m, deterministic)
-}
-func (dst *GetFifoPathResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_GetFifoPathResponse.Merge(dst, src)
-}
-func (m *GetFifoPathResponse) XXX_Size() int {
-	return xxx_messageInfo_GetFifoPathResponse.Size(m)
-}
-func (m *GetFifoPathResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_GetFifoPathResponse.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_GetFifoPathResponse proto.InternalMessageInfo
-
-func (m *GetFifoPathResponse) GetPath() string {
-	if m != nil {
-		return m.Path
+		return m.MetricsFifoPath
 	}
 	return ""
 }
@@ -360,7 +285,7 @@ func (m *SetVMMetadataRequest) Reset()         { *m = SetVMMetadataRequest{} }
 func (m *SetVMMetadataRequest) String() string { return proto.CompactTextString(m) }
 func (*SetVMMetadataRequest) ProtoMessage()    {}
 func (*SetVMMetadataRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_firecracker_abf7bcabf5d4fa05, []int{6}
+	return fileDescriptor_firecracker_7b3f3f0a94e95e55, []int{4}
 }
 func (m *SetVMMetadataRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_SetVMMetadataRequest.Unmarshal(m, b)
@@ -397,12 +322,9 @@ func (m *SetVMMetadataRequest) GetMetadata() string {
 func init() {
 	proto.RegisterType((*CreateVMRequest)(nil), "CreateVMRequest")
 	proto.RegisterType((*StopVMRequest)(nil), "StopVMRequest")
-	proto.RegisterType((*GetVMAddressRequest)(nil), "GetVMAddressRequest")
-	proto.RegisterType((*GetVMAddressResponse)(nil), "GetVMAddressResponse")
-	proto.RegisterType((*GetFifoPathRequest)(nil), "GetFifoPathRequest")
-	proto.RegisterType((*GetFifoPathResponse)(nil), "GetFifoPathResponse")
+	proto.RegisterType((*GetVMInfoRequest)(nil), "GetVMInfoRequest")
+	proto.RegisterType((*GetVMInfoResponse)(nil), "GetVMInfoResponse")
 	proto.RegisterType((*SetVMMetadataRequest)(nil), "SetVMMetadataRequest")
-	proto.RegisterEnum("FifoType", FifoType_name, FifoType_value)
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -421,10 +343,8 @@ type FirecrackerClient interface {
 	CreateVM(ctx context.Context, in *CreateVMRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Stops existing Firecracker instance by VM ID
 	StopVM(ctx context.Context, in *StopVMRequest, opts ...grpc.CallOption) (*empty.Empty, error)
-	// Gets VM's instance socket file location
-	GetVMAddress(ctx context.Context, in *GetVMAddressRequest, opts ...grpc.CallOption) (*GetVMAddressResponse, error)
-	// Gets VM's instance FIFO file location
-	GetFifoPath(ctx context.Context, in *GetFifoPathRequest, opts ...grpc.CallOption) (*GetFifoPathResponse, error)
+	// Returns VM info by VM ID
+	GetVMInfo(ctx context.Context, in *GetVMInfoRequest, opts ...grpc.CallOption) (*GetVMInfoResponse, error)
 	// Sets VM's instance metadata
 	SetVMMetadata(ctx context.Context, in *SetVMMetadataRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 }
@@ -455,18 +375,9 @@ func (c *firecrackerClient) StopVM(ctx context.Context, in *StopVMRequest, opts 
 	return out, nil
 }
 
-func (c *firecrackerClient) GetVMAddress(ctx context.Context, in *GetVMAddressRequest, opts ...grpc.CallOption) (*GetVMAddressResponse, error) {
-	out := new(GetVMAddressResponse)
-	err := c.cc.Invoke(ctx, "/Firecracker/GetVMAddress", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *firecrackerClient) GetFifoPath(ctx context.Context, in *GetFifoPathRequest, opts ...grpc.CallOption) (*GetFifoPathResponse, error) {
-	out := new(GetFifoPathResponse)
-	err := c.cc.Invoke(ctx, "/Firecracker/GetFifoPath", in, out, opts...)
+func (c *firecrackerClient) GetVMInfo(ctx context.Context, in *GetVMInfoRequest, opts ...grpc.CallOption) (*GetVMInfoResponse, error) {
+	out := new(GetVMInfoResponse)
+	err := c.cc.Invoke(ctx, "/Firecracker/GetVMInfo", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -488,10 +399,8 @@ type FirecrackerServer interface {
 	CreateVM(context.Context, *CreateVMRequest) (*empty.Empty, error)
 	// Stops existing Firecracker instance by VM ID
 	StopVM(context.Context, *StopVMRequest) (*empty.Empty, error)
-	// Gets VM's instance socket file location
-	GetVMAddress(context.Context, *GetVMAddressRequest) (*GetVMAddressResponse, error)
-	// Gets VM's instance FIFO file location
-	GetFifoPath(context.Context, *GetFifoPathRequest) (*GetFifoPathResponse, error)
+	// Returns VM info by VM ID
+	GetVMInfo(context.Context, *GetVMInfoRequest) (*GetVMInfoResponse, error)
 	// Sets VM's instance metadata
 	SetVMMetadata(context.Context, *SetVMMetadataRequest) (*empty.Empty, error)
 }
@@ -536,38 +445,20 @@ func _Firecracker_StopVM_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Firecracker_GetVMAddress_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetVMAddressRequest)
+func _Firecracker_GetVMInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetVMInfoRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(FirecrackerServer).GetVMAddress(ctx, in)
+		return srv.(FirecrackerServer).GetVMInfo(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/Firecracker/GetVMAddress",
+		FullMethod: "/Firecracker/GetVMInfo",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(FirecrackerServer).GetVMAddress(ctx, req.(*GetVMAddressRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Firecracker_GetFifoPath_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetFifoPathRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(FirecrackerServer).GetFifoPath(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/Firecracker/GetFifoPath",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(FirecrackerServer).GetFifoPath(ctx, req.(*GetFifoPathRequest))
+		return srv.(FirecrackerServer).GetVMInfo(ctx, req.(*GetVMInfoRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -603,12 +494,8 @@ var _Firecracker_serviceDesc = grpc.ServiceDesc{
 			Handler:    _Firecracker_StopVM_Handler,
 		},
 		{
-			MethodName: "GetVMAddress",
-			Handler:    _Firecracker_GetVMAddress_Handler,
-		},
-		{
-			MethodName: "GetFifoPath",
-			Handler:    _Firecracker_GetFifoPath_Handler,
+			MethodName: "GetVMInfo",
+			Handler:    _Firecracker_GetVMInfo_Handler,
 		},
 		{
 			MethodName: "SetVMMetadata",
@@ -619,41 +506,39 @@ var _Firecracker_serviceDesc = grpc.ServiceDesc{
 	Metadata: "firecracker.proto",
 }
 
-func init() { proto.RegisterFile("firecracker.proto", fileDescriptor_firecracker_abf7bcabf5d4fa05) }
+func init() { proto.RegisterFile("firecracker.proto", fileDescriptor_firecracker_7b3f3f0a94e95e55) }
 
-var fileDescriptor_firecracker_abf7bcabf5d4fa05 = []byte{
-	// 521 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x7c, 0x53, 0x5d, 0x8f, 0xd2, 0x50,
-	0x10, 0x95, 0xe5, 0x7b, 0x70, 0x59, 0x98, 0x65, 0x4d, 0x83, 0xc6, 0x34, 0x18, 0x0d, 0xfa, 0x70,
-	0x31, 0x68, 0x8c, 0x89, 0xd1, 0x88, 0xec, 0x42, 0x50, 0xeb, 0x9a, 0xb2, 0xe1, 0xc1, 0xb7, 0x2b,
-	0x4c, 0xbb, 0x0d, 0x6c, 0x6f, 0xbd, 0xbd, 0x68, 0xf8, 0x21, 0xfe, 0x0b, 0x7f, 0xa4, 0xe9, 0x2d,
-	0x2c, 0xe5, 0x63, 0x79, 0xa2, 0x73, 0xe6, 0x1c, 0xe6, 0x64, 0xce, 0x1d, 0xa8, 0x3a, 0x9e, 0xa4,
-	0xb1, 0xe4, 0xe3, 0x29, 0x49, 0x16, 0x48, 0xa1, 0x44, 0xfd, 0xa1, 0x2b, 0x84, 0x3b, 0xa3, 0x96,
-	0xae, 0x7e, 0xce, 0x9d, 0x16, 0xdd, 0x04, 0x6a, 0xb1, 0x6c, 0x96, 0xd4, 0x22, 0xa0, 0x30, 0x2e,
-	0x1a, 0x7f, 0xd3, 0x70, 0xd2, 0x95, 0xc4, 0x15, 0x8d, 0x2c, 0x9b, 0x7e, 0xcd, 0x29, 0x54, 0x88,
-	0x90, 0x19, 0x59, 0x83, 0x73, 0x23, 0x65, 0xa6, 0x9a, 0x45, 0x5b, 0x7f, 0xe3, 0x47, 0x00, 0x8b,
-	0x8f, 0xaf, 0x3d, 0x9f, 0xba, 0x8e, 0x6b, 0x1c, 0x99, 0xa9, 0x66, 0xa9, 0x6d, 0xb2, 0xde, 0x7a,
-	0xf2, 0xaa, 0x2b, 0x7c, 0xc7, 0x73, 0xe7, 0x92, 0x2b, 0x4f, 0xf8, 0x76, 0x42, 0x83, 0x4d, 0x38,
-	0xf9, 0x42, 0xd2, 0xa7, 0xd9, 0xe0, 0x86, 0xbb, 0xf4, 0x9d, 0xab, 0x6b, 0x23, 0xad, 0x07, 0x6c,
-	0xc3, 0xf8, 0x18, 0x20, 0x86, 0x3a, 0xd2, 0x0d, 0x8d, 0x8c, 0x26, 0x25, 0x10, 0x6c, 0x41, 0xd1,
-	0x16, 0x42, 0x9d, 0x4b, 0xef, 0x37, 0x19, 0x59, 0x6d, 0xa5, 0x9a, 0xb4, 0xa2, 0x1b, 0xf6, 0x9a,
-	0x83, 0xef, 0xa1, 0xd2, 0x99, 0x4c, 0xbc, 0xc8, 0x12, 0x9f, 0x69, 0x28, 0x34, 0x72, 0x66, 0x7a,
-	0xbf, 0x6e, 0x87, 0x8a, 0x9f, 0xa1, 0xfa, 0x8d, 0xd4, 0x1f, 0x21, 0xa7, 0x03, 0x5f, 0x91, 0x74,
-	0xf8, 0x98, 0x42, 0x23, 0xaf, 0xf5, 0x8f, 0x92, 0xfa, 0x6d, 0x92, 0xbd, 0x2b, 0xc3, 0x67, 0x50,
-	0xee, 0x0a, 0x5f, 0x71, 0xcf, 0x27, 0xd9, 0x15, 0x73, 0x5f, 0x19, 0x05, 0x33, 0xd5, 0xcc, 0xda,
-	0x5b, 0x68, 0xe3, 0x09, 0x1c, 0x0f, 0x95, 0x08, 0x0e, 0x86, 0xd2, 0x78, 0x0e, 0xa7, 0x7d, 0x52,
-	0x23, 0xab, 0x33, 0x99, 0x48, 0x0a, 0xc3, 0x43, 0xd4, 0x37, 0x50, 0xdb, 0xa4, 0x86, 0x81, 0xf0,
-	0x43, 0x8a, 0x76, 0x3d, 0x14, 0xe3, 0x29, 0x29, 0x1d, 0x48, 0xac, 0x48, 0x20, 0x8d, 0x4b, 0xc0,
-	0x3e, 0xa9, 0x9e, 0xe7, 0x88, 0xa8, 0x3c, 0xf4, 0x42, 0x9e, 0x42, 0x21, 0xa2, 0x5d, 0x2d, 0x02,
-	0xd2, 0xef, 0xa3, 0xdc, 0x2e, 0xb2, 0x15, 0x60, 0xdf, 0xb6, 0x96, 0x9e, 0xd7, 0x7f, 0xb8, 0xf4,
-	0x81, 0x90, 0x49, 0x38, 0xd0, 0xdf, 0x8d, 0x1e, 0xd4, 0x86, 0x91, 0x67, 0x8b, 0x14, 0x9f, 0x70,
-	0xc5, 0x0f, 0x4d, 0xaf, 0x43, 0x61, 0x45, 0xd3, 0xd3, 0x8b, 0xf6, 0x6d, 0xfd, 0xc2, 0x5c, 0x3b,
-	0xc3, 0x3c, 0xa4, 0xbf, 0x5e, 0xf6, 0x2b, 0xf7, 0xb0, 0x04, 0x79, 0xeb, 0xe2, 0xca, 0x1e, 0x74,
-	0x87, 0x95, 0x54, 0xfb, 0xdf, 0x11, 0x94, 0x12, 0x41, 0xe2, 0x6b, 0x28, 0xac, 0x8e, 0x02, 0x2b,
-	0x6c, 0xeb, 0x3e, 0xea, 0x0f, 0x58, 0x7c, 0x5e, 0x6c, 0x75, 0x5e, 0xec, 0x22, 0x3a, 0x2f, 0x7c,
-	0x09, 0xb9, 0x38, 0x33, 0x2c, 0xb3, 0x8d, 0xf0, 0xee, 0x54, 0xbc, 0x83, 0xfb, 0xc9, 0x54, 0xb0,
-	0xc6, 0xf6, 0xe4, 0x59, 0x3f, 0x63, 0x7b, 0xa3, 0x7b, 0x0b, 0xa5, 0xc4, 0x26, 0xf1, 0x94, 0xed,
-	0x06, 0x55, 0xaf, 0xb1, 0x7d, 0xcb, 0xfe, 0x00, 0xc7, 0x1b, 0x8b, 0xc5, 0x33, 0xb6, 0x6f, 0xd1,
-	0x77, 0xd9, 0xfe, 0x94, 0xff, 0x91, 0x8d, 0x91, 0x9c, 0xfe, 0x79, 0xf5, 0x3f, 0x00, 0x00, 0xff,
-	0xff, 0x62, 0xb0, 0xa1, 0x88, 0x83, 0x04, 0x00, 0x00,
+var fileDescriptor_firecracker_7b3f3f0a94e95e55 = []byte{
+	// 481 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x7c, 0x53, 0xd1, 0x8e, 0xd2, 0x40,
+	0x14, 0x4d, 0x65, 0x61, 0xe1, 0x12, 0x76, 0xe9, 0x44, 0x4d, 0x83, 0x1b, 0xd3, 0x60, 0xb2, 0xe1,
+	0x69, 0x30, 0xe8, 0xab, 0xc6, 0x15, 0xc4, 0x54, 0xad, 0x31, 0x25, 0xe1, 0xc1, 0xb7, 0xb1, 0xdc,
+	0x76, 0x1b, 0xd8, 0x99, 0x3a, 0xbd, 0xa8, 0xfb, 0x21, 0x7e, 0x88, 0x9f, 0xe5, 0x5f, 0x98, 0x4e,
+	0x05, 0xba, 0x85, 0xe5, 0x09, 0xee, 0xb9, 0xe7, 0xe4, 0x9e, 0xce, 0xb9, 0x17, 0xec, 0x28, 0xd1,
+	0x18, 0x6a, 0x11, 0x2e, 0x51, 0xf3, 0x54, 0x2b, 0x52, 0xbd, 0x27, 0xb1, 0x52, 0xf1, 0x0a, 0x87,
+	0xa6, 0xfa, 0xb6, 0x8e, 0x86, 0x78, 0x93, 0xd2, 0xed, 0xff, 0x66, 0x9b, 0x6e, 0x53, 0xcc, 0x8a,
+	0xa2, 0xff, 0xbb, 0x06, 0xe7, 0x63, 0x8d, 0x82, 0x70, 0xee, 0x07, 0xf8, 0x7d, 0x8d, 0x19, 0x31,
+	0x06, 0x27, 0x73, 0xdf, 0x9b, 0x38, 0x96, 0x6b, 0x0d, 0x5a, 0x81, 0xf9, 0xcf, 0xde, 0x00, 0xf8,
+	0x22, 0xbc, 0x4e, 0x24, 0x8e, 0xa3, 0xd8, 0x79, 0xe0, 0x5a, 0x83, 0xf6, 0xc8, 0xe5, 0xd3, 0xdd,
+	0xe4, 0x4d, 0x57, 0xc9, 0x28, 0x89, 0xd7, 0x5a, 0x50, 0xa2, 0x64, 0x50, 0xd2, 0xb0, 0x01, 0x9c,
+	0x7f, 0x44, 0x2d, 0x71, 0xe5, 0xdd, 0x88, 0x18, 0xbf, 0x08, 0xba, 0x76, 0x6a, 0x66, 0x40, 0x15,
+	0x66, 0x4f, 0x01, 0x0a, 0xe8, 0x4a, 0xc7, 0x99, 0x73, 0x62, 0x48, 0x25, 0x84, 0x0d, 0xa1, 0x15,
+	0x28, 0x45, 0x13, 0x9d, 0xfc, 0x40, 0xa7, 0x6e, 0xac, 0xd8, 0x65, 0x2b, 0xa6, 0x11, 0xec, 0x38,
+	0xec, 0x15, 0x74, 0xaf, 0x16, 0x8b, 0x24, 0xb7, 0x24, 0x56, 0x06, 0xca, 0x9c, 0x86, 0x5b, 0x3b,
+	0xac, 0xdb, 0xa3, 0xb2, 0x0f, 0x60, 0x7f, 0x46, 0xfa, 0xa9, 0xf4, 0xd2, 0x93, 0x84, 0x3a, 0x12,
+	0x21, 0x66, 0xce, 0xa9, 0xd1, 0x5f, 0x94, 0xf5, 0x55, 0x52, 0xb0, 0x2f, 0x63, 0x97, 0x70, 0x36,
+	0x56, 0x92, 0x44, 0x22, 0x51, 0x8f, 0xd5, 0x5a, 0x92, 0xd3, 0x74, 0xad, 0x41, 0x3d, 0xa8, 0xa0,
+	0xfd, 0x67, 0xd0, 0x99, 0x91, 0x4a, 0x8f, 0x86, 0xd2, 0xbf, 0x84, 0xee, 0x7b, 0xa4, 0xb9, 0xef,
+	0xc9, 0x48, 0x1d, 0xe3, 0xfd, 0xb1, 0xc0, 0x2e, 0x11, 0xb3, 0x54, 0xc9, 0x0c, 0x0f, 0xc6, 0x7c,
+	0x01, 0xad, 0xdc, 0x08, 0xfe, 0x22, 0x6f, 0x62, 0x52, 0xee, 0x04, 0x3b, 0x20, 0x0f, 0x66, 0xa6,
+	0xc2, 0x25, 0x52, 0x29, 0xbd, 0x12, 0xc2, 0x5c, 0x68, 0x7f, 0x52, 0xf1, 0x34, 0x89, 0x94, 0x21,
+	0x14, 0xc9, 0x95, 0xa1, 0x7c, 0x09, 0x7c, 0x24, 0x9d, 0x84, 0xd9, 0x96, 0x55, 0x2f, 0x96, 0xa0,
+	0x02, 0xf7, 0xa7, 0xf0, 0x70, 0x96, 0x5b, 0xf6, 0x91, 0xc4, 0x42, 0x90, 0x38, 0xb6, 0x9c, 0x3d,
+	0x68, 0x6e, 0x68, 0xc6, 0x74, 0x2b, 0xd8, 0xd6, 0xa3, 0xbf, 0x16, 0xb4, 0x4b, 0x19, 0xb1, 0x97,
+	0xd0, 0xdc, 0xec, 0x3b, 0xeb, 0xf2, 0xca, 0xea, 0xf7, 0x1e, 0xf3, 0xe2, 0x72, 0xf8, 0xe6, 0x72,
+	0xf8, 0xbb, 0xfc, 0x72, 0xd8, 0x73, 0x68, 0x14, 0x71, 0xb0, 0x33, 0x7e, 0x27, 0x97, 0x7b, 0x15,
+	0x23, 0x68, 0x6d, 0x9f, 0x9c, 0xd9, 0xbc, 0x9a, 0x53, 0x8f, 0xf1, 0xfd, 0x44, 0x5e, 0x43, 0xe7,
+	0xce, 0x37, 0xb3, 0x47, 0xfc, 0xd0, 0x1b, 0xdc, 0x37, 0xf3, 0xed, 0xe9, 0xd7, 0x7a, 0x81, 0x34,
+	0xcc, 0xcf, 0x8b, 0x7f, 0x01, 0x00, 0x00, 0xff, 0xff, 0xac, 0xa7, 0xfc, 0x93, 0x1b, 0x04, 0x00,
+	0x00,
 }

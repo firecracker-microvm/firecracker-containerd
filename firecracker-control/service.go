@@ -76,14 +76,9 @@ func (s *service) StopVM(ctx context.Context, req *proto.StopVMRequest) (*empty.
 	return s.local.StopVM(ctx, req)
 }
 
-func (s *service) GetVMAddress(ctx context.Context, req *proto.GetVMAddressRequest) (*proto.GetVMAddressResponse, error) {
-	log.G(ctx).Debugf("get VM address: %+v", req)
-	return s.local.GetVMAddress(ctx, req)
-}
-
-func (s *service) GetFifoPath(ctx context.Context, req *proto.GetFifoPathRequest) (*proto.GetFifoPathResponse, error) {
-	log.G(ctx).Debugf("get fifo path: %+v", req)
-	return s.local.GetFifoPath(ctx, req)
+func (s *service) GetVMInfo(ctx context.Context, req *proto.GetVMInfoRequest) (*proto.GetVMInfoResponse, error) {
+	log.G(ctx).Debugf("get VM info: %+v", req)
+	return s.local.GetVMInfo(ctx, req)
 }
 
 func (s *service) SetVMMetadata(ctx context.Context, req *proto.SetVMMetadataRequest) (*empty.Empty, error) {

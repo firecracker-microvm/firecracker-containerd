@@ -1,0 +1,9 @@
+[Unit]
+Description=Single container root filesystem
+ConditionPathIsDirectory=/container/rootfs
+DefaultDependencies=no
+Before=local-fs.target
+
+[Mount]
+What=/dev/vdb
+Where=/container/rootfs

@@ -1,0 +1,12 @@
+[Unit]
+Description=Firecracker VM agent
+StartLimitIntervalSec=2
+ConditionPathIsMountPoint=/container/rootfs
+After=local-fs.target
+Requires=local-fs.target
+
+[Service]
+Type=simple
+WorkingDirectory=/container
+ExecStart=/usr/local/bin/agent -id 1
+Restart=always

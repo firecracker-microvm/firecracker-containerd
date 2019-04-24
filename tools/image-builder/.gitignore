@@ -1,0 +1,4 @@
+files_ephemeral
+*.img
+rootfs
+*stamp

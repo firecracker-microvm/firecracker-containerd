@@ -76,22 +76,6 @@ func TestLocal_buildVMConfiguration(t *testing.T) {
 	assert.True(t, ni.AllowMMDS)
 }
 
-func TestLocal_buildInvalidConfiguration(t *testing.T) {
-	obj := &local{
-		rootPath:    "/",
-		findVsockFn: func(context.Context) (*os.File, uint32, error) { return nil, 3, nil },
-	}
-
-	request := &proto.CreateVMRequest{}
-
-	_, err := obj.buildVMConfiguration(testCtx, "1", 3, request)
-	assert.EqualError(t, err, "invalid machine configuration")
-
-	request.MachineCfg = &proto.FirecrackerMachineConfiguration{}
-	_, err = obj.buildVMConfiguration(testCtx, "1", 3, request)
-	assert.EqualError(t, err, "root drive can't be empty")
-}
-
 func TestLocal_startMachine(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

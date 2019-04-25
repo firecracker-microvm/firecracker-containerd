@@ -16,6 +16,7 @@ package service
 import (
 	"time"
 
+	models "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 	"github.com/pkg/errors"
 )
 
@@ -31,4 +32,11 @@ var (
 
 const (
 	firecrackerStartTimeout = 5 * time.Second
+	defaultCPUTemplate      = models.CPUTemplateT2
+	defaultCPUCount         = 1
+	defaultMemSizeMb        = 128
+	defaultKernelArgs       = "console=ttyS0 noapic reboot=k panic=1 pci=off nomodules rw"
+	defaultFilesPath        = "/var/lib/firecracker-containerd/runtime/"
+	defaultKernelPath       = defaultFilesPath + "default-vmlinux.bin"
+	defaultRootfsPath       = defaultFilesPath + "default-rootfs.img"
 )

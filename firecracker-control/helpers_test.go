@@ -17,209 +17,87 @@ import (
 	"testing"
 
 	"github.com/firecracker-microvm/firecracker-go-sdk"
-	"github.com/stretchr/testify/assert"
-
 	models "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 )
 
 const (
-	oneTimeBurst  = 800
-	refillTime    = 1000
-	capacity      = 400
-	rootDrivePath = "/path/to/root/drive"
-	loopDrivePath = "/path/to/loop/drive"
-	loopDriveRO   = false
-	memSize       = 4096
-	vcpuCount     = 2
-	mac           = "AA:FC:00:00:00:01"
-	hostDevName   = "tap0"
+	oneTimeBurst = 800
+	refillTime   = 1000
+	capacity     = 400
+	memSize      = 4096
+	vcpuCount    = 2
+	mac          = "AA:FC:00:00:00:01"
+	hostDevName  = "tap0"
 )
 
-var (
-	defaultDrivesBuilder = firecracker.NewDrivesBuilder(rootDrivePath).AddDrive(
-		loopDrivePath, loopDriveRO)
-	defaultDrives             = defaultDrivesBuilder.Build()
-	overrideRootDrivesBuilder = firecracker.NewDrivesBuilder(loopDrivePath)
-	additionalDrivesBuilder   = firecracker.NewDrivesBuilder(rootDrivePath).AddDrive(
-		loopDrivePath, loopDriveRO).AddDrive(
-		loopDrivePath, loopDriveRO, func(d *models.Drive) {
-			d.RateLimiter = &models.RateLimiter{
-				Ops: &models.TokenBucket{
-					OneTimeBurst: firecracker.Int64(oneTimeBurst),
-					RefillTime:   firecracker.Int64(refillTime),
-					Size:         firecracker.Int64(capacity),
-				},
-			}
-		})
-)
+func TestMachineConfigurationFromProto(t *testing.T) {
+	config := machineConfigurationFromProto(&proto.FirecrackerMachineConfiguration{
+		CPUTemplate: string(models.CPUTemplateC3),
+		VcpuCount:   vcpuCount,
+		MemSizeMib:  memSize,
+		HtEnabled:   true,
+	})
 
-func TestOverrideVMConfigFromTaskOpts(t *testing.T) {
-	var testCases = []struct {
-		name            string
-		in              firecracker.Config
-		inDrivesBuilder firecracker.DrivesBuilder
-		vmConfig        *proto.FirecrackerConfig
-		expectedOut     firecracker.Config
-		expectedDrives  []models.Drive
-		expectedErr     bool
-	}{
-		{
-			name:            "network config",
-			in:              firecracker.Config{},
-			inDrivesBuilder: defaultDrivesBuilder,
-			vmConfig: &proto.FirecrackerConfig{
-				NetworkInterfaces: []*proto.FirecrackerNetworkInterface{
-					{
-						MacAddress:  mac,
-						HostDevName: hostDevName,
-						AllowMMDS:   true,
-						InRateLimiter: &proto.FirecrackerRateLimiter{
-							Bandwidth: &proto.FirecrackerTokenBucket{
-								OneTimeBurst: oneTimeBurst,
-								RefillTime:   refillTime,
-								Capacity:     capacity,
-							},
-						},
-						OutRateLimiter: &proto.FirecrackerRateLimiter{
-							Bandwidth: &proto.FirecrackerTokenBucket{
-								OneTimeBurst: oneTimeBurst,
-								RefillTime:   refillTime,
-								Capacity:     capacity,
-							},
-						},
-					},
-					{
-						MacAddress:  mac,
-						HostDevName: hostDevName,
-					},
-				},
-			},
-			expectedErr: false,
-			expectedOut: firecracker.Config{
-				NetworkInterfaces: []firecracker.NetworkInterface{
-					{
-						MacAddress:  mac,
-						HostDevName: hostDevName,
-						AllowMMDS:   true,
-						InRateLimiter: &models.RateLimiter{
-							Bandwidth: &models.TokenBucket{
-								OneTimeBurst: firecracker.Int64(oneTimeBurst),
-								RefillTime:   firecracker.Int64(refillTime),
-								Size:         firecracker.Int64(capacity),
-							},
-						},
-						OutRateLimiter: &models.RateLimiter{
-							Bandwidth: &models.TokenBucket{
-								OneTimeBurst: firecracker.Int64(oneTimeBurst),
-								RefillTime:   firecracker.Int64(refillTime),
-								Size:         firecracker.Int64(capacity),
-							},
-						},
-					},
-					{
-						MacAddress:  mac,
-						HostDevName: hostDevName,
-					},
-				},
-			},
-			expectedDrives: defaultDrives,
-		},
-		{
-			name:            "machine config",
-			in:              firecracker.Config{},
-			inDrivesBuilder: defaultDrivesBuilder,
-			vmConfig: &proto.FirecrackerConfig{
-				MachineCfg: &proto.FirecrackerMachineConfiguration{
-					MemSizeMib: memSize,
-					VcpuCount:  vcpuCount,
-				},
-			},
-			expectedErr: false,
-			expectedOut: firecracker.Config{
-				MachineCfg: models.MachineConfiguration{
-					MemSizeMib: memSize,
-					VcpuCount:  vcpuCount,
-				},
-			},
-			expectedDrives: defaultDrivesBuilder.Build(),
-		},
-		{
-			name:            "invalid memory in machine config",
-			in:              firecracker.Config{},
-			inDrivesBuilder: defaultDrivesBuilder,
-			vmConfig: &proto.FirecrackerConfig{
-				MachineCfg: &proto.FirecrackerMachineConfiguration{
-					VcpuCount: vcpuCount,
-				},
-			},
-			expectedErr:    true,
-			expectedOut:    firecracker.Config{},
-			expectedDrives: defaultDrivesBuilder.Build(),
-		},
-		{
-			name:            "invalid vcpu count in machine config",
-			in:              firecracker.Config{},
-			inDrivesBuilder: defaultDrivesBuilder,
-			vmConfig: &proto.FirecrackerConfig{
-				MachineCfg: &proto.FirecrackerMachineConfiguration{
-					MemSizeMib: memSize,
-				},
-			},
-			expectedErr:    true,
-			expectedOut:    firecracker.Config{},
-			expectedDrives: defaultDrivesBuilder.Build(),
-		},
-		{
-			name:            "storage config overrides root drive",
-			in:              firecracker.Config{},
-			inDrivesBuilder: overrideRootDrivesBuilder,
-			vmConfig: &proto.FirecrackerConfig{
-				RootDrive: &proto.FirecrackerDrive{
-					PathOnHost: loopDrivePath,
-				},
-			},
-			expectedErr:    false,
-			expectedOut:    firecracker.Config{},
-			expectedDrives: overrideRootDrivesBuilder.Build(),
-		},
-		{
-			name:            "storage config adds additional drives",
-			in:              firecracker.Config{},
-			inDrivesBuilder: defaultDrivesBuilder,
-			vmConfig: &proto.FirecrackerConfig{
-				AdditionalDrives: []*proto.FirecrackerDrive{
-					{
-						PathOnHost: loopDrivePath,
-						RateLimiter: &proto.FirecrackerRateLimiter{
-							Ops: &proto.FirecrackerTokenBucket{
-								OneTimeBurst: oneTimeBurst,
-								RefillTime:   refillTime,
-								Capacity:     capacity,
-							},
-						},
-					},
-				},
-			},
-			expectedErr:    false,
-			expectedOut:    firecracker.Config{},
-			expectedDrives: additionalDrivesBuilder.Build(),
-		},
+	assert.EqualValues(t, models.CPUTemplateC3, config.CPUTemplate)
+	assert.EqualValues(t, vcpuCount, config.VcpuCount)
+	assert.EqualValues(t, memSize, config.MemSizeMib)
+	assert.True(t, config.HtEnabled)
+}
+
+func TestDefaultMachineConfigurationFromProto(t *testing.T) {
+	configs := map[string]models.MachineConfiguration{
+		"Nil":          machineConfigurationFromProto(nil),
+		"Empty struct": machineConfigurationFromProto(&proto.FirecrackerMachineConfiguration{}),
 	}
-	for _, tc := range testCases {
-		// scopelint gets sad if we use tc directly. The specific complaint is
-		// "Using the variable on range scope in function literal".
-		test := tc
-		t.Run(test.name, func(t *testing.T) {
-			out, drivesBuilder, err := overrideVMConfigFromTaskOpts(test.in, test.vmConfig, test.inDrivesBuilder)
-			if test.expectedErr {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				assert.Equal(t, test.expectedOut, out)
-				assert.Equal(t, test.expectedDrives, drivesBuilder.Build())
-			}
+
+	for name, config := range configs {
+		cfg := config
+		t.Run(name, func(t *testing.T) {
+			assert.EqualValues(t, defaultCPUTemplate, cfg.CPUTemplate)
+			assert.EqualValues(t, defaultCPUCount, cfg.VcpuCount)
+			assert.EqualValues(t, defaultMemSizeMb, cfg.MemSizeMib)
+			assert.False(t, cfg.HtEnabled)
 		})
 	}
+}
+
+func TestNetworkConfigFromProto(t *testing.T) {
+	network := networkConfigFromProto(&proto.FirecrackerNetworkInterface{
+		MacAddress:  mac,
+		HostDevName: hostDevName,
+		AllowMMDS:   true,
+	})
+
+	assert.Equal(t, mac, network.MacAddress)
+	assert.Equal(t, hostDevName, network.HostDevName)
+	assert.True(t, network.AllowMMDS)
+	assert.Nil(t, network.InRateLimiter)
+	assert.Nil(t, network.OutRateLimiter)
+}
+
+func TestTokenBucketFromProto(t *testing.T) {
+	bucket := tokenBucketFromProto(&proto.FirecrackerTokenBucket{
+		OneTimeBurst: oneTimeBurst,
+		RefillTime:   refillTime,
+		Capacity:     capacity,
+	})
+
+	assert.EqualValues(t, oneTimeBurst, *bucket.OneTimeBurst)
+	assert.EqualValues(t, refillTime, *bucket.RefillTime)
+	assert.EqualValues(t, capacity, *bucket.Size)
+}
+
+func TestAddDriveFromProto(t *testing.T) {
+	list := addDriveFromProto(firecracker.DrivesBuilder{}, &proto.FirecrackerDrive{
+		IsReadOnly: true,
+		PathOnHost: "/a",
+		Partuuid:   "xy",
+	}).Build()
+
+	assert.Equal(t, "/a", *list[0].PathOnHost)
+	assert.Equal(t, "xy", list[0].Partuuid)
+	assert.True(t, *list[0].IsReadOnly)
 }

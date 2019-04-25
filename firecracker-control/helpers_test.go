@@ -20,7 +20,7 @@ import (
 	models "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/firecracker-microvm/firecracker-containerd/proto"
+	proto "github.com/firecracker-microvm/firecracker-containerd/proto/grpc"
 )
 
 const (

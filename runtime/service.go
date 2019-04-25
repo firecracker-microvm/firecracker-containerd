@@ -57,7 +57,7 @@ import (
 
 	"github.com/firecracker-microvm/firecracker-containerd/eventbridge"
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
-	"github.com/firecracker-microvm/firecracker-containerd/proto"
+	proto "github.com/firecracker-microvm/firecracker-containerd/proto/grpc"
 	"github.com/firecracker-microvm/firecracker-containerd/runtime/firecrackeroci"
 )
 

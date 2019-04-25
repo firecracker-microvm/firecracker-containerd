@@ -13,15 +13,22 @@
 
 PROTO_SRC := $(wildcard *.proto)
 PROTO_GEN_SRC := $(PROTO_SRC:.proto=.pb.go)
+PROTO_GEN_SRC_GRPC := $(addprefix grpc/,$(PROTO_GEN_SRC))
+PROTO_GEN_SRC_TTRPC := $(addprefix ttrpc/,$(PROTO_GEN_SRC))
 
-$(PROTO_GEN_SRC): $(PROTO_SRC)
+$(PROTO_GEN_SRC_TTRPC): $(PROTO_SRC)
 	protoc \
-		--gogo_out=plugins=grpc,Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types:. \
+		--gogottrpc_out=plugins=ttrpc,Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types:ttrpc \
 		$^
 
-proto: $(PROTO_GEN_SRC)
+$(PROTO_GEN_SRC_GRPC): $(PROTO_SRC)
+	protoc \
+		--gogo_out=plugins=grpc,Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types:grpc \
+		$^
+
+proto: $(PROTO_GEN_SRC_GRPC) $(PROTO_GEN_SRC_TTRPC)
 
 clean:
-	- rm -f *.pb.go
+	- rm -f $(PROTO_GEN_SRC_GRPC) $(PROTO_GEN_SRC_TTRPC)
 
 .PHONY: clean proto

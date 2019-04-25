@@ -19,7 +19,7 @@ import (
 	"github.com/firecracker-microvm/firecracker-go-sdk"
 	models "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 
-	"github.com/firecracker-microvm/firecracker-containerd/proto"
+	proto "github.com/firecracker-microvm/firecracker-containerd/proto/grpc"
 )
 
 func machineConfigurationFromProto(req *proto.FirecrackerMachineConfiguration) models.MachineConfiguration {

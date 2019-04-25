@@ -29,7 +29,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
-	"github.com/firecracker-microvm/firecracker-containerd/proto"
+	proto "github.com/firecracker-microvm/firecracker-containerd/proto/grpc"
 )
 
 var (

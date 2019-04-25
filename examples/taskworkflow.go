@@ -27,7 +27,7 @@ import (
 	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/oci"
-	"github.com/firecracker-microvm/firecracker-containerd/proto"
+	proto "github.com/firecracker-microvm/firecracker-containerd/proto/grpc"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 )

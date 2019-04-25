@@ -16,7 +16,7 @@ package main
 import (
 	"time"
 
-	"github.com/firecracker-microvm/firecracker-containerd/proto"
+	proto "github.com/firecracker-microvm/firecracker-containerd/proto/grpc"
 	firecracker "github.com/firecracker-microvm/firecracker-go-sdk"
 	models "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 	"github.com/pkg/errors"

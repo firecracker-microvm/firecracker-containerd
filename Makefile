@@ -30,7 +30,7 @@ $(SUBDIRS):
 	$(MAKE) -C $@
 
 proto:
-	$(MAKE) -C proto/ proto
+	PATH=$(BINPATH):$(PATH) $(MAKE) -C proto/ proto
 
 clean:
 	for d in $(SUBDIRS); do $(MAKE) -C $$d clean; done
@@ -53,6 +53,7 @@ deps:
 	$(BINPATH)/golangci-lint --version
 	GOBIN=$(BINPATH) GO111MODULE=off go get -u github.com/vbatts/git-validation
 	GOBIN=$(BINPATH) GO111MODULE=off go get -u github.com/kunalkushwaha/ltag
+	GOBIN=$(BINPATH) GO111MODULE=off go get -u github.com/containerd/ttrpc/cmd/protoc-gen-gogottrpc
 
 runc-builder: runc-builder-stamp
 

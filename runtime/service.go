@@ -205,7 +205,6 @@ func (s *service) newShim(namespace string, containerdBinary, containerdAddress 
 	args := []string{
 		"-namespace", namespace,
 		"-address", containerdAddress,
-		"-publish-binary", containerdBinary,
 	}
 
 	if s.config.Debug {

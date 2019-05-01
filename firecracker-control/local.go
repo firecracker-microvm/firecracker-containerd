@@ -16,25 +16,34 @@ package service
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
-	"path/filepath"
-	"sync"
+	"os/exec"
+	"strconv"
+	"strings"
+	"syscall"
 
-	"github.com/containerd/containerd/events"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/plugin"
-	"github.com/firecracker-microvm/firecracker-go-sdk"
+	"github.com/containerd/containerd/runtime/v2/shim"
+	"github.com/containerd/ttrpc"
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
+	"github.com/firecracker-microvm/firecracker-containerd/internal"
+	fcShim "github.com/firecracker-microvm/firecracker-containerd/internal/shim"
+	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
-	fccontrol "github.com/firecracker-microvm/firecracker-containerd/proto/service/fccontrol/grpc"
+	fccontrolGrpc "github.com/firecracker-microvm/firecracker-containerd/proto/service/fccontrol/grpc"
+	fccontrolTtrpc "github.com/firecracker-microvm/firecracker-containerd/proto/service/fccontrol/ttrpc"
 )
 
 var (
-	_ fccontrol.FirecrackerServer = (*local)(nil)
+	_ fccontrolGrpc.FirecrackerServer = (*local)(nil)
 )
 
 func init() {
@@ -48,31 +57,9 @@ func init() {
 	})
 }
 
-const (
-	startEventName = "/firecracker-vm/start"
-	stopEventName  = "/firecracker-vm/stop"
-)
-
-// Wrap interface in order to properly generate mock with mockgen
-type machine interface {
-	firecracker.MachineIface
-}
-
-type publisher interface {
-	events.Publisher
-}
-
-type instance struct {
-	cfg     *firecracker.Config
-	machine machine
-}
-
 type local struct {
-	vm          map[string]*instance
-	vmLock      sync.RWMutex
-	rootPath    string
-	publisher   publisher
-	findVsockFn func(context.Context) (*os.File, uint32, error)
+	containerdAddress string
+	logger            *logrus.Entry
 }
 
 func newLocal(ic *plugin.InitContext) (*local, error) {
@@ -81,263 +68,251 @@ func newLocal(ic *plugin.InitContext) (*local, error) {
 	}
 
 	return &local{
-		vm:          make(map[string]*instance),
-		rootPath:    ic.Root,
-		publisher:   ic.Events,
-		findVsockFn: findNextAvailableVsockCID,
+		containerdAddress: ic.Address,
+		logger:            log.G(ic.Context),
 	}, nil
 }
 
-// CreateVM creates new Firecracker VM instance
-func (s *local) CreateVM(ctx context.Context, req *proto.CreateVMRequest) (*empty.Empty, error) {
+// CreateVM creates new Firecracker VM instance. It creates a runtime shim for the VM and the forwards
+// the CreateVM request to that shim. If there is already a VM created with the provided VMID, then
+// AlreadyExists is returned.
+func (s *local) CreateVM(requestCtx context.Context, req *proto.CreateVMRequest) (*empty.Empty, error) {
+	var err error
+
 	id := req.GetVMID()
 	if id == "" {
-		return nil, errors.New("invalid VM ID")
-	}
-
-	s.vmLock.Lock()
-
-	// Make sure VM ID unique
-	if _, ok := s.vm[id]; ok {
-		s.vmLock.Unlock()
-		return nil, errors.Errorf("VM with id %q already exists", id)
-	}
-
-	// Reserve this ID while we're creating an instance in order to avoid race conditions
-	s.vm[id] = &instance{}
-	s.vmLock.Unlock()
-
-	instance, err := s.newInstance(ctx, id, req)
-
-	s.vmLock.Lock()
-	defer s.vmLock.Unlock()
-
-	if err != nil {
-		log.G(ctx).WithError(err).WithField("vm_id", id).Error("failed to create VM")
-		delete(s.vm, id)
-
+		err = errors.New("invalid VM ID")
+		s.logger.WithError(err).Error()
 		return nil, err
 	}
 
-	s.vm[id] = instance
-	return &empty.Empty{}, nil
-}
-
-func (s *local) newInstance(ctx context.Context, id string, req *proto.CreateVMRequest) (*instance, error) {
-	logger := log.G(ctx).WithField("vm_id", id)
-
-	vsockDescriptor, cid, err := s.findVsockFn(ctx)
+	ns, err := namespaces.NamespaceRequired(requestCtx)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to find available cid for vsock")
-	}
-
-	defer vsockDescriptor.Close()
-
-	cfg, err := s.buildVMConfiguration(ctx, id, cid, req)
-	if err != nil {
+		err = errors.Wrap(err, "error retrieving namespace of request")
+		s.logger.WithError(err).Error()
 		return nil, err
 	}
 
-	logger.Info("creating new VM")
+	s.logger.Debugf("using namespace: %s", ns)
 
-	machine, err := firecracker.NewMachine(ctx, *cfg, firecracker.WithLogger(logger))
+	// We determine if there is already a shim managing a VM with the current VMID by attempting
+	// to listen on the abstract socket address (which is parameterized by VMID). If we get
+	// EADDRINUSE, then we assume there is already a shim for the VM and return an AlreadyExists error.
+	shimSocketAddress, err := fcShim.SocketAddress(requestCtx, id)
 	if err != nil {
-		logger.WithError(err).Error("failed to create new machine instance")
+		err = errors.Wrap(err, "failed to obtain shim socket address")
+		s.logger.WithError(err).Error()
 		return nil, err
 	}
 
-	// Release vsock CID so Firecracker instance can reacquire it.
-	vsockDescriptor.Close()
-
-	if err := s.startMachine(ctx, id, machine); err != nil {
-		logger.WithError(err).Error("failed to start VM instance")
+	shimSocket, err := shim.NewSocket(shimSocketAddress)
+	if isEADDRINUSE(err) {
+		return nil, status.Errorf(codes.AlreadyExists, "VM with ID %q already exists", id)
+	} else if err != nil {
+		err = errors.Wrapf(err, "failed to open shim socket at address %q", shimSocketAddress)
+		s.logger.WithError(err).Error()
 		return nil, err
 	}
 
-	logger.Info("successfully started the VM")
+	// If we're here, there is no pre-existing shim for this VMID, so we spawn a new one
+	defer shimSocket.Close()
 
-	newInstance := &instance{
-		cfg:     cfg,
-		machine: machine,
-	}
-
-	return newInstance, nil
-}
-
-func (s *local) buildVMConfiguration(ctx context.Context, id string, cid uint32, req *proto.CreateVMRequest) (*firecracker.Config, error) {
-	logger := log.G(ctx).WithFields(logrus.Fields{
-		"vm_id":  id,
-		"vm_cid": cid,
-	})
-
-	cfg := &firecracker.Config{
-		SocketPath:   filepath.Join(s.rootPath, fmt.Sprintf("vm_%s.socket", id)),
-		LogFifo:      filepath.Join(s.rootPath, fmt.Sprintf("vm_%s_log.fifo", id)),
-		MetricsFifo:  filepath.Join(s.rootPath, fmt.Sprintf("vm_%s_metrics.fifo", id)),
-		VsockDevices: []firecracker.VsockDevice{{Path: "root", CID: cid}},
-		MachineCfg:   machineConfigurationFromProto(req.GetMachineCfg()),
-	}
-
-	logger.Debugf("using socket path: %s", cfg.SocketPath)
-
-	// Kernel configuration
-
-	if val := req.GetKernelArgs(); val != "" {
-		cfg.KernelArgs = val
-	} else {
-		cfg.KernelArgs = defaultKernelArgs
-	}
-
-	if val := req.GetKernelImagePath(); val != "" {
-		cfg.KernelImagePath = val
-	} else {
-		cfg.KernelImagePath = defaultKernelPath
-	}
-
-	// Drives configuration
-
-	var driveBuilder firecracker.DrivesBuilder
-	if root := req.GetRootDrive(); root != nil {
-		driveBuilder = firecracker.NewDrivesBuilder(root.GetPathOnHost())
-	} else {
-		driveBuilder = firecracker.NewDrivesBuilder(defaultRootfsPath)
-	}
-
-	for _, drive := range req.GetAdditionalDrives() {
-		driveBuilder = addDriveFromProto(driveBuilder, drive)
-	}
-
-	// TODO: Reserve fake drives here (https://github.com/firecracker-microvm/firecracker-containerd/pull/154)
-
-	cfg.Drives = driveBuilder.Build()
-
-	// Setup network interfaces
-
-	for _, ni := range req.GetNetworkInterfaces() {
-		cfg.NetworkInterfaces = append(cfg.NetworkInterfaces, networkConfigFromProto(ni))
-	}
-
-	return cfg, nil
-}
-
-// startMachine attempts to start an instance within timeout and runs a goroutine to monitor VM exit event
-func (s *local) startMachine(ctx context.Context, id string, machine machine) error {
-	logger := log.G(ctx).WithField("vm_id", id)
-
-	logger.Info("starting VM instance")
-
-	ctx, cancel := context.WithTimeout(ctx, firecrackerStartTimeout)
-	defer cancel()
-
-	ns, err := namespaces.NamespaceRequired(ctx)
+	shimDir := vm.ShimDir(ns, id)
+	err = shimDir.Create()
 	if err != nil {
-		return err
+		err = errors.Wrapf(err, "failed to create VM dir %q", shimDir.RootPath())
+		s.logger.WithError(err).Error()
+		return nil, err
 	}
 
-	logger.Debugf("using namespace: %s", ns)
-
-	if err := machine.Start(ctx); err != nil {
-		logger.WithError(err).Error("failed to start the VM")
-		return err
-	}
-
-	if err := s.publisher.Publish(ctx, startEventName, &proto.VMStart{VMID: id}); err != nil {
-		logger.WithError(err).Error("failed to publish start event")
-		return err
-	}
-
-	go func() {
-		ctx := namespaces.WithNamespace(context.Background(), ns)
-
-		if err := machine.Wait(ctx); err != nil {
-			logger.WithError(err).Error("failed to wait the VM")
+	defer func() {
+		if err != nil {
+			removeErr := os.RemoveAll(shimDir.RootPath())
+			if removeErr != nil {
+				s.logger.WithError(removeErr).WithField("path", shimDir.RootPath()).Error("failed to cleanup VM dir")
+			}
 		}
-
-		if err := s.publisher.Publish(ctx, stopEventName, &proto.VMStop{VMID: id}); err != nil {
-			logger.WithError(err).Error("failed to publish stop event")
-		}
-
-		logger.Debug("removing machine")
-
-		s.vmLock.Lock()
-		delete(s.vm, id)
-		s.vmLock.Unlock()
 	}()
 
-	return nil
-}
+	// TODO we have to create separate listeners for the fccontrol service and shim service because
+	// containerd does not currently expose the shim server for us to register the fccontrol service with too.
+	// This is likely addressable through some relatively small upstream contributions; the following is a stop-gap
+	// solution until that time.
+	fcSocketAddress, err := fcShim.FCControlSocketAddress(requestCtx, id)
+	if err != nil {
+		err = errors.Wrap(err, "failed to obtain shim socket address")
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
 
-// StopVM stops running VM instance by VM ID
-func (s *local) StopVM(ctx context.Context, req *proto.StopVMRequest) (*empty.Empty, error) {
-	logger := log.G(ctx).WithField("vm_id", req.GetVMID())
+	fcSocket, err := shim.NewSocket(fcSocketAddress)
+	if err != nil {
+		err = errors.Wrapf(err, "failed to open fccontrol socket at address %q", fcSocketAddress)
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
 
-	instance, err := s.getVM(req.GetVMID())
+	defer fcSocket.Close()
+
+	cmd, err := s.newShim(ns, id, s.containerdAddress, shimSocket, fcSocket)
 	if err != nil {
 		return nil, err
 	}
 
-	logger.Infof("stopping the VM")
+	defer func() {
+		if err != nil {
+			cmd.Process.Kill()
+		}
+	}()
 
-	if err := instance.machine.StopVMM(); err != nil {
-		logger.WithError(err).Error("failed to stop VM")
-		return nil, err
-	}
-
-	logger.Info("successfully stopped the VM")
-	return &empty.Empty{}, nil
-}
-
-func (s *local) GetVMInfo(ctx context.Context, req *proto.GetVMInfoRequest) (*proto.GetVMInfoResponse, error) {
-	id := req.GetVMID()
-	instance, err := s.getVM(id)
+	client, err := s.shimFirecrackerClient(requestCtx, id)
 	if err != nil {
+		err = errors.Wrap(err, "failed to create firecracker shim client")
+		s.logger.WithError(err).Error()
 		return nil, err
 	}
 
-	var cid uint32
-	if len(instance.cfg.VsockDevices) > 0 {
-		cid = instance.cfg.VsockDevices[0].CID
-	}
-
-	resp := &proto.GetVMInfoResponse{
-		VMID:            id,
-		ContextID:       cid,
-		SocketPath:      instance.cfg.SocketPath,
-		LogFifoPath:     instance.cfg.LogFifo,
-		MetricsFifoPath: instance.cfg.MetricsFifo,
+	resp, err := client.CreateVM(requestCtx, req)
+	if err != nil {
+		err = errors.Wrap(err, "shim CreateVM returned error")
+		s.logger.WithError(err).Error()
+		return nil, err
 	}
 
 	return resp, nil
 }
 
-// SetVMMetadata sets Firecracker instance metadata
-func (s *local) SetVMMetadata(ctx context.Context, req *proto.SetVMMetadataRequest) (*empty.Empty, error) {
-	var (
-		id       = req.GetVMID()
-		metadata = req.GetMetadata()
-	)
+func (s *local) shimFirecrackerClient(requestCtx context.Context, vmID string) (fccontrolTtrpc.FirecrackerService, error) {
+	socketAddr, err := fcShim.FCControlSocketAddress(requestCtx, vmID)
+	if err != nil {
+		err = errors.Wrap(err, "failed to get shim's fccontrol socket address")
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
 
-	instance, err := s.getVM(id)
+	conn, err := shim.Connect(socketAddr, shim.AnonDialer)
+	if err != nil {
+		err = errors.Wrap(err, "failed to connect to shim's fccontrol endpoint")
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	return fccontrolTtrpc.NewFirecrackerClient(ttrpc.NewClient(conn)), nil
+}
+
+// StopVM stops running VM instance by VM ID. This stops the VM, all tasks within the VM and the runtime shim
+// managing the VM.
+func (s *local) StopVM(requestCtx context.Context, req *proto.StopVMRequest) (*empty.Empty, error) {
+	client, err := s.shimFirecrackerClient(requestCtx, req.VMID)
 	if err != nil {
 		return nil, err
 	}
 
-	log.G(ctx).WithField("vm_id", id).Info("updating VM metadata")
-	if err := instance.machine.SetMetadata(ctx, metadata); err != nil {
-		return nil, errors.Wrapf(err, "failed to set metadata for VM %q", id)
+	resp, err := client.StopVM(requestCtx, req)
+	if err != nil {
+		err = errors.Wrap(err, "shim client failed to stop VM")
+		s.logger.WithError(err).Error()
+		return nil, err
 	}
 
-	return &empty.Empty{}, nil
+	return resp, err
 }
 
-func (s *local) getVM(id string) (*instance, error) {
-	s.vmLock.RLock()
-	instance, ok := s.vm[id]
-	s.vmLock.RUnlock()
-
-	if !ok {
-		return nil, ErrVMNotFound
+// GetVMInfo returns metadata for the VM with the given VMID.
+func (s *local) GetVMInfo(requestCtx context.Context, req *proto.GetVMInfoRequest) (*proto.GetVMInfoResponse, error) {
+	client, err := s.shimFirecrackerClient(requestCtx, req.VMID)
+	if err != nil {
+		return nil, err
 	}
 
-	return instance, nil
+	resp, err := client.GetVMInfo(requestCtx, req)
+	if err != nil {
+		err = errors.Wrap(err, "shim client failed to get vm info")
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+// SetVMMetadata sets Firecracker instance metadata for the VM with the given VMID.
+func (s *local) SetVMMetadata(requestCtx context.Context, req *proto.SetVMMetadataRequest) (*empty.Empty, error) {
+	client, err := s.shimFirecrackerClient(requestCtx, req.VMID)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := client.SetVMMetadata(requestCtx, req)
+	if err != nil {
+		err = errors.Wrap(err, "shim client failed to set vm info")
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+func (s *local) newShim(ns, vmID, containerdAddress string, shimSocket *net.UnixListener, fcSocket *net.UnixListener) (*exec.Cmd, error) {
+	logger := s.logger.WithField("vmID", vmID)
+
+	args := []string{
+		"-namespace", ns,
+		"-address", containerdAddress,
+	}
+
+	cmd := exec.Command(internal.ShimBinaryName, args...)
+
+	cmd.Dir = vm.ShimDir(ns, vmID).RootPath()
+
+	shimSocketFile, err := shimSocket.File()
+	if err != nil {
+		err = errors.Wrap(err, "failed to get shim socket fd")
+		logger.WithError(err).Error()
+		return nil, err
+	}
+
+	fcSocketFile, err := fcSocket.File()
+	if err != nil {
+		err = errors.Wrap(err, "failed to get shim fccontrol socket fd")
+		logger.WithError(err).Error()
+		return nil, err
+	}
+
+	cmd.ExtraFiles = append(cmd.ExtraFiles, shimSocketFile, fcSocketFile)
+	fcSocketFDNum := 2 + len(cmd.ExtraFiles) // "2 +" because ExtraFiles come after stderr (fd #2)
+
+	cmd.Env = append(os.Environ(),
+		fmt.Sprintf("%s=%s", internal.VMIDEnvVarKey, vmID),
+		fmt.Sprintf("%s=%s", internal.FCSocketFDEnvKey, strconv.Itoa(fcSocketFDNum))) // TODO remove after containerd is updated to expose ttrpc server to shim
+
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setpgid: true,
+	}
+
+	err = cmd.Start()
+	if err != nil {
+		err = errors.Wrap(err, "failed to start shim child process")
+		logger.WithError(err).Error()
+		return nil, err
+	}
+
+	// make sure to wait after start
+	go func() {
+		logger.Debug("waiting on shim process")
+		waitErr := cmd.Wait()
+		logger.WithError(waitErr).Debug("completed waiting on shim process")
+	}()
+
+	err = shim.SetScore(cmd.Process.Pid)
+	if err != nil {
+		err = errors.Wrap(err, "failed to set OOM Score on shim")
+		logger.WithError(err).Error()
+		return nil, err
+	}
+
+	return cmd, nil
+}
+
+func isEADDRINUSE(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "address already in use")
 }

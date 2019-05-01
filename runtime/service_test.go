@@ -38,7 +38,7 @@ func TestFindNextAvailableVsockCID(t *testing.T) {
 		sysCall = syscall.Syscall
 	}()
 
-	_, err := findNextAvailableVsockCID(context.Background())
+	_, _, err := findNextAvailableVsockCID(context.Background())
 	require.NoError(t, err,
 		"Do you have permission to interact with /dev/vhost-vsock?\n"+
 			"Grant yourself permission with `sudo setfacl -m u:${USER}:rw /dev/vhost-vsock`")
@@ -47,7 +47,7 @@ func TestFindNextAvailableVsockCID(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err = findNextAvailableVsockCID(ctx)
+	_, _, err = findNextAvailableVsockCID(ctx)
 	require.Equal(t, context.Canceled, err)
 }
 

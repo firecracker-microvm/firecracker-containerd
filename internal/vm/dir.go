@@ -14,14 +14,28 @@
 package vm
 
 import (
+	"context"
+	"io"
 	"os"
 	"path/filepath"
 
 	"github.com/containerd/containerd/runtime/v2/shim"
+	"github.com/containerd/fifo"
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/bundle"
 	"github.com/pkg/errors"
+	"golang.org/x/sys/unix"
 )
+
+const (
+	varRunDir = "/var/run/firecracker-containerd/"
+)
+
+// ShimDir holds files, sockets and FIFOs scoped to a single shim managing the
+// VM with the given VMID. It is unique per-VM and containerd namespace.
+func ShimDir(namespace, vmID string) Dir {
+	return Dir(filepath.Join(varRunDir, namespace, vmID))
+}
 
 // Dir represents the root of a firecracker-containerd VM directory, which
 // holds various files, sockets and FIFOs used during VM runtime.
@@ -47,6 +61,11 @@ func (d Dir) AddrFilePath() string {
 // LogFifoPath returns the path to the FIFO for writing shim logs
 func (d Dir) LogFifoPath() string {
 	return filepath.Join(d.RootPath(), internal.ShimLogFifoName)
+}
+
+// OpenLogFifo opens the shim's log fifo as WriteOnly
+func (d Dir) OpenLogFifo(requestCtx context.Context) (io.ReadWriteCloser, error) {
+	return fifo.OpenFifo(requestCtx, d.LogFifoPath(), unix.O_WRONLY|unix.O_NONBLOCK, 0200)
 }
 
 // FirecrackerSockPath returns the path to the unix socket at which the firecracker VMM

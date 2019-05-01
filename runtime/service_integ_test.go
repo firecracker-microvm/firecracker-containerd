@@ -42,10 +42,13 @@ import (
 
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
+	fccontrol "github.com/firecracker-microvm/firecracker-containerd/proto/service/fccontrol/grpc"
 	"github.com/firecracker-microvm/firecracker-containerd/runtime/firecrackeroci"
 )
 
 const (
+	defaultNamespace = namespaces.Default
+
 	containerdSockPath = "/run/containerd/containerd.sock"
 	debianDockerImage  = "docker.io/library/debian:latest"
 
@@ -53,14 +56,15 @@ const (
 	naiveSnapshotterName = "firecracker-naive"
 	shimProcessName      = "containerd-shim-aws-firecracker"
 
-	defaultVMRootfsPath = "/var/lib/firecracker-containerd/runtime/hello-rootfs.ext4"
+	defaultVMRootfsPath = "/var/lib/firecracker-containerd/runtime/default-rootfs.img"
 	defaultVMNetDevName = "eth0"
+	varRunDir           = "/var/run/firecracker-containerd"
 )
 
 func TestShimExitsUponContainerKill_Isolated(t *testing.T) {
 	internal.RequiresIsolation(t)
 
-	ctx := namespaces.WithNamespace(context.Background(), namespaces.Default)
+	ctx := namespaces.WithNamespace(context.Background(), defaultNamespace)
 
 	client, err := containerd.New(containerdSockPath)
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
@@ -108,7 +112,7 @@ func TestShimExitsUponContainerKill_Isolated(t *testing.T) {
 			return filepath.Base(processExecutable) == shimProcessName, nil
 		},
 	)
-	require.NoError(t, err, "failed waiting for expected shim process \"%s\" to come up", shimProcessName)
+	require.NoError(t, err, "failed waiting for expected shim process %q to come up", shimProcessName)
 	require.Len(t, shimProcesses, 1, "expected only one shim process to exist")
 	shimProcess := shimProcesses[0]
 
@@ -183,7 +187,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 		containersPerVM = 3
 	)
 
-	ctx := namespaces.WithNamespace(context.Background(), "default")
+	ctx := namespaces.WithNamespace(context.Background(), defaultNamespace)
 
 	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
@@ -214,6 +218,24 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 			err = ioutil.WriteFile(rootfsPath, rootfsBytes, 0600)
 			require.NoError(t, err, "failed to copy vm rootfs to %s", rootfsPath)
 
+			fcClient := fccontrol.NewFirecrackerClient(client.Conn())
+			_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
+				VMID: strconv.Itoa(vmID),
+				RootDrive: &proto.FirecrackerDrive{
+					PathOnHost:   rootfsPath,
+					IsReadOnly:   false,
+					IsRootDevice: true,
+				},
+				NetworkInterfaces: []*proto.FirecrackerNetworkInterface{
+					{
+						HostDevName: tapName,
+						MacAddress:  vmIDtoMacAddr(uint(vmID)),
+						AllowMMDS:   true,
+					},
+				},
+			})
+			require.NoError(t, err, "failed to create vm")
+
 			var containerWg sync.WaitGroup
 			for containerID := 0; containerID < containersPerVM; containerID++ {
 				containerWg.Add(1)
@@ -228,10 +250,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 						containerd.WithSnapshotter(naiveSnapshotterName),
 						containerd.WithNewSnapshot(snapshotName, image),
 						containerd.WithNewSpec(
-							oci.WithProcessArgs("sh", "-c", fmt.Sprintf("%s && %s",
-								fmt.Sprintf("cat /sys/class/net/%s/address", defaultVMNetDevName),
-								fmt.Sprintf("sleep %d", 10),
-							)),
+							oci.WithProcessArgs("cat", fmt.Sprintf("/sys/class/net/%s/address", defaultVMNetDevName)),
 							oci.WithHostNamespace(specs.NetworkNamespace),
 							firecrackeroci.WithVMID(strconv.Itoa(vmID)),
 						),
@@ -242,23 +261,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 					var stderr bytes.Buffer
 
 					newTask, err := newContainer.NewTask(ctx,
-						cio.NewCreator(cio.WithStreams(nil, bufio.NewWriter(&stdout), bufio.NewWriter(&stderr))),
-						func(ctx context.Context, _ *containerd.Client, ti *containerd.TaskInfo) error {
-							ti.Options = &proto.FirecrackerConfig{
-								RootDrive: &proto.FirecrackerDrive{
-									PathOnHost:   rootfsPath,
-									IsReadOnly:   false,
-									IsRootDevice: true,
-								},
-								NetworkInterfaces: []*proto.FirecrackerNetworkInterface{
-									{
-										HostDevName: tapName,
-										MacAddress:  vmIDtoMacAddr(uint(vmID)),
-									},
-								},
-							}
-							return nil
-						})
+						cio.NewCreator(cio.WithStreams(nil, bufio.NewWriter(&stdout), bufio.NewWriter(&stderr))))
 					require.NoError(t, err, "failed to create task for container %s", containerName)
 
 					exitCh, err := newTask.Wait(ctx)
@@ -284,7 +287,30 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 				}(containerID)
 			}
 
+			// verify duplicate CreateVM call fails with right error
+			_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{VMID: strconv.Itoa(vmID)})
+			require.Error(t, err, "did not receive expected error for duplicate CreateVM call")
+
+			// verify GetVMInfo returns expected data
+			vmInfoResp, err := fcClient.GetVMInfo(ctx, &proto.GetVMInfoRequest{VMID: strconv.Itoa(vmID)})
+			require.NoError(t, err, "failed to get VM Info for VM %d", vmID)
+			require.Equal(t, vmInfoResp.VMID, strconv.Itoa(vmID))
+			require.Equal(t, vmInfoResp.SocketPath, filepath.Join(varRunDir, defaultNamespace, strconv.Itoa(vmID), "firecracker.sock"))
+			require.Equal(t, vmInfoResp.LogFifoPath, filepath.Join(varRunDir, defaultNamespace, strconv.Itoa(vmID), "fc-logs.fifo"))
+			require.Equal(t, vmInfoResp.MetricsFifoPath, filepath.Join(varRunDir, defaultNamespace, strconv.Itoa(vmID), "fc-metrics.fifo"))
+
+			// just verify that updating the metadata doesn't return an error, a separate test case is needed
+			// to very the MMDS update propagates to the container correctly
+			_, err = fcClient.SetVMMetadata(ctx, &proto.SetVMMetadataRequest{
+				VMID:     strconv.Itoa(vmID),
+				Metadata: "{}",
+			})
+			require.NoError(t, err, "failed to set VM Metadata for VM %d", vmID)
+
 			containerWg.Wait()
+
+			_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: strconv.Itoa(vmID)})
+			require.NoError(t, err, "failed to stop VM %d", vmID)
 		}(vmID)
 	}
 

@@ -14,11 +14,22 @@
 package main
 
 import (
+	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/runtime/v2/shim"
+	"github.com/sirupsen/logrus"
 )
 
 const shimID = "aws.firecracker"
 
+func init() {
+	logrus.SetFormatter(&logrus.TextFormatter{
+		TimestampFormat: log.RFC3339NanoFixed,
+		FullTimestamp:   true,
+	})
+}
+
 func main() {
-	shim.Run(shimID, NewService)
+	shim.Run(shimID, NewService, func(cfg *shim.Config) {
+		cfg.NoSetupLogger = true
+	})
 }

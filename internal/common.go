@@ -46,4 +46,13 @@ const (
 
 	// BundleRootfsName is the name of the bundle's directory for holding the container's rootfs
 	BundleRootfsName = "rootfs"
+
+	// VMIDEnvVarKey is the environment variable key used to provide a VMID to a shim process
+	VMIDEnvVarKey = "FIRECRACKER_VM_ID"
+
+	// FCSocketFDEnvKey is the environment variable key used to provide the FD of the fccontrol listening socket to a shim
+	FCSocketFDEnvKey = "FCCONTROL_SOCKET_FD"
+
+	// ShimBinaryName is the name of the runtime shim binary
+	ShimBinaryName = "containerd-shim-aws-firecracker"
 )

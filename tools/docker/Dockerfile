@@ -105,11 +105,17 @@ RUN --mount=type=cache,from=build-base,source=/home/builder/cargo/registry,targe
 FROM build-base as containerd-build
 # we don't need their btrfs snapshotter, which requires more dependencies
 ENV BUILDTAGS='no_btrfs'
+# The commit ID being used ensures we have the following commit IDs (which currently are not in a tagged release):
+# * 82f2ac7edec03dfc301d99d8910c9e53a9d71d90 - Stop logging error on v2 multi shim log failure
+# * 810b3c37bb13662a289b9f6b028b5b5435be72b7 - Support disabling default setup of shim logger.
+# * 665715b8a6c595a1a96e6b60cbf8b544ad63cc78 - Allow reuse client for external GRPC services
+# Once those commits are in a tagged release it should make sense to go back to using a release branch instead of
+# a commit ID off the master containerd branch.
 RUN --mount=type=cache,from=build-base,source=/home/builder/go/pkg/mod,target=/home/builder/go/pkg/mod,sharing=locked \
 	mkdir -p /home/builder/go/src/github.com/containerd/containerd \
 	&& git clone https://github.com/containerd/containerd.git /home/builder/go/src/github.com/containerd/containerd \
 	&& cd /home/builder/go/src/github.com/containerd/containerd \
-	&& git checkout v1.2.5 \
+  && git checkout 82f2ac7edec03dfc301d99d8910c9e53a9d71d90 \
 	&& go mod verify || go mod download
 RUN --mount=type=cache,from=build-base,source=/home/builder/go/pkg/mod,target=/home/builder/go/pkg/mod \
 	cd /home/builder/go/src/github.com/containerd/containerd \

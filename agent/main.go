@@ -34,6 +34,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/firecracker-microvm/firecracker-containerd/eventbridge"
+	"github.com/firecracker-microvm/firecracker-containerd/internal/event"
 )
 
 const (
@@ -86,7 +87,7 @@ func main() {
 
 	log.G(ctx).WithField("id", id).Info("creating runc shim")
 
-	eventExchange := exchange.NewExchange()
+	eventExchange := &event.ExchangeCloser{Exchange: exchange.NewExchange()}
 	taskService := NewTaskService(eventExchange, cancel)
 
 	server, err := ttrpc.NewServer()
@@ -140,6 +141,6 @@ func main() {
 
 	if err != nil {
 		log.G(ctx).WithError(err).Error("shim error")
-		os.Exit(1)
+		panic(err)
 	}
 }

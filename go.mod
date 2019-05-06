@@ -7,16 +7,14 @@ require (
 	github.com/StackExchange/wmi v0.0.0-20181212234831-e0a55b97c705 // indirect
 	github.com/containerd/cgroups v0.0.0-20181105182409-82cb49fc1779 // indirect
 	github.com/containerd/console v0.0.0-20181022165439-0650fd9eeb50 // indirect
-	github.com/containerd/containerd v1.2.0
+	github.com/containerd/containerd v1.2.1-0.20190504000349-82f2ac7edec0
 	github.com/containerd/continuity v0.0.0-20181027224239-bea7585dbfac
-	github.com/containerd/cri v1.11.1 // indirect
 	github.com/containerd/fifo v0.0.0-20180307165137-3d5202aec260
 	github.com/containerd/go-runc v0.0.0-20190226155025-7d11b49dc076 // indirect
-	github.com/containerd/ttrpc v0.0.0-20181001154009-f51df4475b76
+	github.com/containerd/ttrpc v0.0.0-20190411181408-699c4e40d1e7
 	github.com/containerd/typeurl v0.0.0-20181015155603-461401dc8f19
 	github.com/coreos/go-systemd v0.0.0-20181031085051-9002847aa142 // indirect
 	github.com/docker/distribution v2.7.1+incompatible // indirect
-	github.com/docker/docker v1.13.1 // indirect
 	github.com/docker/go-events v0.0.0-20170721190031-9461782956ad // indirect
 	github.com/docker/go-metrics v0.0.0-20181218153428-b84716841b82 // indirect
 	github.com/docker/go-units v0.3.3
@@ -44,15 +42,12 @@ require (
 	github.com/syndtr/gocapability v0.0.0-20180916011248-d98352740cb2 // indirect
 	github.com/urfave/cli v1.20.0 // indirect
 	go.etcd.io/bbolt v1.3.1-etcd.8
-	golang.org/x/net v0.0.0-20190328230028-74de082e2cca
 	golang.org/x/sync v0.0.0-20181108010431-42b317875d0f
 	golang.org/x/sys v0.0.0-20190329044733-9eb1bfa1ce65
 	google.golang.org/genproto v0.0.0-20181109154231-b5d43981345b // indirect
 	google.golang.org/grpc v1.16.0
-	gotest.tools v2.2.0+incompatible
+	gotest.tools v2.2.0+incompatible // indirect
 )
 
-// Workaround issues pulling specific commits of /x/sys experienced by our build
-// instances. The commit ID was the HEAD of the release 1.12 branch at the time
-// of this commit.
-replace golang.org/x/sys => golang.org/x/sys v0.0.0-20190209173611-3b5209105503
+// Workaround for github.com/containerd/containerd issue #3031
+replace github.com/docker/distribution v2.7.1+incompatible => github.com/docker/distribution v2.7.1-0.20190205005809-0d3efadf0154+incompatible

@@ -88,7 +88,27 @@ type service struct {
 	publish       shim.Publisher
 	eventExchange *exchange.Exchange
 	namespace     string
-	shutdown      func()
+
+	logger *logrus.Entry
+
+	// Normally, it's ill-advised to store a context object in a struct. However,
+	// in this case there appears to be little choice. Containerd provides the
+	// context and cancel from their shim setup code to our NewService function.
+	// It is expected to live for the lifetime of the shim process and canceled
+	// when the shim is shutting down.
+	//
+	// The problem is that sometimes service methods, such as CreateVM, require
+	// a context scoped to the lifetime of the shim process but they are only provided
+	// a context scoped to the lifetime of the individual request, not the shimCtx.
+	//
+	// shimCtx should thus only be used by service methods that need to provide
+	// a context that will be canceled only when the shim is shutting down and
+	// cleanup should happen.
+	//
+	// This approach is also taken by containerd's current reference runc shim
+	// v2 implementation
+	shimCtx    context.Context
+	shimCancel func()
 
 	vmID   string
 	config *Config
@@ -103,8 +123,8 @@ type service struct {
 	vsockPortMu      sync.Mutex
 }
 
-func shimOpts(ctx context.Context) (*shim.Opts, error) {
-	opts, ok := ctx.Value(shim.OptsKey{}).(shim.Opts)
+func shimOpts(shimCtx context.Context) (*shim.Opts, error) {
+	opts, ok := shimCtx.Value(shim.OptsKey{}).(shim.Opts)
 	if !ok {
 		return nil, errors.New("failed to parse containerd shim opts from context")
 	}
@@ -113,7 +133,7 @@ func shimOpts(ctx context.Context) (*shim.Opts, error) {
 }
 
 // NewService creates new runtime shim.
-func NewService(ctx context.Context, id string, remotePublisher shim.Publisher, shutdown func()) (shim.Shim, error) {
+func NewService(shimCtx context.Context, id string, remotePublisher shim.Publisher, shimCancel func()) (shim.Shim, error) {
 	server, err := newServer()
 	if err != nil {
 		return nil, err
@@ -125,7 +145,7 @@ func NewService(ctx context.Context, id string, remotePublisher shim.Publisher, 
 	}
 
 	if !config.Debug {
-		opts, err := shimOpts(ctx)
+		opts, err := shimOpts(shimCtx)
 		if err != nil {
 			return nil, err
 		}
@@ -133,7 +153,7 @@ func NewService(ctx context.Context, id string, remotePublisher shim.Publisher, 
 		config.Debug = opts.Debug
 	}
 
-	namespace, ok := namespaces.Namespace(ctx)
+	namespace, ok := namespaces.Namespace(shimCtx)
 	if !ok {
 		namespace = namespaces.Default
 	}
@@ -146,19 +166,22 @@ func NewService(ctx context.Context, id string, remotePublisher shim.Publisher, 
 	// the containerd v2 runtime model only provides a shim with a publisher, not a forwarder,
 	// so we have to republish for now.
 	go func() {
-		if err := <-eventbridge.Republish(ctx, eventExchange, remotePublisher); err != nil && err != context.Canceled {
-			log.G(ctx).WithError(err).Error("error while republishing events")
+		if err := <-eventbridge.Republish(shimCtx, eventExchange, remotePublisher); err != nil && err != context.Canceled {
+			log.G(shimCtx).WithError(err).Error("error while republishing events")
 		}
 	}()
 
 	s := &service{
-		taskManager: vm.NewTaskManager(),
+		taskManager: vm.NewTaskManager(log.G(shimCtx)),
 
 		server:        server,
 		publish:       remotePublisher,
 		eventExchange: eventExchange,
 		namespace:     namespace,
-		shutdown:      shutdown,
+
+		logger:     log.G(shimCtx),
+		shimCtx:    shimCtx,
+		shimCancel: shimCancel,
 
 		vmID:   os.Getenv(vmIDEnvVarKey),
 		config: config,
@@ -173,25 +196,14 @@ func (s *service) vmDir() vm.Dir {
 	return vm.Dir(filepath.Join(varRunDir, s.namespace, s.vmID))
 }
 
-// shimSocketAddress is the abstract unix socket path at which our shim serves its API
-// It is unique per-VM and containerd namespace.
-func (s *service) shimSocketAddress(ctx context.Context) (string, error) {
-	return shim.SocketAddress(ctx, s.vmID)
-}
-
-func (s *service) newShim(ctx context.Context, containerdBinary, containerdAddress string, shimSocket *net.UnixListener) (*exec.Cmd, error) {
-	ns, err := namespaces.NamespaceRequired(ctx)
-	if err != nil {
-		return nil, err
-	}
-
+func (s *service) newShim(namespace string, containerdBinary, containerdAddress string, shimSocket *net.UnixListener) (*exec.Cmd, error) {
 	self, err := os.Executable()
 	if err != nil {
 		return nil, err
 	}
 
 	args := []string{
-		"-namespace", ns,
+		"-namespace", namespace,
 		"-address", containerdAddress,
 		"-publish-binary", containerdBinary,
 	}
@@ -224,14 +236,14 @@ func (s *service) newShim(ctx context.Context, containerdBinary, containerdAddre
 
 	// make sure to wait after start
 	go func() {
-		log.G(ctx).WithField("vmID", s.vmID).Debug("waiting on shim process")
+		s.logger.WithField("vmID", s.vmID).Debug("waiting on shim process")
 		waitErr := cmd.Wait()
-		log.G(ctx).WithError(waitErr).WithField("vmID", s.vmID).Debug("completed waiting on shim process")
+		s.logger.WithError(waitErr).WithField("vmID", s.vmID).Debug("completed waiting on shim process")
 	}()
 
 	err = shim.SetScore(cmd.Process.Pid)
 	if err != nil {
-		log.G(ctx).WithError(err).WithField("vmID", s.vmID).Error("failed to set OOM score on shim")
+		s.logger.WithError(err).WithField("vmID", s.vmID).Error("failed to set OOM score on shim")
 		return nil, errors.Wrap(err, "failed to set OOM Score on shim")
 	}
 
@@ -242,8 +254,13 @@ func isEADDRINUSE(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "address already in use")
 }
 
-func (s *service) StartShim(ctx context.Context, containerID, containerdBinary, containerdAddress string) (string, error) {
-	log.G(ctx).WithField("id", containerID).Debug("StartShim")
+func (s *service) StartShim(shimCtx context.Context, containerID, containerdBinary, containerdAddress string) (string, error) {
+	s.logger.WithField("id", containerID).Debug("StartShim")
+
+	namespace, err := namespaces.NamespaceRequired(shimCtx)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to extract namespace from context")
+	}
 
 	// If we are running a shim start routine, we can safely assume our current working
 	// directory is the bundle directory
@@ -278,7 +295,7 @@ func (s *service) StartShim(ctx context.Context, containerID, containerdBinary, 
 	// one. This is in line with the approach used by containerd's reference runC shim v2
 	// implementation (which is also designed to manage multiple containers from a single shim
 	// process)
-	shimSocketAddress, err := s.shimSocketAddress(ctx)
+	shimSocketAddress, err := shim.SocketAddress(shimCtx, s.vmID)
 	if err != nil {
 		return "", err
 	}
@@ -303,7 +320,7 @@ func (s *service) StartShim(ctx context.Context, containerID, containerdBinary, 
 
 	// If we're here, there is no pre-existing shim for this VMID, so we spawn a new one
 	defer func() {
-		log.G(ctx).WithField("id", containerID).Debug("closing shim socket")
+		s.logger.WithField("id", containerID).Debug("closing shim socket")
 		shimSocket.Close()
 	}()
 
@@ -317,22 +334,22 @@ func (s *service) StartShim(ctx context.Context, containerID, containerdBinary, 
 		return "", err
 	}
 
-	cmd, err := s.newShim(ctx, containerdBinary, containerdAddress, shimSocket)
+	cmd, err := s.newShim(namespace, containerdBinary, containerdAddress, shimSocket)
 	if err != nil {
-		log.G(ctx).WithError(err).WithField("id", containerID).Error("Failed to start new shim")
+		s.logger.WithError(err).WithField("id", containerID).Error("Failed to start new shim")
 		return "", err
 	}
 
 	defer func() {
 		if err != nil {
-			log.G(ctx).WithError(err).WithField("id", containerID).Error("killing shim process after error")
+			s.logger.WithError(err).WithField("id", containerID).Error("killing shim process after error")
 			cmd.Process.Kill()
 		}
 	}()
 
 	err = s.vmDir().WriteAddress(shimSocketAddress)
 	if err != nil {
-		log.G(ctx).WithError(err).WithField("id", containerID).Error("failed to write address")
+		s.logger.WithError(err).WithField("id", containerID).Error("failed to write address")
 		return "", err
 	}
 
@@ -355,7 +372,7 @@ func logPanicAndDie(logger *logrus.Entry) {
 	}
 }
 
-func parseCreateTaskOpts(ctx context.Context, opts *ptypes.Any) (*proto.FirecrackerConfig, *ptypes.Any, error) {
+func parseCreateTaskOpts(opts *ptypes.Any) (*proto.FirecrackerConfig, *ptypes.Any, error) {
 	cfg, err := typeurl.UnmarshalAny(opts)
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "unmarshaling task create request options")
@@ -419,11 +436,11 @@ func (s *service) nextVSockPort() uint32 {
 	return port
 }
 
-func (s *service) Create(ctx context.Context, request *taskAPI.CreateTaskRequest) (*taskAPI.CreateTaskResponse, error) {
-	defer logPanicAndDie(log.G(ctx))
+func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTaskRequest) (*taskAPI.CreateTaskResponse, error) {
+	logger := log.G(requestCtx).WithField("id", request.ID)
+	defer logPanicAndDie(logger)
 
-	log.G(ctx).WithFields(logrus.Fields{
-		"id":         request.ID,
+	logger.WithFields(logrus.Fields{
 		"bundle":     request.Bundle,
 		"terminal":   request.Terminal,
 		"stdin":      request.Stdin,
@@ -437,10 +454,9 @@ func (s *service) Create(ctx context.Context, request *taskAPI.CreateTaskRequest
 	var runcOpts *ptypes.Any
 
 	if request.Options != nil {
-		firecrackerConfig, runcOpts, err = parseCreateTaskOpts(ctx, request.Options)
+		firecrackerConfig, runcOpts, err = parseCreateTaskOpts(request.Options)
 		if err != nil {
-			log.G(ctx).WithFields(logrus.Fields{
-				"id":      request.ID,
+			logger.WithFields(logrus.Fields{
 				"options": request.Options,
 				"error":   err,
 			}).Error("failed to unmarshal task create request options")
@@ -450,11 +466,11 @@ func (s *service) Create(ctx context.Context, request *taskAPI.CreateTaskRequest
 
 	s.startVMMutex.Lock()
 	if !s.agentStarted {
-		log.G(ctx).WithField("id", request.ID).Debug("calling startVM")
-		client, err := s.startVM(ctx, request, firecrackerConfig)
+		logger.Debug("calling startVM")
+		client, err := s.startVM(requestCtx, request, firecrackerConfig)
 		if err != nil {
 			s.startVMMutex.Unlock()
-			log.G(ctx).WithError(err).WithField("id", request.ID).Error("failed to start VM")
+			logger.WithError(err).Error("failed to start VM")
 			return nil, err
 		}
 
@@ -463,7 +479,7 @@ func (s *service) Create(ctx context.Context, request *taskAPI.CreateTaskRequest
 	}
 	s.startVMMutex.Unlock()
 
-	log.G(ctx).WithField("id", request.ID).Info("creating task")
+	logger.Info("creating task")
 
 	bundleDir := bundle.Dir(request.Bundle)
 	extraData, err := s.generateExtraData(bundleDir, runcOpts)
@@ -471,25 +487,27 @@ func (s *service) Create(ctx context.Context, request *taskAPI.CreateTaskRequest
 		return nil, err
 	}
 
-	task, err := s.taskManager.AddTask(ctx, request.ID, s.agentClient, bundleDir, extraData, cio.NewFIFOSet(cio.Config{
+	taskCtx, taskCancel := context.WithCancel(s.shimCtx)
+	task, err := s.taskManager.AddTask(request.ID, s.agentClient, bundleDir, extraData, cio.NewFIFOSet(cio.Config{
 		Stdin:    request.Stdin,
 		Stdout:   request.Stdout,
 		Stderr:   request.Stderr,
 		Terminal: request.Terminal,
-	}, nil))
+	}, nil), taskCtx.Done(), taskCancel)
 	if err != nil {
 		return nil, err
 	}
 
 	defer func() {
 		if err != nil {
-			s.taskManager.Remove(ctx, request.ID)
+			s.taskManager.Remove(request.ID)
 		}
 	}()
 
 	// Begin initializing stdio, but don't block on the initialization so we can send the Create
-	// call (which will allow the stdio initialization to complete)
-	stdioReadyCh := task.StartStdioProxy(ctx, vm.FIFOtoVSock, cidDialer(s.machineCID))
+	// call (which will allow the stdio initialization to complete).
+	// Use requestCtx as the ctx here is only used for initializing stdio, not the actual copying of io
+	stdioReadyCh := task.StartStdioProxy(requestCtx, vm.FIFOtoVSock, cidDialer(s.machineCID))
 
 	// Override the original request options with ExtraData needed by the VM Agent before sending it off
 	request.Options, err = task.MarshalExtraData()
@@ -497,9 +515,9 @@ func (s *service) Create(ctx context.Context, request *taskAPI.CreateTaskRequest
 		return nil, err
 	}
 
-	resp, err := task.Create(ctx, request)
+	resp, err := task.Create(requestCtx, request)
 	if err != nil {
-		log.G(ctx).WithError(err).Error("create failed")
+		logger.WithError(err).Error("create failed")
 		return nil, err
 	}
 
@@ -509,20 +527,20 @@ func (s *service) Create(ctx context.Context, request *taskAPI.CreateTaskRequest
 		return nil, err
 	}
 
-	log.G(ctx).WithField("id", request.ID).WithField("pid", resp.Pid).Info("successfully created task")
+	logger.WithField("pid", resp.Pid).Info("successfully created task")
 	return resp, nil
 }
 
-func (s *service) Start(ctx context.Context, req *taskAPI.StartRequest) (*taskAPI.StartResponse, error) {
-	defer logPanicAndDie(log.G(ctx))
+func (s *service) Start(requestCtx context.Context, req *taskAPI.StartRequest) (*taskAPI.StartResponse, error) {
+	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("start")
+	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("start")
 	task, err := s.taskManager.Task(req.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := task.Start(ctx, req)
+	resp, err := task.Start(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -530,37 +548,37 @@ func (s *service) Start(ctx context.Context, req *taskAPI.StartRequest) (*taskAP
 	return resp, nil
 }
 
-func (s *service) Delete(ctx context.Context, req *taskAPI.DeleteRequest) (*taskAPI.DeleteResponse, error) {
-	defer logPanicAndDie(log.G(ctx))
+func (s *service) Delete(requestCtx context.Context, req *taskAPI.DeleteRequest) (*taskAPI.DeleteResponse, error) {
+	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("delete")
+	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("delete")
 
 	task, err := s.taskManager.Task(req.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := task.Delete(ctx, req)
+	resp, err := task.Delete(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
 
-	s.taskManager.Remove(ctx, req.ID)
+	s.taskManager.Remove(req.ID)
 
 	return resp, nil
 }
 
 // Exec an additional process inside the container
-func (s *service) Exec(ctx context.Context, req *taskAPI.ExecProcessRequest) (*ptypes.Empty, error) {
-	defer logPanicAndDie(log.G(ctx))
+func (s *service) Exec(requestCtx context.Context, req *taskAPI.ExecProcessRequest) (*ptypes.Empty, error) {
+	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("exec")
+	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("exec")
 	task, err := s.taskManager.Task(req.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := task.Exec(ctx, req)
+	resp, err := task.Exec(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -569,16 +587,16 @@ func (s *service) Exec(ctx context.Context, req *taskAPI.ExecProcessRequest) (*p
 }
 
 // ResizePty of a process
-func (s *service) ResizePty(ctx context.Context, req *taskAPI.ResizePtyRequest) (*ptypes.Empty, error) {
-	defer logPanicAndDie(log.G(ctx))
+func (s *service) ResizePty(requestCtx context.Context, req *taskAPI.ResizePtyRequest) (*ptypes.Empty, error) {
+	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("resize_pty")
+	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("resize_pty")
 	task, err := s.taskManager.Task(req.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := task.ResizePty(ctx, req)
+	resp, err := task.ResizePty(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -587,16 +605,16 @@ func (s *service) ResizePty(ctx context.Context, req *taskAPI.ResizePtyRequest) 
 }
 
 // State returns runtime state information for a process
-func (s *service) State(ctx context.Context, req *taskAPI.StateRequest) (*taskAPI.StateResponse, error) {
-	defer logPanicAndDie(log.G(ctx))
+func (s *service) State(requestCtx context.Context, req *taskAPI.StateRequest) (*taskAPI.StateResponse, error) {
+	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("state")
+	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("state")
 	task, err := s.taskManager.Task(req.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := task.State(ctx, req)
+	resp, err := task.State(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -605,16 +623,16 @@ func (s *service) State(ctx context.Context, req *taskAPI.StateRequest) (*taskAP
 }
 
 // Pause the container
-func (s *service) Pause(ctx context.Context, req *taskAPI.PauseRequest) (*ptypes.Empty, error) {
-	defer logPanicAndDie(log.G(ctx))
+func (s *service) Pause(requestCtx context.Context, req *taskAPI.PauseRequest) (*ptypes.Empty, error) {
+	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(ctx).WithField("id", req.ID).Debug("pause")
+	log.G(requestCtx).WithField("id", req.ID).Debug("pause")
 	task, err := s.taskManager.Task(req.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := task.Pause(ctx, req)
+	resp, err := task.Pause(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -623,16 +641,16 @@ func (s *service) Pause(ctx context.Context, req *taskAPI.PauseRequest) (*ptypes
 }
 
 // Resume the container
-func (s *service) Resume(ctx context.Context, req *taskAPI.ResumeRequest) (*ptypes.Empty, error) {
-	defer logPanicAndDie(log.G(ctx))
+func (s *service) Resume(requestCtx context.Context, req *taskAPI.ResumeRequest) (*ptypes.Empty, error) {
+	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(ctx).WithField("id", req.ID).Debug("resume")
+	log.G(requestCtx).WithField("id", req.ID).Debug("resume")
 	task, err := s.taskManager.Task(req.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := task.Resume(ctx, req)
+	resp, err := task.Resume(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -641,16 +659,16 @@ func (s *service) Resume(ctx context.Context, req *taskAPI.ResumeRequest) (*ptyp
 }
 
 // Kill a process with the provided signal
-func (s *service) Kill(ctx context.Context, req *taskAPI.KillRequest) (*ptypes.Empty, error) {
-	defer logPanicAndDie(log.G(ctx))
+func (s *service) Kill(requestCtx context.Context, req *taskAPI.KillRequest) (*ptypes.Empty, error) {
+	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("kill")
+	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("kill")
 	task, err := s.taskManager.Task(req.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := task.Kill(ctx, req)
+	resp, err := task.Kill(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -658,16 +676,16 @@ func (s *service) Kill(ctx context.Context, req *taskAPI.KillRequest) (*ptypes.E
 }
 
 // Pids returns all pids inside the container
-func (s *service) Pids(ctx context.Context, req *taskAPI.PidsRequest) (*taskAPI.PidsResponse, error) {
-	defer logPanicAndDie(log.G(ctx))
+func (s *service) Pids(requestCtx context.Context, req *taskAPI.PidsRequest) (*taskAPI.PidsResponse, error) {
+	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(ctx).WithField("id", req.ID).Debug("pids")
+	log.G(requestCtx).WithField("id", req.ID).Debug("pids")
 	task, err := s.taskManager.Task(req.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := task.Pids(ctx, req)
+	resp, err := task.Pids(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -676,16 +694,16 @@ func (s *service) Pids(ctx context.Context, req *taskAPI.PidsRequest) (*taskAPI.
 }
 
 // CloseIO of a process
-func (s *service) CloseIO(ctx context.Context, req *taskAPI.CloseIORequest) (*ptypes.Empty, error) {
-	defer logPanicAndDie(log.G(ctx))
+func (s *service) CloseIO(requestCtx context.Context, req *taskAPI.CloseIORequest) (*ptypes.Empty, error) {
+	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("close_io")
+	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("close_io")
 	task, err := s.taskManager.Task(req.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := task.CloseIO(ctx, req)
+	resp, err := task.CloseIO(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -694,16 +712,16 @@ func (s *service) CloseIO(ctx context.Context, req *taskAPI.CloseIORequest) (*pt
 }
 
 // Checkpoint the container
-func (s *service) Checkpoint(ctx context.Context, req *taskAPI.CheckpointTaskRequest) (*ptypes.Empty, error) {
-	defer logPanicAndDie(log.G(ctx))
+func (s *service) Checkpoint(requestCtx context.Context, req *taskAPI.CheckpointTaskRequest) (*ptypes.Empty, error) {
+	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "path": req.Path}).Info("checkpoint")
+	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "path": req.Path}).Info("checkpoint")
 	task, err := s.taskManager.Task(req.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := task.Checkpoint(ctx, req)
+	resp, err := task.Checkpoint(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -712,16 +730,16 @@ func (s *service) Checkpoint(ctx context.Context, req *taskAPI.CheckpointTaskReq
 }
 
 // Connect returns shim information such as the shim's pid
-func (s *service) Connect(ctx context.Context, req *taskAPI.ConnectRequest) (*taskAPI.ConnectResponse, error) {
-	defer logPanicAndDie(log.G(ctx))
+func (s *service) Connect(requestCtx context.Context, req *taskAPI.ConnectRequest) (*taskAPI.ConnectResponse, error) {
+	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(ctx).WithField("id", req.ID).Debug("connect")
+	log.G(requestCtx).WithField("id", req.ID).Debug("connect")
 	task, err := s.taskManager.Task(req.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := task.Connect(ctx, req)
+	resp, err := task.Connect(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -729,54 +747,48 @@ func (s *service) Connect(ctx context.Context, req *taskAPI.ConnectRequest) (*ta
 	return resp, nil
 }
 
-func (s *service) Shutdown(ctx context.Context, req *taskAPI.ShutdownRequest) (*ptypes.Empty, error) {
-	defer logPanicAndDie(log.G(ctx))
+func (s *service) Shutdown(requestCtx context.Context, req *taskAPI.ShutdownRequest) (*ptypes.Empty, error) {
+	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "now": req.Now}).Debug("shutdown")
+	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "now": req.Now}).Debug("shutdown")
 
 	// If we are still managing containers, don't shutdown
 	if s.taskManager.TaskCount() > 0 {
 		return &ptypes.Empty{}, nil
 	}
 
-	_, err := s.agentClient.Shutdown(ctx, req)
+	_, err := s.agentClient.Shutdown(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
 
-	log.G(ctx).Debug("stopping VM")
+	log.G(requestCtx).Debug("stopping VM")
 	if err := s.stopVM(); err != nil {
-		log.G(ctx).WithError(err).Error("failed to stop VM")
+		log.G(requestCtx).WithError(err).Error("failed to stop VM")
 		return nil, err
 	}
 
 	err = os.RemoveAll(s.vmDir().RootPath())
 	if err != nil {
-		log.G(ctx).WithField("path", s.vmDir().RootPath()).WithError(err).Error("failed to remove VM dir during shutdown")
+		log.G(requestCtx).WithField("path", s.vmDir().RootPath()).WithError(err).Error("failed to remove VM dir during shutdown")
 	}
 
-	// Exit to avoid 'zombie' shim processes
-	defer func() {
-		if s.shutdown != nil {
-			s.shutdown()
-		}
-		os.Exit(0)
-	}()
+	defer s.shimCancel()
 
-	log.G(ctx).Debug("stopping runtime")
+	log.G(requestCtx).Debug("stopping runtime")
 	return &ptypes.Empty{}, nil
 }
 
-func (s *service) Stats(ctx context.Context, req *taskAPI.StatsRequest) (*taskAPI.StatsResponse, error) {
-	defer logPanicAndDie(log.G(ctx))
+func (s *service) Stats(requestCtx context.Context, req *taskAPI.StatsRequest) (*taskAPI.StatsResponse, error) {
+	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(ctx).WithField("id", req.ID).Debug("stats")
+	log.G(requestCtx).WithField("id", req.ID).Debug("stats")
 	task, err := s.taskManager.Task(req.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := task.Stats(ctx, req)
+	resp, err := task.Stats(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -785,16 +797,16 @@ func (s *service) Stats(ctx context.Context, req *taskAPI.StatsRequest) (*taskAP
 }
 
 // Update a running container
-func (s *service) Update(ctx context.Context, req *taskAPI.UpdateTaskRequest) (*ptypes.Empty, error) {
-	defer logPanicAndDie(log.G(ctx))
+func (s *service) Update(requestCtx context.Context, req *taskAPI.UpdateTaskRequest) (*ptypes.Empty, error) {
+	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(ctx).WithField("id", req.ID).Debug("update")
+	log.G(requestCtx).WithField("id", req.ID).Debug("update")
 	task, err := s.taskManager.Task(req.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := task.Update(ctx, req)
+	resp, err := task.Update(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -803,16 +815,16 @@ func (s *service) Update(ctx context.Context, req *taskAPI.UpdateTaskRequest) (*
 }
 
 // Wait for a process to exit
-func (s *service) Wait(ctx context.Context, req *taskAPI.WaitRequest) (*taskAPI.WaitResponse, error) {
-	defer logPanicAndDie(log.G(ctx))
+func (s *service) Wait(requestCtx context.Context, req *taskAPI.WaitRequest) (*taskAPI.WaitResponse, error) {
+	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("wait")
+	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("wait")
 	task, err := s.taskManager.Task(req.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := task.Wait(ctx, req)
+	resp, err := task.Wait(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -820,10 +832,10 @@ func (s *service) Wait(ctx context.Context, req *taskAPI.WaitRequest) (*taskAPI.
 	return resp, nil
 }
 
-func (s *service) Cleanup(ctx context.Context) (*taskAPI.DeleteResponse, error) {
-	defer logPanicAndDie(log.G(ctx))
+func (s *service) Cleanup(requestCtx context.Context) (*taskAPI.DeleteResponse, error) {
+	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(ctx).Debug("cleanup")
+	log.G(requestCtx).Debug("cleanup")
 	// Destroy VM/etc here?
 	// copied from runcs impl, nothing to cleanup atm
 	return &taskAPI.DeleteResponse{
@@ -836,7 +848,7 @@ func newServer() (*ttrpc.Server, error) {
 	return ttrpc.NewServer(ttrpc.WithServerHandshaker(ttrpc.UnixSocketRequireSameUser()))
 }
 
-func dialVsock(ctx context.Context, contextID, port uint32) (net.Conn, error) {
+func dialVsock(requestCtx context.Context, contextID, port uint32) (net.Conn, error) {
 	// VM should start within 200ms, vsock dial will make retries at 100ms, 200ms, 400ms, 800ms, 1.6s, 3.2s, 6.4s
 	const (
 		retryCount      = 7
@@ -846,27 +858,33 @@ func dialVsock(ctx context.Context, contextID, port uint32) (net.Conn, error) {
 
 	var lastErr error
 	var currentDelay = initialDelay
+
 	for i := 1; i <= retryCount; i++ {
-		conn, err := vsock.Dial(contextID, port)
-		if err == nil {
-			log.G(ctx).WithField("connection", conn).Debug("Dial succeeded")
-			return conn, nil
+		select {
+		case <-requestCtx.Done():
+			return nil, requestCtx.Err()
+		default:
+			conn, err := vsock.Dial(contextID, port)
+			if err == nil {
+				log.G(requestCtx).WithField("connection", conn).Debug("Dial succeeded")
+				return conn, nil
+			}
+
+			log.G(requestCtx).WithError(err).Warnf("vsock dial failed (attempt %d of %d), will retry in %s", i, retryCount, currentDelay)
+			time.Sleep(currentDelay)
+
+			lastErr = err
+			currentDelay *= delayMultiplier
 		}
-
-		log.G(ctx).WithError(err).Warnf("vsock dial failed (attempt %d of %d), will retry in %s", i, retryCount, currentDelay)
-		time.Sleep(currentDelay)
-
-		lastErr = err
-		currentDelay *= delayMultiplier
 	}
 
-	log.G(ctx).WithError(lastErr).WithFields(logrus.Fields{"context_id": contextID, "port": port}).Error("vsock dial failed")
+	log.G(requestCtx).WithError(lastErr).WithFields(logrus.Fields{"context_id": contextID, "port": port}).Error("vsock dial failed")
 	return nil, lastErr
 }
 
 func cidDialer(cid uint32) vm.VSockConnector {
-	return func(ctx context.Context, port uint32) (net.Conn, error) {
-		return dialVsock(ctx, cid, port)
+	return func(requestCtx context.Context, port uint32) (net.Conn, error) {
+		return dialVsock(requestCtx, cid, port)
 	}
 }
 
@@ -874,7 +892,7 @@ func cidDialer(cid uint32) vm.VSockConnector {
 // It uses VHOST_VSOCK_SET_GUEST_CID ioctl which allows some CID ranges to be statically reserved in advance.
 // The ioctl fails with EADDRINUSE if cid is already taken and with EINVAL if the CID is invalid.
 // Taken from https://bugzilla.redhat.com/show_bug.cgi?id=1291851
-func findNextAvailableVsockCID(ctx context.Context) (uint32, error) {
+func findNextAvailableVsockCID(requestCtx context.Context) (uint32, error) {
 	const (
 		// Corresponds to VHOST_VSOCK_SET_GUEST_CID in vhost.h
 		ioctlVsockSetGuestCID = uintptr(0x4008AF60)
@@ -897,8 +915,8 @@ func findNextAvailableVsockCID(ctx context.Context) (uint32, error) {
 	for n := 0; n < maxCID-minCID; n++ {
 		cid := minCID + ((start + n) % (maxCID - minCID))
 		select {
-		case <-ctx.Done():
-			return 0, ctx.Err()
+		case <-requestCtx.Done():
+			return 0, requestCtx.Err()
 		default:
 			_, _, err = sysCall(
 				unix.SYS_IOCTL,
@@ -923,13 +941,13 @@ func findNextAvailableVsockCID(ctx context.Context) (uint32, error) {
 }
 
 // TODO: replace startVM with calls to the FC-control plugin
-func (s *service) startVM(ctx context.Context,
+func (s *service) startVM(requestCtx context.Context,
 	request *taskAPI.CreateTaskRequest,
 	vmConfig *proto.FirecrackerConfig,
 ) (taskAPI.TaskService, error) {
-	log.G(ctx).Info("starting VM")
+	log.G(requestCtx).Info("starting VM")
 
-	cid, err := findNextAvailableVsockCID(ctx)
+	cid, err := findNextAvailableVsockCID(requestCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -973,33 +991,31 @@ func (s *service) startVM(ctx context.Context,
 	cmd := firecracker.VMCommandBuilder{}.
 		WithBin(s.config.FirecrackerBinaryPath).
 		WithSocketPath(s.vmDir().FirecrackerSockPath()).
-		Build(context.Background())
+		Build(s.shimCtx) // use shimCtx to ensure the cmd is only killed once the shim shutsdown
 	machineOpts := []firecracker.Opt{
 		firecracker.WithProcessRunner(cmd),
-		firecracker.WithLogger(log.G(ctx)),
+		firecracker.WithLogger(s.logger),
 	}
 
-	vmmCtx, vmmCancel := context.WithCancel(context.Background())
-	defer vmmCancel()
-	s.machine, err = firecracker.NewMachine(vmmCtx, cfg, machineOpts...)
+	s.machine, err = firecracker.NewMachine(requestCtx, cfg, machineOpts...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create firecracker config")
 	}
 	s.machineCID = cid
 
-	log.G(ctx).Info("starting instance")
-	if err := s.machine.Start(vmmCtx); err != nil {
+	log.G(requestCtx).Info("starting instance")
+	if err := s.machine.Start(requestCtx); err != nil {
 		return nil, errors.Wrap(err, "failed to start firecracker VM")
 	}
 
-	log.G(ctx).Info("calling agent")
-	conn, err := dialVsock(ctx, cid, defaultVsockPort)
+	log.G(requestCtx).Info("calling agent")
+	conn, err := dialVsock(requestCtx, cid, defaultVsockPort)
 	if err != nil {
 		s.stopVM()
 		return nil, errors.Wrap(err, "failed to dial vsock")
 	}
 
-	log.G(ctx).Info("creating clients")
+	log.G(requestCtx).Info("creating clients")
 	rpcClient := ttrpc.NewClient(conn, ttrpc.WithOnClose(func() { _ = conn.Close() }))
 	apiClient := taskAPI.NewTaskClient(rpcClient)
 	eventBridgeClient := eventbridge.NewGetterClient(rpcClient)
@@ -1008,12 +1024,12 @@ func (s *service) startVM(ctx context.Context,
 		// Connect the agent's event exchange to our own own event exchange
 		// using the eventbridge client. All events that are published on the
 		// agent's exchange will also be published on our own
-		if err := <-eventbridge.Attach(context.Background(), eventBridgeClient, s.eventExchange); err != nil && err != context.Canceled {
-			log.G(ctx).WithError(err).Error("error while forwarding events from VM agent")
+		if err := <-eventbridge.Attach(s.shimCtx, eventBridgeClient, s.eventExchange); err != nil && err != context.Canceled {
+			log.G(requestCtx).WithError(err).Error("error while forwarding events from VM agent")
 		}
 	}()
 
-	go s.monitorTaskExit(context.Background())
+	go s.monitorTaskExit()
 
 	return apiClient, nil
 }
@@ -1022,14 +1038,13 @@ func (s *service) stopVM() error {
 	return s.machine.StopVMM()
 }
 
-func (s *service) monitorTaskExit(ctx context.Context) {
-	logger := log.G(ctx)
-	exitEvents, exitEventErrs := s.eventExchange.Subscribe(ctx, fmt.Sprintf(`topic=="%s"`, runtime.TaskExitEventTopic))
+func (s *service) monitorTaskExit() {
+	exitEvents, exitEventErrs := s.eventExchange.Subscribe(s.shimCtx, fmt.Sprintf(`topic=="%s"`, runtime.TaskExitEventTopic))
 
 	var err error
 	defer func() {
 		if err != nil && err != context.Canceled {
-			logger.WithError(err).Error("error while waiting for task exit events")
+			s.logger.WithError(err).Error("error while waiting for task exit events")
 		}
 	}()
 
@@ -1038,35 +1053,35 @@ func (s *service) monitorTaskExit(ctx context.Context) {
 		case envelope := <-exitEvents:
 			unmarshaledEvent, err := typeurl.UnmarshalAny(envelope.Event)
 			if err != nil {
-				logger.WithError(err).Error("error unmarshaling event")
+				s.logger.WithError(err).Error("error unmarshaling event")
 				continue
 			}
 
 			switch event := unmarshaledEvent.(type) {
 			case *eventsAPI.TaskExit:
-				logger = logger.WithField("id", event.ContainerID)
+				logger := s.logger.WithField("id", event.ContainerID)
 				logger.Debug("received container exit event")
 
-				s.taskManager.Remove(ctx, event.ContainerID)
+				s.taskManager.Remove(event.ContainerID)
 
 				// If we have no more containers, shutdown. If we still have containers left,
 				// this will be a no-op
-				_, err = s.Shutdown(ctx, &taskAPI.ShutdownRequest{})
+				_, err = s.Shutdown(s.shimCtx, &taskAPI.ShutdownRequest{})
 				if err != nil {
 					logger.WithError(err).Fatal("failed to shutdown after container exit")
 				}
 
 			default:
-				logger.Error("unexpected non-exit event type published on exit event channel")
+				s.logger.Error("unexpected non-exit event type published on exit event channel")
 			}
 
 		case err = <-exitEventErrs:
 			if err != nil {
-				logger.WithError(err).Error("event error channel published to")
+				s.logger.WithError(err).Error("event error channel published to")
 			}
 
-		case <-ctx.Done():
-			err = ctx.Err()
+		case <-s.shimCtx.Done():
+			err = s.shimCtx.Err()
 			return
 
 		}

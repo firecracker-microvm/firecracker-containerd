@@ -63,7 +63,7 @@ func TestParseCreateTaskOptsParsesFirecrackerConfig(t *testing.T) {
 
 	protoFirecrackerConfig, err := typeurl.MarshalAny(inFirecrackerConfig)
 	require.NoError(t, err, "unable to marshal firecracker config proto message")
-	outFirecrackerConfig, outRuncOpts, err := parseCreateTaskOpts(context.TODO(), protoFirecrackerConfig)
+	outFirecrackerConfig, outRuncOpts, err := parseCreateTaskOpts(protoFirecrackerConfig)
 	require.NoError(t, err, "unable to parse firecracker config from proto message")
 	if outRuncOpts != nil {
 		// assert.Equal is insufficient here as the nil comparison fails for
@@ -82,7 +82,7 @@ func TestParseCreateTaskLeavesNonFirecrackerConfigAlong(t *testing.T) {
 	}
 	protoIn, err := typeurl.MarshalAny(in)
 	require.NoError(t, err, "unable to marshal proto message")
-	outFirecrackerConfig, outOpts, err := parseCreateTaskOpts(context.TODO(), protoIn)
+	outFirecrackerConfig, outOpts, err := parseCreateTaskOpts(protoIn)
 	require.NoError(t, err, "unable to parse firecracker config from proto message")
 	if outFirecrackerConfig != nil {
 		// assert.Equal is insufficient here as the nil comparison fails for

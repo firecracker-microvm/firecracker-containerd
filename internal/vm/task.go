@@ -21,12 +21,11 @@ import (
 	"syscall"
 
 	"github.com/containerd/containerd/cio"
-	"github.com/containerd/containerd/log"
 	taskAPI "github.com/containerd/containerd/runtime/v2/task"
 	"github.com/containerd/fifo"
 	ptypes "github.com/gogo/protobuf/types"
-	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/bundle"
@@ -62,34 +61,37 @@ type VSockConnector func(ctx context.Context, port uint32) (net.Conn, error)
 // being executed via a firecracker-containerd runtime. It's intended to be
 // abstracted over whether it's being executed on the Host or inside a VM Guest.
 type TaskManager interface {
-	AddTask(context.Context, string, taskAPI.TaskService, bundle.Dir, *proto.ExtraData, *cio.FIFOSet) (*Task, error)
+	AddTask(string, taskAPI.TaskService, bundle.Dir, *proto.ExtraData, *cio.FIFOSet, <-chan struct{}, context.CancelFunc) (*Task, error)
 	Task(string) (*Task, error)
 	TaskCount() uint
-	Remove(context.Context, string)
-	RemoveAll(context.Context)
+	Remove(string)
+	RemoveAll()
 }
 
 // NewTaskManager initializes a new TaskManager
-func NewTaskManager() TaskManager {
+func NewTaskManager(logger *logrus.Entry) TaskManager {
 	return &taskManager{
-		tasks: make(map[string]*Task),
+		tasks:  make(map[string]*Task),
+		logger: logger,
 	}
 }
 
 type taskManager struct {
-	mu    sync.RWMutex
-	tasks map[string]*Task
+	mu     sync.RWMutex
+	tasks  map[string]*Task
+	logger *logrus.Entry
 }
 
 // AddTask registers a task with the provided metadata with the taskManager.
 // taskService should implement the TaskService API for the task (i.e. Create, Kill, Exec, etc.).
 func (m *taskManager) AddTask(
-	ctx context.Context,
 	containerID string,
 	taskService taskAPI.TaskService,
 	bundleDir bundle.Dir,
 	extraData *proto.ExtraData,
 	fifoSet *cio.FIFOSet,
+	doneCh <-chan struct{},
+	cancel context.CancelFunc,
 ) (*Task, error) {
 	err := bundleDir.Create() // no-op if it already exists
 	if err != nil {
@@ -106,12 +108,14 @@ func (m *taskManager) AddTask(
 	task := &Task{
 		TaskService: taskService,
 		ID:          containerID,
+		logger:      m.logger.WithField("id", containerID),
+
+		doneCh: doneCh,
+		cancel: cancel,
 
 		extraData: extraData,
 		bundleDir: bundleDir,
 		fifoSet:   fifoSet,
-
-		cancelCh: make(chan struct{}),
 	}
 
 	m.tasks[task.ID] = task
@@ -131,12 +135,9 @@ func (m *taskManager) get(containerID string) (*Task, error) {
 }
 
 // assumes caller is holding m.mu lock
-func (m *taskManager) remove(ctx context.Context, containerID string, task *Task) {
+func (m *taskManager) remove(containerID string, task *Task) {
 	delete(m.tasks, containerID)
-	err := task.CancelIO()
-	if err != nil {
-		log.G(ctx).WithField("id", containerID).Error("failed to cancel task io")
-	}
+	task.cancel()
 }
 
 // Task returns the TaskService API for the task with the provided containerID, allowing
@@ -155,7 +156,7 @@ func (m *taskManager) TaskCount() uint {
 
 // Remove unregisters the task with the provided containerID with the taskManager and cancels
 // any ongoing I/O proxying for the task.
-func (m *taskManager) Remove(ctx context.Context, containerID string) {
+func (m *taskManager) Remove(containerID string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -165,29 +166,31 @@ func (m *taskManager) Remove(ctx context.Context, containerID string) {
 		return
 	}
 
-	m.remove(ctx, containerID, task)
+	m.remove(containerID, task)
 }
 
 // RemoveAll calls Remove() on all tasks registered with the taskManager.
-func (m *taskManager) RemoveAll(ctx context.Context) {
+func (m *taskManager) RemoveAll() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	for containerID, task := range m.tasks {
-		m.remove(ctx, containerID, task)
+		m.remove(containerID, task)
 	}
 }
 
 // Task represents a containerd Task under the control of a taskManager
 type Task struct {
 	taskAPI.TaskService
-	ID string
+	ID     string
+	logger *logrus.Entry
+
+	doneCh <-chan struct{}
+	cancel context.CancelFunc
 
 	extraData *proto.ExtraData
 	bundleDir bundle.Dir
 	fifoSet   *cio.FIFOSet
-
-	cancelCh chan struct{}
 }
 
 // ExtraData returns the extra data the VM Agent needs to execute this task
@@ -205,13 +208,6 @@ func (task *Task) BundleDir() bundle.Dir {
 	return task.bundleDir
 }
 
-// CancelIO will stop any ongoing IO proxying. It returns an error to be compatible
-// with a cio interface but at this time should only return nil in practice.
-func (task *Task) CancelIO() error {
-	close(task.cancelCh)
-	return nil
-}
-
 // StartStdioProxy sets up stdin, stdout and stderr streams for the task. It returns a channel that will be closed once
 // *initialization* of the streams has completed (or, if there was an error, the error will be published and then the chan
 // will be closed). Initialization consists of opening the FIFOs and establishing the vsock connections. After initialization,
@@ -222,8 +218,11 @@ func (task *Task) CancelIO() error {
 //
 // inputDirection is the IODirection that should be used for *stdin*. Stdout/stderr will, by definition, go in the opposite direction.
 // vsockConnector is a callback for establishing a vsock connection.
-func (task *Task) StartStdioProxy(ctx context.Context, inputDirection IODirection, vsockConnector VSockConnector) <-chan error {
-	logger := log.G(ctx).WithField("id", task.ID)
+//
+// initializeCtx is used exclusively during initialization, not during the actual IO copying. To stop IO copying, the task should be
+// removed from the TaskManager it was added to.
+func (task *Task) StartStdioProxy(initializeCtx context.Context, inputDirection IODirection, vsockConnector VSockConnector) <-chan error {
+	initializeCtx, initializeCancel := context.WithCancel(initializeCtx)
 	returnCh := make(chan error)
 
 	var wg sync.WaitGroup
@@ -234,61 +233,65 @@ func (task *Task) StartStdioProxy(ctx context.Context, inputDirection IODirectio
 	if task.fifoSet.Stdin != "" {
 		wg.Add(1)
 		go func() {
-			errCh <- task.proxyIO(ctx, task.fifoSet.Stdin, task.extraData.StdinPort, inputDirection, vsockConnector)
+			errCh <- task.proxyIO(initializeCtx, task.fifoSet.Stdin, task.extraData.StdinPort, inputDirection, vsockConnector)
 			wg.Done()
 		}()
 	} else {
-		logger.Info("skipping proxy io for unset stdin")
+		task.logger.Info("skipping proxy io for unset stdin")
 	}
 
 	if task.fifoSet.Stdout != "" {
 		wg.Add(1)
 		go func() {
-			errCh <- task.proxyIO(ctx, task.fifoSet.Stdout, task.extraData.StdoutPort, inputDirection.opposite(), vsockConnector)
+			errCh <- task.proxyIO(initializeCtx, task.fifoSet.Stdout, task.extraData.StdoutPort, inputDirection.opposite(), vsockConnector)
 			wg.Done()
 		}()
 	} else {
-		logger.Info("skipping proxy io for unset stdout")
+		task.logger.Info("skipping proxy io for unset stdout")
 	}
 
 	if task.fifoSet.Stderr != "" {
 		wg.Add(1)
 		go func() {
-			errCh <- task.proxyIO(ctx, task.fifoSet.Stderr, task.extraData.StderrPort, inputDirection.opposite(), vsockConnector)
+			errCh <- task.proxyIO(initializeCtx, task.fifoSet.Stderr, task.extraData.StderrPort, inputDirection.opposite(), vsockConnector)
 			wg.Done()
 		}()
 	} else {
-		logger.Info("skipping proxy io for unset stderr")
+		task.logger.Info("skipping proxy io for unset stderr")
 	}
 
-	// Once the streams have been initialized, gather any errors they returned and let the caller know by publishing
+	// once each stream is initialized, close the error chan
+	go func() {
+		defer close(errCh)
+		wg.Wait()
+	}()
+
+	// Once each stream has been initialized, get any error it returned and let the caller know by publishing
 	// on the return chan
 	go func() {
-		wg.Wait()
-		close(errCh)
-
-		var finalError *multierror.Error
+		defer close(returnCh)
 		for err := range errCh {
-			finalError = multierror.Append(finalError, err)
+			if err != nil {
+				initializeCancel()
+				returnCh <- err
+				return
+			}
 		}
-
-		returnCh <- finalError.ErrorOrNil()
-		close(returnCh)
 	}()
 
 	return returnCh
 }
 
-func (task *Task) proxyIO(ctx context.Context, fifoPath string, port uint32, ioDirection IODirection, vsockConnector VSockConnector) error {
-	logger := log.G(ctx).WithField("path", fifoPath).WithField("port", port)
+func (task *Task) proxyIO(initializeCtx context.Context, fifoPath string, port uint32, ioDirection IODirection, vsockConnector VSockConnector) error {
+	logger := task.logger.WithField("path", fifoPath).WithField("port", port)
 
-	fifoFile, err := fifo.OpenFifo(ctx, fifoPath, syscall.O_RDWR|syscall.O_CREAT|syscall.O_NONBLOCK, 0700)
+	fifoFile, err := fifo.OpenFifo(initializeCtx, fifoPath, syscall.O_RDWR|syscall.O_CREAT|syscall.O_NONBLOCK, 0700)
 	if err != nil {
 		logger.WithError(err).Error("failed to open fifo")
 		return err
 	}
 
-	sock, err := vsockConnector(ctx, port)
+	sock, err := vsockConnector(initializeCtx, port)
 	if err != nil {
 		fifoFile.Close()
 		logger.WithError(err).Error("failed to establish vsock connection")
@@ -305,7 +308,7 @@ func (task *Task) proxyIO(ctx context.Context, fifoPath string, port uint32, ioD
 		switch ioDirection {
 		case FIFOtoVSock:
 			go func() {
-				<-task.cancelCh
+				<-task.doneCh
 				// If we are copying from FIFO to vsock, be sure to first close just the FIFO,
 				// allowing any buffered data to be flushed into the vsock first.
 				fifoFile.Close()
@@ -316,7 +319,7 @@ func (task *Task) proxyIO(ctx context.Context, fifoPath string, port uint32, ioD
 
 		case VSockToFIFO:
 			go func() {
-				<-task.cancelCh
+				<-task.doneCh
 				// If we are copying from vsock to FIFO, be sure to first close just the vsock,
 				// allowing any buffered data to be flushed into the FIFO first.
 				sock.Close()

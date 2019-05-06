@@ -26,6 +26,7 @@ import (
 	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/bundle"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
+	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/require"
 )
 
@@ -70,11 +71,12 @@ type addTaskArgs struct {
 }
 
 func addTaskFromArgs(tm TaskManager, args addTaskArgs) (*Task, error) {
-	return tm.AddTask(context.TODO(), args.id, args.ts, args.bundleDir, args.extraData, args.fifoSet)
+	return tm.AddTask(args.id, args.ts, args.bundleDir, args.extraData, args.fifoSet, context.Background().Done(), func() {})
 }
 
 func TestTaskManager_AddRemoveTask(t *testing.T) {
-	tm := NewTaskManager()
+	logger, _ := test.NewNullLogger()
+	tm := NewTaskManager(logger.WithField("test", t.Name()))
 
 	taskAArgs := defaultMockTaskArgs("A")
 	taskBArgs := defaultMockTaskArgs("B")
@@ -123,7 +125,7 @@ func TestTaskManager_AddRemoveTask(t *testing.T) {
 	require.Error(t, err, "get non-existent task should fail")
 
 	// Removing a task should remove the task requested but have no effect on the others
-	tm.Remove(context.TODO(), taskBArgs.id)
+	tm.Remove(taskBArgs.id)
 	require.EqualValues(t, 2, tm.TaskCount(), "task count should return correct number of tasks after remove")
 
 	supposedlyTaskA, err = tm.Task(taskAArgs.id)
@@ -138,7 +140,7 @@ func TestTaskManager_AddRemoveTask(t *testing.T) {
 	require.Exactly(t, taskC, supposedlyTaskC, "get should return expected task")
 
 	// Remove all should remove all the tasks
-	tm.RemoveAll(context.TODO())
+	tm.RemoveAll()
 	require.EqualValues(t, 0, tm.TaskCount(), "task count should return correct number of tasks after remove all")
 
 	_, err = tm.Task(taskAArgs.id)
@@ -147,9 +149,9 @@ func TestTaskManager_AddRemoveTask(t *testing.T) {
 	_, err = tm.Task(taskCArgs.id)
 	require.Error(t, err, "get removed task should fail")
 
-	tm.RemoveAll(context.TODO())
+	tm.RemoveAll()
 	require.EqualValues(t, 0, tm.TaskCount(), "remove all on empty task manager should have no effect")
-	tm.Remove(context.TODO(), taskAArgs.id)
+	tm.Remove(taskAArgs.id)
 	require.EqualValues(t, 0, tm.TaskCount(), "remove on non-existent task should have no effect")
 
 	// Tasks should still be able to be added after removes
@@ -177,7 +179,8 @@ func TestTaskManager_StartStdioProxy_VSockToFIFO(t *testing.T) {
 }
 
 func testStdioProxy(t *testing.T, inputDirection IODirection) {
-	tm := NewTaskManager()
+	logger, _ := test.NewNullLogger()
+	tm := NewTaskManager(logger.WithField("test", t.Name()))
 
 	taskArgs := defaultMockTaskArgs("A")
 

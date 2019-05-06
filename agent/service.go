@@ -22,7 +22,6 @@ import (
 
 	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/log"
-	"github.com/containerd/containerd/namespaces"
 	runc "github.com/containerd/containerd/runtime/v2/runc/v1"
 	"github.com/containerd/containerd/runtime/v2/shim"
 	taskAPI "github.com/containerd/containerd/runtime/v2/task"
@@ -48,16 +47,33 @@ type TaskService struct {
 	taskManager vm.TaskManager
 
 	publisher shim.Publisher
-	cancel    func()
+
+	// Normally, it's ill-advised to store a context object in a struct. However,
+	// in this case there appears to be little choice.
+	//
+	// The problem is that sometimes service methods, such as CreateVM, require
+	// a context scoped to the lifetime of the agent process but they are only provided
+	// by the TTRPC server a context scoped to the lifetime of the individual request,
+	// not the shimCtx.
+	//
+	// shimCtx should thus only be used by service methods that need to provide
+	// a context that will be canceled only when agent is shutting down and
+	// cleanup should happen.
+	//
+	// This approach is also taken by containerd's current reference runc shim
+	// v2 implementation
+	shimCtx    context.Context
+	shimCancel context.CancelFunc
 }
 
 // NewTaskService creates new runc shim wrapper
-func NewTaskService(publisher shim.Publisher, cancel context.CancelFunc) taskAPI.TaskService {
+func NewTaskService(shimCtx context.Context, shimCancel context.CancelFunc, publisher shim.Publisher) taskAPI.TaskService {
 	return &TaskService{
-		taskManager: vm.NewTaskManager(),
+		taskManager: vm.NewTaskManager(log.G(shimCtx)),
 
-		publisher: publisher,
-		cancel:    cancel,
+		publisher:  publisher,
+		shimCtx:    shimCtx,
+		shimCancel: shimCancel,
 	}
 }
 
@@ -79,11 +95,10 @@ func unmarshalExtraData(marshalled *types.Any) (*proto.ExtraData, error) {
 }
 
 // Create creates a new initial process and container using runc
-func (ts *TaskService) Create(ctx context.Context, req *taskAPI.CreateTaskRequest) (*taskAPI.CreateTaskResponse, error) {
-	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
+func (ts *TaskService) Create(requestCtx context.Context, req *taskAPI.CreateTaskRequest) (*taskAPI.CreateTaskResponse, error) {
+	defer logPanicAndDie(log.G(requestCtx))
 
-	defer logPanicAndDie(log.G(ctx))
-	logger := log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "bundle": req.Bundle})
+	logger := log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "bundle": req.Bundle})
 	logger.Info("create")
 
 	extraData, err := unmarshalExtraData(req.Options)
@@ -112,15 +127,22 @@ func (ts *TaskService) Create(ctx context.Context, req *taskAPI.CreateTaskReques
 	// Create a runc shim to manage this task
 	// TODO if we update to the v2 runc implementation in containerd, we can use a single
 	// runc service instance to manage all tasks instead of creating a new one for each
-	runcService, err := runc.New(ctx, req.ID, ts.publisher, func() {})
+	taskCtx, taskCancel := context.WithCancel(ts.shimCtx)
+	runcService, err := runc.New(taskCtx, req.ID, ts.publisher, taskCancel)
 	if err != nil {
 		return nil, err
 	}
 
+	defer func() {
+		if err != nil {
+			taskCancel()
+		}
+	}()
+
 	// Override the incoming stdio FIFOs, which have paths from the host that we can't use
 	fifoSet, err := cio.NewFIFOSetInDir(bundleDir.RootPath(), req.ID, req.Terminal)
 	if err != nil {
-		log.G(ctx).WithError(err).Error("failed opening stdio FIFOs")
+		logger.WithError(err).Error("failed opening stdio FIFOs")
 		return nil, err
 	}
 
@@ -137,7 +159,7 @@ func (ts *TaskService) Create(ctx context.Context, req *taskAPI.CreateTaskReques
 		fifoSet.Stderr = ""
 	}
 
-	task, err := ts.taskManager.AddTask(ctx, req.ID, runcService, bundleDir, extraData, fifoSet)
+	task, err := ts.taskManager.AddTask(req.ID, runcService, bundleDir, extraData, fifoSet, taskCtx.Done(), taskCancel)
 	if err != nil {
 		return nil, err
 	}
@@ -156,12 +178,12 @@ func (ts *TaskService) Create(ctx context.Context, req *taskAPI.CreateTaskReques
 
 	// Start the io proxy and wait for initialization to complete before starting
 	// the task to ensure we capture all task output
-	err = <-task.StartStdioProxy(ctx, vm.VSockToFIFO, acceptVSock)
+	err = <-task.StartStdioProxy(taskCtx, vm.VSockToFIFO, acceptVSock)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := task.Create(ctx, req)
+	resp, err := task.Create(requestCtx, req)
 	if err != nil {
 		logger.WithError(err).Error("error creating container")
 		return nil, err
@@ -181,49 +203,52 @@ func isTemporaryNetErr(err error) bool {
 
 var _ vm.VSockConnector = acceptVSock
 
-func acceptVSock(ctx context.Context, port uint32) (net.Conn, error) {
+func acceptVSock(requestCtx context.Context, port uint32) (net.Conn, error) {
 	listener, err := vsock.Listen(port)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to listen on vsock")
 	}
 
 	for range time.Tick(10 * time.Millisecond) {
-		// accept is non-blocking so try to accept until we get a connection
-		conn, err := listener.Accept()
-		if err == nil {
-			return conn, nil
-		}
+		select {
+		case <-requestCtx.Done():
+			return nil, requestCtx.Err()
+		default:
+			// accept is non-blocking so try to accept until we get a connection
+			conn, err := listener.Accept()
+			if err == nil {
+				return conn, nil
+			}
 
-		if isTemporaryNetErr(err) {
-			log.G(ctx).WithError(err).Debug("temporary stdio vsock accept failure")
-			continue
+			if isTemporaryNetErr(err) {
+				log.G(requestCtx).WithError(err).Debug("temporary stdio vsock accept failure")
+			} else {
+				log.G(requestCtx).WithError(err).Error("non-temporary stdio vsock accept failure")
+				return nil, err
+			}
 		}
-
-		log.G(ctx).WithError(err).Error("non-temporary stdio vsock accept failure")
-		return nil, err
 	}
 
 	panic("unreachable code") // appeases the compiler, which doesn't know the for loop is infinite
 }
 
 // State returns process state information
-func (ts *TaskService) State(ctx context.Context, req *taskAPI.StateRequest) (*taskAPI.StateResponse, error) {
-	defer logPanicAndDie(log.G(ctx))
+func (ts *TaskService) State(requestCtx context.Context, req *taskAPI.StateRequest) (*taskAPI.StateResponse, error) {
+	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("state")
+	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("state")
 	task, err := ts.taskManager.Task(req.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
-	resp, err := task.State(ctx, req)
+	resp, err := task.State(requestCtx, req)
 	if err != nil {
-		log.G(ctx).WithError(err).Error("state failed")
+		log.G(requestCtx).WithError(err).Error("state failed")
 		return nil, err
 	}
 
-	log.G(ctx).WithFields(logrus.Fields{
+	log.G(requestCtx).WithFields(logrus.Fields{
 		"id":     resp.ID,
 		"bundle": resp.Bundle,
 		"pid":    resp.Pid,
@@ -233,44 +258,44 @@ func (ts *TaskService) State(ctx context.Context, req *taskAPI.StateRequest) (*t
 }
 
 // Start starts a process
-func (ts *TaskService) Start(ctx context.Context, req *taskAPI.StartRequest) (*taskAPI.StartResponse, error) {
-	defer logPanicAndDie(log.G(ctx))
+func (ts *TaskService) Start(requestCtx context.Context, req *taskAPI.StartRequest) (*taskAPI.StartResponse, error) {
+	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("start")
+	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("start")
 	task, err := ts.taskManager.Task(req.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
-	resp, err := task.Start(ctx, req)
+	resp, err := task.Start(requestCtx, req)
 	if err != nil {
-		log.G(ctx).WithError(err).Error("start failed")
+		log.G(requestCtx).WithError(err).Error("start failed")
 		return nil, err
 	}
 
-	log.G(ctx).WithField("pid", resp.Pid).Debug("start succeeded")
+	log.G(requestCtx).WithField("pid", resp.Pid).Debug("start succeeded")
 	return resp, nil
 }
 
 // Delete deletes the initial process and container
-func (ts *TaskService) Delete(ctx context.Context, req *taskAPI.DeleteRequest) (*taskAPI.DeleteResponse, error) {
-	defer logPanicAndDie(log.G(ctx))
+func (ts *TaskService) Delete(requestCtx context.Context, req *taskAPI.DeleteRequest) (*taskAPI.DeleteResponse, error) {
+	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("delete")
+	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("delete")
 	task, err := ts.taskManager.Task(req.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
-	resp, err := task.Delete(ctx, req)
+	resp, err := task.Delete(requestCtx, req)
 	if err != nil {
-		log.G(ctx).WithError(err).Error("delete failed")
+		log.G(requestCtx).WithError(err).Error("delete failed")
 		return nil, err
 	}
 
-	log.G(ctx).WithFields(logrus.Fields{
+	ts.taskManager.Remove(req.ID)
+
+	log.G(requestCtx).WithFields(logrus.Fields{
 		"pid":         resp.Pid,
 		"exit_status": resp.ExitStatus,
 	}).Debug("delete succeeded")
@@ -278,254 +303,242 @@ func (ts *TaskService) Delete(ctx context.Context, req *taskAPI.DeleteRequest) (
 }
 
 // Pids returns all pids inside the container
-func (ts *TaskService) Pids(ctx context.Context, req *taskAPI.PidsRequest) (*taskAPI.PidsResponse, error) {
-	defer logPanicAndDie(log.G(ctx))
+func (ts *TaskService) Pids(requestCtx context.Context, req *taskAPI.PidsRequest) (*taskAPI.PidsResponse, error) {
+	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(ctx).WithField("id", req.ID).Debug("pids")
+	log.G(requestCtx).WithField("id", req.ID).Debug("pids")
 	task, err := ts.taskManager.Task(req.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
-	resp, err := task.Pids(ctx, req)
+	resp, err := task.Pids(requestCtx, req)
 	if err != nil {
-		log.G(ctx).WithError(err).Error("pids failed")
+		log.G(requestCtx).WithError(err).Error("pids failed")
 		return nil, err
 	}
 
-	log.G(ctx).Debug("pids succeeded")
+	log.G(requestCtx).Debug("pids succeeded")
 	return resp, nil
 }
 
 // Pause pauses the container
-func (ts *TaskService) Pause(ctx context.Context, req *taskAPI.PauseRequest) (*types.Empty, error) {
-	defer logPanicAndDie(log.G(ctx))
+func (ts *TaskService) Pause(requestCtx context.Context, req *taskAPI.PauseRequest) (*types.Empty, error) {
+	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(ctx).WithField("id", req.ID).Debug("pause")
+	log.G(requestCtx).WithField("id", req.ID).Debug("pause")
 	task, err := ts.taskManager.Task(req.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
-	resp, err := task.Pause(ctx, req)
+	resp, err := task.Pause(requestCtx, req)
 	if err != nil {
-		log.G(ctx).WithError(err).Error("pause failed")
+		log.G(requestCtx).WithError(err).Error("pause failed")
 		return nil, err
 	}
 
-	log.G(ctx).Debug("pause succeeded")
+	log.G(requestCtx).Debug("pause succeeded")
 	return resp, nil
 }
 
 // Resume resumes the container
-func (ts *TaskService) Resume(ctx context.Context, req *taskAPI.ResumeRequest) (*types.Empty, error) {
-	defer logPanicAndDie(log.G(ctx))
+func (ts *TaskService) Resume(requestCtx context.Context, req *taskAPI.ResumeRequest) (*types.Empty, error) {
+	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(ctx).WithField("id", req.ID).Debug("resume")
+	log.G(requestCtx).WithField("id", req.ID).Debug("resume")
 	task, err := ts.taskManager.Task(req.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
-	resp, err := task.Resume(ctx, req)
+	resp, err := task.Resume(requestCtx, req)
 	if err != nil {
-		log.G(ctx).WithError(err).Debug("resume failed")
+		log.G(requestCtx).WithError(err).Debug("resume failed")
 		return nil, err
 	}
 
-	log.G(ctx).Debug("resume succeeded")
+	log.G(requestCtx).Debug("resume succeeded")
 	return resp, nil
 }
 
 // Checkpoint saves the state of the container instance
-func (ts *TaskService) Checkpoint(ctx context.Context, req *taskAPI.CheckpointTaskRequest) (*types.Empty, error) {
-	defer logPanicAndDie(log.G(ctx))
+func (ts *TaskService) Checkpoint(requestCtx context.Context, req *taskAPI.CheckpointTaskRequest) (*types.Empty, error) {
+	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "path": req.Path}).Info("checkpoint")
+	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "path": req.Path}).Info("checkpoint")
 	task, err := ts.taskManager.Task(req.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
-	resp, err := task.Checkpoint(ctx, req)
+	resp, err := task.Checkpoint(requestCtx, req)
 	if err != nil {
-		log.G(ctx).WithError(err).Error("checkout failed")
+		log.G(requestCtx).WithError(err).Error("checkout failed")
 		return nil, err
 	}
 
-	log.G(ctx).Debug("checkpoint sutaskAPI")
+	log.G(requestCtx).Debug("checkpoint sutaskAPI")
 	return resp, nil
 }
 
 // Kill kills a process with the provided signal
-func (ts *TaskService) Kill(ctx context.Context, req *taskAPI.KillRequest) (*types.Empty, error) {
-	defer logPanicAndDie(log.G(ctx))
+func (ts *TaskService) Kill(requestCtx context.Context, req *taskAPI.KillRequest) (*types.Empty, error) {
+	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("kill")
+	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("kill")
 	task, err := ts.taskManager.Task(req.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
-	resp, err := task.Kill(ctx, req)
+	resp, err := task.Kill(requestCtx, req)
 	if err != nil {
-		log.G(ctx).WithError(err).Error("kill failed")
+		log.G(requestCtx).WithError(err).Error("kill failed")
 		return nil, err
 	}
 
-	log.G(ctx).Debug("kill succeeded")
+	log.G(requestCtx).Debug("kill succeeded")
 	return resp, nil
 }
 
 // Exec runs an additional process inside the container
-func (ts *TaskService) Exec(ctx context.Context, req *taskAPI.ExecProcessRequest) (*types.Empty, error) {
-	defer logPanicAndDie(log.G(ctx))
+func (ts *TaskService) Exec(requestCtx context.Context, req *taskAPI.ExecProcessRequest) (*types.Empty, error) {
+	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("exec")
+	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("exec")
 	task, err := ts.taskManager.Task(req.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
-	resp, err := task.Exec(ctx, req)
+	resp, err := task.Exec(requestCtx, req)
 	if err != nil {
-		log.G(ctx).WithError(err).Error("exec failed")
+		log.G(requestCtx).WithError(err).Error("exec failed")
 		return nil, err
 	}
 
-	log.G(ctx).Debug("exec succeeded")
+	log.G(requestCtx).Debug("exec succeeded")
 	return resp, nil
 }
 
 // ResizePty resizes pty
-func (ts *TaskService) ResizePty(ctx context.Context, req *taskAPI.ResizePtyRequest) (*types.Empty, error) {
-	defer logPanicAndDie(log.G(ctx))
+func (ts *TaskService) ResizePty(requestCtx context.Context, req *taskAPI.ResizePtyRequest) (*types.Empty, error) {
+	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("resize_pty")
+	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("resize_pty")
 	task, err := ts.taskManager.Task(req.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
-	resp, err := task.ResizePty(ctx, req)
+	resp, err := task.ResizePty(requestCtx, req)
 	if err != nil {
-		log.G(ctx).WithError(err).Error("resize_pty failed")
+		log.G(requestCtx).WithError(err).Error("resize_pty failed")
 		return nil, err
 	}
 
-	log.G(ctx).Debug("resize_pty succeeded")
+	log.G(requestCtx).Debug("resize_pty succeeded")
 	return resp, nil
 }
 
 // CloseIO closes all IO inside container
-func (ts *TaskService) CloseIO(ctx context.Context, req *taskAPI.CloseIORequest) (*types.Empty, error) {
-	defer logPanicAndDie(log.G(ctx))
+func (ts *TaskService) CloseIO(requestCtx context.Context, req *taskAPI.CloseIORequest) (*types.Empty, error) {
+	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("close_io")
+	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("close_io")
 	task, err := ts.taskManager.Task(req.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
-	resp, err := task.CloseIO(ctx, req)
+	resp, err := task.CloseIO(requestCtx, req)
 	if err != nil {
-		log.G(ctx).WithError(err).Error("close io failed")
+		log.G(requestCtx).WithError(err).Error("close io failed")
 		return nil, err
 	}
 
-	log.G(ctx).Debug("close io succeeded")
+	log.G(requestCtx).Debug("close io succeeded")
 	return resp, nil
 }
 
 // Update updates running container
-func (ts *TaskService) Update(ctx context.Context, req *taskAPI.UpdateTaskRequest) (*types.Empty, error) {
-	defer logPanicAndDie(log.G(ctx))
+func (ts *TaskService) Update(requestCtx context.Context, req *taskAPI.UpdateTaskRequest) (*types.Empty, error) {
+	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(ctx).WithField("id", req.ID).Debug("update")
+	log.G(requestCtx).WithField("id", req.ID).Debug("update")
 	task, err := ts.taskManager.Task(req.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
-	resp, err := task.Update(ctx, req)
+	resp, err := task.Update(requestCtx, req)
 	if err != nil {
-		log.G(ctx).WithError(err).Error("update failed")
+		log.G(requestCtx).WithError(err).Error("update failed")
 		return nil, err
 	}
 
-	log.G(ctx).Debug("update succeeded")
+	log.G(requestCtx).Debug("update succeeded")
 	return resp, nil
 }
 
 // Wait waits for a process to exit
-func (ts *TaskService) Wait(ctx context.Context, req *taskAPI.WaitRequest) (*taskAPI.WaitResponse, error) {
-	defer logPanicAndDie(log.G(ctx))
+func (ts *TaskService) Wait(requestCtx context.Context, req *taskAPI.WaitRequest) (*taskAPI.WaitResponse, error) {
+	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("wait")
+	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("wait")
 	task, err := ts.taskManager.Task(req.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
-	resp, err := task.Wait(ctx, req)
+	resp, err := task.Wait(requestCtx, req)
 	if err != nil {
-		log.G(ctx).WithError(err).Error("wait failed")
+		log.G(requestCtx).WithError(err).Error("wait failed")
 		return nil, err
 	}
 
-	log.G(ctx).WithField("exit_status", resp.ExitStatus).Debug("wait succeeded")
+	log.G(requestCtx).WithField("exit_status", resp.ExitStatus).Debug("wait succeeded")
 	return resp, nil
 }
 
 // Stats returns a process stats
-func (ts *TaskService) Stats(ctx context.Context, req *taskAPI.StatsRequest) (*taskAPI.StatsResponse, error) {
-	defer logPanicAndDie(log.G(ctx))
+func (ts *TaskService) Stats(requestCtx context.Context, req *taskAPI.StatsRequest) (*taskAPI.StatsResponse, error) {
+	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(ctx).WithField("id", req.ID).Debug("stats")
+	log.G(requestCtx).WithField("id", req.ID).Debug("stats")
 	task, err := ts.taskManager.Task(req.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
-	resp, err := task.Stats(ctx, req)
+	resp, err := task.Stats(requestCtx, req)
 	if err != nil {
-		log.G(ctx).WithError(err).Error("stats failed")
+		log.G(requestCtx).WithError(err).Error("stats failed")
 		return nil, err
 	}
 
-	log.G(ctx).Debug("stats succeeded")
+	log.G(requestCtx).Debug("stats succeeded")
 	return resp, nil
 }
 
 // Connect returns shim information such as the shim's pid
-func (ts *TaskService) Connect(ctx context.Context, req *taskAPI.ConnectRequest) (*taskAPI.ConnectResponse, error) {
-	defer logPanicAndDie(log.G(ctx))
+func (ts *TaskService) Connect(requestCtx context.Context, req *taskAPI.ConnectRequest) (*taskAPI.ConnectResponse, error) {
+	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(ctx).WithField("id", req.ID).Debug("connect")
+	log.G(requestCtx).WithField("id", req.ID).Debug("connect")
 	task, err := ts.taskManager.Task(req.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
-	resp, err := task.Connect(ctx, req)
+	resp, err := task.Connect(requestCtx, req)
 	if err != nil {
-		log.G(ctx).WithError(err).Error("connect failed")
+		log.G(requestCtx).WithError(err).Error("connect failed")
 		return nil, err
 	}
 
-	log.G(ctx).WithFields(logrus.Fields{
+	log.G(requestCtx).WithFields(logrus.Fields{
 		"shim_pid": resp.ShimPid,
 		"task_pid": resp.TaskPid,
 		"version":  resp.Version,
@@ -534,15 +547,17 @@ func (ts *TaskService) Connect(ctx context.Context, req *taskAPI.ConnectRequest)
 }
 
 // Shutdown cleanups runc resources ans gracefully shutdowns ttrpc server
-func (ts *TaskService) Shutdown(ctx context.Context, req *taskAPI.ShutdownRequest) (*types.Empty, error) {
-	defer logPanicAndDie(log.G(ctx))
+func (ts *TaskService) Shutdown(requestCtx context.Context, req *taskAPI.ShutdownRequest) (*types.Empty, error) {
+	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "now": req.Now}).Debug("shutdown")
-	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
+	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "now": req.Now}).Debug("shutdown")
 
-	ts.taskManager.RemoveAll(ctx)
-	ts.cancel()
+	ts.taskManager.RemoveAll()
 
-	log.G(ctx).Debug("going to gracefully shutdown agent")
+	// shimCancel will result in each ctx provided to runc shims to be canceled in addition to unblocking agent's
+	// main func, which will allow it to exit gracefully.
+	defer ts.shimCancel()
+
+	log.G(requestCtx).Debug("going to gracefully shutdown agent")
 	return &types.Empty{}, nil
 }

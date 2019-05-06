@@ -65,56 +65,54 @@ func main() {
 	signals := make(chan os.Signal, 32)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM, unix.SIGCHLD)
 
-	ctx, cancel := context.WithCancel(namespaces.WithNamespace(context.Background(), defaultNamespace))
-	defer cancel()
-
-	group, ctx := errgroup.WithContext(ctx)
+	shimCtx, shimCancel := context.WithCancel(namespaces.WithNamespace(context.Background(), defaultNamespace))
+	group, shimCtx := errgroup.WithContext(shimCtx)
 
 	// verify arguments, id is required
 	if id == "" {
-		log.G(ctx).WithError(errors.New("invalid argument")).Fatal("id not set")
+		log.G(shimCtx).WithError(errors.New("invalid argument")).Fatal("id not set")
 	}
 
 	// Ensure this process is a subreaper or else containers created via runc will
 	// not be its children.
 	if err := sys.SetSubreaper(enableSubreaper); err != nil {
-		log.G(ctx).WithError(err).Fatal("failed to set shim as subreaper")
+		log.G(shimCtx).WithError(err).Fatal("failed to set shim as subreaper")
 	}
 
 	// Create a runc task service that can be used via GRPC.
 	// This can be wrapped to add missing functionality (like
 	// running multiple containers inside one Firecracker VM)
 
-	log.G(ctx).WithField("id", id).Info("creating runc shim")
+	log.G(shimCtx).WithField("id", id).Info("creating runc shim")
 
 	eventExchange := &event.ExchangeCloser{Exchange: exchange.NewExchange()}
-	taskService := NewTaskService(eventExchange, cancel)
+	taskService := NewTaskService(shimCtx, shimCancel, eventExchange)
 
 	server, err := ttrpc.NewServer()
 	if err != nil {
-		log.G(ctx).WithError(err).Fatal("failed to create ttrpc server")
+		log.G(shimCtx).WithError(err).Fatal("failed to create ttrpc server")
 	}
 
 	taskAPI.RegisterTaskService(server, taskService)
-	eventbridge.RegisterGetterService(server, eventbridge.NewGetterService(ctx, eventExchange))
+	eventbridge.RegisterGetterService(server, eventbridge.NewGetterService(shimCtx, eventExchange))
 
 	// Run ttrpc over vsock
 
-	log.G(ctx).WithField("port", port).Info("listening to vsock")
+	log.G(shimCtx).WithField("port", port).Info("listening to vsock")
 	listener, err := vsock.Listen(uint32(port))
 	if err != nil {
-		log.G(ctx).WithError(err).Fatalf("failed to listen to vsock on port %d", port)
+		log.G(shimCtx).WithError(err).Fatalf("failed to listen to vsock on port %d", port)
 	}
 
 	group.Go(func() error {
-		return server.Serve(ctx, listener)
+		return server.Serve(shimCtx, listener)
 	})
 
 	group.Go(func() error {
 		defer func() {
-			log.G(ctx).Info("stopping ttrpc server")
-			if err := server.Shutdown(ctx); err != nil {
-				log.G(ctx).WithError(err).Errorf("failed to close ttrpc server")
+			log.G(shimCtx).Info("stopping ttrpc server")
+			if err := server.Shutdown(shimCtx); err != nil {
+				log.G(shimCtx).WithError(err).Errorf("failed to close ttrpc server")
 			}
 		}()
 
@@ -124,23 +122,23 @@ func main() {
 				switch s {
 				case unix.SIGCHLD:
 					if err := shim.Reap(); err != nil {
-						log.G(ctx).WithError(err).Error("reap error")
+						log.G(shimCtx).WithError(err).Error("reap error")
 					}
 				case syscall.SIGINT, syscall.SIGTERM:
-					cancel()
+					shimCancel()
 					return nil
 				}
-			case <-ctx.Done():
-				return ctx.Err()
+			case <-shimCtx.Done():
+				return shimCtx.Err()
 			}
 		}
 	})
 
 	err = group.Wait()
-	log.G(ctx).Info("shutting down agent")
+	log.G(shimCtx).Info("shutting down agent")
 
-	if err != nil {
-		log.G(ctx).WithError(err).Error("shim error")
+	if err != nil && err != context.Canceled {
+		log.G(shimCtx).WithError(err).Error("shim error")
 		panic(err)
 	}
 }

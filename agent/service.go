@@ -21,10 +21,10 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/cio"
-	"github.com/containerd/containerd/events/exchange"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/namespaces"
-	"github.com/containerd/containerd/runtime/v2/runc"
+	runc "github.com/containerd/containerd/runtime/v2/runc/v1"
+	"github.com/containerd/containerd/runtime/v2/shim"
 	taskAPI "github.com/containerd/containerd/runtime/v2/task"
 	"github.com/gogo/protobuf/types"
 	"github.com/mdlayher/vsock"
@@ -47,17 +47,17 @@ const (
 type TaskService struct {
 	taskManager vm.TaskManager
 
-	eventExchange *exchange.Exchange
-	cancel        func()
+	publisher shim.Publisher
+	cancel    func()
 }
 
 // NewTaskService creates new runc shim wrapper
-func NewTaskService(eventExchange *exchange.Exchange, cancel context.CancelFunc) taskAPI.TaskService {
+func NewTaskService(publisher shim.Publisher, cancel context.CancelFunc) taskAPI.TaskService {
 	return &TaskService{
 		taskManager: vm.NewTaskManager(),
 
-		eventExchange: eventExchange,
-		cancel:        cancel,
+		publisher: publisher,
+		cancel:    cancel,
 	}
 }
 
@@ -80,6 +80,8 @@ func unmarshalExtraData(marshalled *types.Any) (*proto.ExtraData, error) {
 
 // Create creates a new initial process and container using runc
 func (ts *TaskService) Create(ctx context.Context, req *taskAPI.CreateTaskRequest) (*taskAPI.CreateTaskResponse, error) {
+	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
+
 	defer logPanicAndDie(log.G(ctx))
 	logger := log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "bundle": req.Bundle})
 	logger.Info("create")
@@ -110,7 +112,7 @@ func (ts *TaskService) Create(ctx context.Context, req *taskAPI.CreateTaskReques
 	// Create a runc shim to manage this task
 	// TODO if we update to the v2 runc implementation in containerd, we can use a single
 	// runc service instance to manage all tasks instead of creating a new one for each
-	runcService, err := runc.New(ctx, req.ID, ts.eventExchange)
+	runcService, err := runc.New(ctx, req.ID, ts.publisher, func() {})
 	if err != nil {
 		return nil, err
 	}
@@ -538,8 +540,6 @@ func (ts *TaskService) Shutdown(ctx context.Context, req *taskAPI.ShutdownReques
 	log.G(ctx).WithFields(logrus.Fields{"id": req.ID, "now": req.Now}).Debug("shutdown")
 	ctx = namespaces.WithNamespace(ctx, defaultNamespace)
 
-	// We don't want to call runc.Shutdown here as it just os.Exits behind.
-	// calling all cancels here for graceful shutdown instead and call runc Shutdown at end.
 	ts.taskManager.RemoveAll(ctx)
 	ts.cancel()
 

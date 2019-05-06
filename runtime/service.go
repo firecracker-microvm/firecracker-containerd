@@ -35,7 +35,6 @@ import (
 
 	eventsAPI "github.com/containerd/containerd/api/events"
 	"github.com/containerd/containerd/cio"
-	"github.com/containerd/containerd/events"
 	"github.com/containerd/containerd/events/exchange"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/namespaces"
@@ -86,9 +85,10 @@ type service struct {
 	taskManager vm.TaskManager
 
 	server        *ttrpc.Server
-	publish       events.Publisher
+	publish       shim.Publisher
 	eventExchange *exchange.Exchange
 	namespace     string
+	shutdown      func()
 
 	vmID   string
 	config *Config
@@ -113,7 +113,7 @@ func shimOpts(ctx context.Context) (*shim.Opts, error) {
 }
 
 // NewService creates new runtime shim.
-func NewService(ctx context.Context, id string, remotePublisher events.Publisher) (shim.Shim, error) {
+func NewService(ctx context.Context, id string, remotePublisher shim.Publisher, shutdown func()) (shim.Shim, error) {
 	server, err := newServer()
 	if err != nil {
 		return nil, err
@@ -158,6 +158,7 @@ func NewService(ctx context.Context, id string, remotePublisher events.Publisher
 		publish:       remotePublisher,
 		eventExchange: eventExchange,
 		namespace:     namespace,
+		shutdown:      shutdown,
 
 		vmID:   os.Getenv(vmIDEnvVarKey),
 		config: config,
@@ -755,7 +756,13 @@ func (s *service) Shutdown(ctx context.Context, req *taskAPI.ShutdownRequest) (*
 	}
 
 	// Exit to avoid 'zombie' shim processes
-	defer os.Exit(0)
+	defer func() {
+		if s.shutdown != nil {
+			s.shutdown()
+		}
+		os.Exit(0)
+	}()
+
 	log.G(ctx).Debug("stopping runtime")
 	return &ptypes.Empty{}, nil
 }
@@ -966,7 +973,7 @@ func (s *service) startVM(ctx context.Context,
 	cmd := firecracker.VMCommandBuilder{}.
 		WithBin(s.config.FirecrackerBinaryPath).
 		WithSocketPath(s.vmDir().FirecrackerSockPath()).
-		Build(ctx)
+		Build(context.Background())
 	machineOpts := []firecracker.Opt{
 		firecracker.WithProcessRunner(cmd),
 		firecracker.WithLogger(log.G(ctx)),
@@ -993,8 +1000,7 @@ func (s *service) startVM(ctx context.Context,
 	}
 
 	log.G(ctx).Info("creating clients")
-	rpcClient := ttrpc.NewClient(conn)
-	rpcClient.OnClose(func() { conn.Close() })
+	rpcClient := ttrpc.NewClient(conn, ttrpc.WithOnClose(func() { _ = conn.Close() }))
 	apiClient := taskAPI.NewTaskClient(rpcClient)
 	eventBridgeClient := eventbridge.NewGetterClient(rpcClient)
 
@@ -1002,12 +1008,12 @@ func (s *service) startVM(ctx context.Context,
 		// Connect the agent's event exchange to our own own event exchange
 		// using the eventbridge client. All events that are published on the
 		// agent's exchange will also be published on our own
-		if err := <-eventbridge.Attach(ctx, eventBridgeClient, s.eventExchange); err != nil && err != context.Canceled {
+		if err := <-eventbridge.Attach(context.Background(), eventBridgeClient, s.eventExchange); err != nil && err != context.Canceled {
 			log.G(ctx).WithError(err).Error("error while forwarding events from VM agent")
 		}
 	}()
 
-	go s.monitorTaskExit(ctx)
+	go s.monitorTaskExit(context.Background())
 
 	return apiClient, nil
 }
@@ -1038,13 +1044,16 @@ func (s *service) monitorTaskExit(ctx context.Context) {
 
 			switch event := unmarshaledEvent.(type) {
 			case *eventsAPI.TaskExit:
+				logger = logger.WithField("id", event.ContainerID)
+				logger.Debug("received container exit event")
+
 				s.taskManager.Remove(ctx, event.ContainerID)
 
 				// If we have no more containers, shutdown. If we still have containers left,
 				// this will be a no-op
 				_, err = s.Shutdown(ctx, &taskAPI.ShutdownRequest{})
 				if err != nil {
-					logger.WithError(err).WithField("id", event.ContainerID).Fatal("failed to shutdown after container exit")
+					logger.WithError(err).Fatal("failed to shutdown after container exit")
 				}
 
 			default:
@@ -1052,7 +1061,9 @@ func (s *service) monitorTaskExit(ctx context.Context) {
 			}
 
 		case err = <-exitEventErrs:
-			logger.WithError(err).Error("event error channel published to")
+			if err != nil {
+				logger.WithError(err).Error("event error channel published to")
+			}
 
 		case <-ctx.Done():
 			err = ctx.Err()

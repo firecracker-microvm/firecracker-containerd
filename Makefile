@@ -54,6 +54,7 @@ deps:
 	GOBIN=$(BINPATH) GO111MODULE=off go get -u github.com/vbatts/git-validation
 	GOBIN=$(BINPATH) GO111MODULE=off go get -u github.com/kunalkushwaha/ltag
 	GOBIN=$(BINPATH) GO111MODULE=off go get -u github.com/containerd/ttrpc/cmd/protoc-gen-gogottrpc
+	GOBIN=$(BINPATH) GO111MODULE=off go get -u github.com/gogo/protobuf/protoc-gen-gogo
 
 runc-builder: runc-builder-stamp
 

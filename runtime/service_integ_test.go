@@ -41,7 +41,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
-	proto "github.com/firecracker-microvm/firecracker-containerd/proto/grpc"
+	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	"github.com/firecracker-microvm/firecracker-containerd/runtime/firecrackeroci"
 )
 

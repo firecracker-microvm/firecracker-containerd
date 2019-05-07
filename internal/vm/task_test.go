@@ -25,7 +25,7 @@ import (
 	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/bundle"
-	proto "github.com/firecracker-microvm/firecracker-containerd/proto/grpc"
+	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	"github.com/stretchr/testify/require"
 )
 

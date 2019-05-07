@@ -22,7 +22,8 @@ import (
 	"github.com/golang/protobuf/ptypes/empty"
 	"google.golang.org/grpc"
 
-	proto "github.com/firecracker-microvm/firecracker-containerd/proto/grpc"
+	"github.com/firecracker-microvm/firecracker-containerd/proto"
+	fccontrol "github.com/firecracker-microvm/firecracker-containerd/proto/service/fccontrol/grpc"
 )
 
 func init() {
@@ -50,19 +51,19 @@ func init() {
 				return nil, err
 			}
 
-			return &service{local: instance.(proto.FirecrackerServer)}, nil
+			return &service{local: instance.(fccontrol.FirecrackerServer)}, nil
 		},
 	})
 }
 
 type service struct {
-	local proto.FirecrackerServer
+	local fccontrol.FirecrackerServer
 }
 
-var _ proto.FirecrackerServer = (*service)(nil)
+var _ fccontrol.FirecrackerServer = (*service)(nil)
 
 func (s *service) Register(server *grpc.Server) error {
-	proto.RegisterFirecrackerServer(server, s)
+	fccontrol.RegisterFirecrackerServer(server, s)
 	return nil
 }
 

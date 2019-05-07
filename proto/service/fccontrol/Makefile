@@ -13,17 +13,22 @@
 
 PROTO_SRC := $(wildcard *.proto)
 PROTO_GEN_SRC := $(PROTO_SRC:.proto=.pb.go)
+PROTO_GEN_SRC_GRPC := $(addprefix grpc/,$(PROTO_GEN_SRC))
+PROTO_GEN_SRC_TTRPC := $(addprefix ttrpc/,$(PROTO_GEN_SRC))
 
-$(PROTO_GEN_SRC): $(PROTO_SRC)
-	protoc \
-		--gogo_out=Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types:. \
+$(PROTO_GEN_SRC_TTRPC): $(PROTO_SRC)
+	protoc -I. -I$(PROTOPATH)\
+		--gogottrpc_out=plugins=ttrpc,Mfirecracker.proto=github.com/firecracker-microvm/firecracker-containerd/proto:ttrpc \
 		$^
 
-proto: $(PROTO_GEN_SRC)
-	PROTOPATH=$(CURDIR) $(MAKE) -C service/fccontrol proto
+$(PROTO_GEN_SRC_GRPC): $(PROTO_SRC)
+	protoc -I. -I$(PROTOPATH)\
+		--gogo_out=plugins=grpc,Mfirecracker.proto=github.com/firecracker-microvm/firecracker-containerd/proto:grpc \
+		$^
+
+proto: $(PROTO_GEN_SRC_GRPC) $(PROTO_GEN_SRC_TTRPC)
 
 clean:
-	- rm -f $(PROTO_GEN_SRC)
-	- $(MAKE) -C service/fccontrol clean
+	- rm -f $(PROTO_GEN_SRC_GRPC) $(PROTO_GEN_SRC_TTRPC)
 
 .PHONY: clean proto

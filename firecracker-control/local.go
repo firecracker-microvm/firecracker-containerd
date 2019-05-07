@@ -29,11 +29,12 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
-	proto "github.com/firecracker-microvm/firecracker-containerd/proto/grpc"
+	"github.com/firecracker-microvm/firecracker-containerd/proto"
+	fccontrol "github.com/firecracker-microvm/firecracker-containerd/proto/service/fccontrol/grpc"
 )
 
 var (
-	_ proto.FirecrackerServer = (*local)(nil)
+	_ fccontrol.FirecrackerServer = (*local)(nil)
 )
 
 func init() {

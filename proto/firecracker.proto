@@ -1,23 +1,8 @@
 syntax = "proto3";
 
-import "google/protobuf/empty.proto";
 import "types.proto";
 
 option go_package = "proto";
-
-service Firecracker {
-    // Runs new Firecracker VM instance
-    rpc CreateVM(CreateVMRequest) returns (google.protobuf.Empty);
-
-    // Stops existing Firecracker instance by VM ID
-    rpc StopVM(StopVMRequest) returns (google.protobuf.Empty);
-
-    // Returns VM info by VM ID
-    rpc GetVMInfo(GetVMInfoRequest) returns (GetVMInfoResponse);
-
-    // Sets VM's instance metadata
-    rpc SetVMMetadata(SetVMMetadataRequest) returns (google.protobuf.Empty);
-}
 
 // CreateVMRequest specifies creation parameters for a new FC instance
 message CreateVMRequest {

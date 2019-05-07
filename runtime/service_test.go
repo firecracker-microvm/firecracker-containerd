@@ -19,7 +19,7 @@ import (
 	"testing"
 
 	"github.com/containerd/typeurl"
-	proto "github.com/firecracker-microvm/firecracker-containerd/proto/grpc"
+	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

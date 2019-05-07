@@ -175,7 +175,7 @@ RUN --mount=type=cache,from=build-base,source=/home/builder/go/pkg/mod,target=/h
 FROM alpine:3.8 as firecracker-vm-root
 COPY --from=runc-build /output/runc /usr/local/bin/
 COPY --from=firecracker-containerd-build /output/agent /usr/local/bin/
-ADD --chown=builder tools/docker/fc-agent.start /etc/local.d/fc-agent.start
+ADD tools/docker/fc-agent.start /etc/local.d/fc-agent.start
 RUN apk add openrc \
 	&& ln -s /etc/init.d/local /etc/runlevels/default/local \
 	&& ln -s /etc/init.d/cgroups /etc/runlevels/default/cgroups \

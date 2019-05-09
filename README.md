@@ -2,7 +2,7 @@
 
 | Automation | Status |
 |------------|--------|
-| Tests      | [![Build status](https://badge.buildkite.com/aab4ae547d5e5079a5915522e8cdb18492349aef67aae5a8c5.svg)](https://buildkite.com/firecracker-microvm/firecracker-containerd)
+| Tests      | [![Build status](https://badge.buildkite.com/aab4ae547d5e5079a5915522e8cdb18492349aef67aae5a8c5.svg?branch=master)](https://buildkite.com/firecracker-microvm/firecracker-containerd)
 | Lint       | [![Build Status](https://travis-ci.org/firecracker-microvm/firecracker-containerd.svg?branch=master)](https://travis-ci.org/firecracker-microvm/firecracker-containerd)
 
 This repository enables the use of a container runtime,

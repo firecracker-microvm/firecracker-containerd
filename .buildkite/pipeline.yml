@@ -23,6 +23,16 @@ steps:
 
   - wait
 
+    # Global concurrency has been set to one in the website configuration.
+    # With that we can now clean up loop devices before starting jobs to ensure
+    # we don't hit the loop device limit
+  - label: ":lint-roller: loop device cleanup"
+    agents:
+      queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
+    command: 'sudo losetup -D'
+
+  - wait
+
   # Git history validation happens after the 'wait' step so it happens
   # in parallel with the subsequent tests and does not prevent them
   # from running in the event of a validation failure.

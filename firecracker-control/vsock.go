@@ -56,7 +56,7 @@ func findNextAvailableVsockCID(ctx context.Context) (*os.File, uint32, error) {
 			return nil, 0, ctx.Err()
 		default:
 			cid := contextID
-			_, _, err = syscall.Syscall(
+			_, _, err = sysCall(
 				unix.SYS_IOCTL,
 				file.Fd(),
 				ioctlVsockSetGuestCID,

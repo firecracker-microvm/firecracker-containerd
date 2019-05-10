@@ -289,6 +289,11 @@ func (s *local) newShim(ns, vmID, containerdAddress string, shimSocket *net.Unix
 		Setpgid: true,
 	}
 
+	// shim stderr is just raw text, so pass it through our logrus formatter first
+	cmd.Stderr = logger.WithField("shim_stream", "stderr").WriterLevel(logrus.ErrorLevel)
+	// shim stdout on the other hand is already formatted by logrus, so pass that transparently through to containerd logs
+	cmd.Stdout = logger.Logger.Out
+
 	err = cmd.Start()
 	if err != nil {
 		err = errors.Wrap(err, "failed to start shim child process")

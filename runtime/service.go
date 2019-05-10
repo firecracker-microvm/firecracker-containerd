@@ -654,46 +654,13 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 
 func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTaskRequest) (*taskAPI.CreateTaskResponse, error) {
 	logger := s.logger.WithField("containerID", request.ID)
+	defer logPanicAndDie(logger)
 
 	err := s.waitVMReady()
 	if err != nil {
 		logger.WithError(err).Error()
 		return nil, err
 	}
-
-	bundleDir := bundle.Dir(request.Bundle)
-	err = s.shimDir().CreateBundleLink(request.ID, bundleDir)
-	if err != nil {
-		err = errors.Wrap(err, "failed to create VM dir bundle link")
-		logger.WithError(err).Error()
-		return nil, err
-	}
-
-	// TODO replace with a FIFO created by the plugin
-	_, err = os.Stat(s.shimDir().LogFifoPath())
-	if os.IsNotExist(err) {
-		err = s.shimDir().CreateShimLogFifoLink(request.ID)
-		if err != nil {
-			err = errors.Wrap(err, "failed to create shim log fifo symlink")
-			logger.WithError(err).Error()
-			return nil, err
-		}
-
-		fifo, err := s.shimDir().OpenLogFifo(requestCtx)
-		if err != nil {
-			err = errors.Wrap(err, "failed to open shim log fifo")
-			logger.WithError(err).Error()
-			return nil, err
-		}
-
-		logrus.SetOutput(fifo)
-	} else if err != nil {
-		err = errors.Wrap(err, "failed to stat log fifo path")
-		logger.WithError(err).Error()
-		return nil, err
-	}
-
-	defer logPanicAndDie(log.G(requestCtx))
 
 	logger.WithFields(logrus.Fields{
 		"bundle":     request.Bundle,
@@ -703,6 +670,14 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 		"stderr":     request.Stderr,
 		"checkpoint": request.Checkpoint,
 	}).Debug("creating task")
+
+	bundleDir := bundle.Dir(request.Bundle)
+	err = s.shimDir().CreateBundleLink(request.ID, bundleDir)
+	if err != nil {
+		err = errors.Wrap(err, "failed to create VM dir bundle link")
+		logger.WithError(err).Error()
+		return nil, err
+	}
 
 	err = s.shimDir().CreateAddressLink(request.ID)
 	if err != nil {

@@ -14,6 +14,8 @@
 package main
 
 import (
+	"os"
+
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/runtime/v2/shim"
 	"github.com/sirupsen/logrus"
@@ -26,6 +28,8 @@ func init() {
 		TimestampFormat: log.RFC3339NanoFixed,
 		FullTimestamp:   true,
 	})
+
+	logrus.SetOutput(os.Stdout)
 }
 
 func main() {

@@ -18,9 +18,6 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/containerd/typeurl"
-	"github.com/firecracker-microvm/firecracker-containerd/proto"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -49,45 +46,4 @@ func TestFindNextAvailableVsockCID(t *testing.T) {
 
 	_, _, err = findNextAvailableVsockCID(ctx)
 	require.Equal(t, context.Canceled, err)
-}
-
-func TestParseCreateTaskOptsParsesFirecrackerConfig(t *testing.T) {
-	inFirecrackerConfig := &proto.FirecrackerConfig{
-		NetworkInterfaces: []*proto.FirecrackerNetworkInterface{
-			{
-				MacAddress:  mac,
-				HostDevName: hostDevName,
-			},
-		},
-	}
-
-	protoFirecrackerConfig, err := typeurl.MarshalAny(inFirecrackerConfig)
-	require.NoError(t, err, "unable to marshal firecracker config proto message")
-	outFirecrackerConfig, outRuncOpts, err := parseCreateTaskOpts(protoFirecrackerConfig)
-	require.NoError(t, err, "unable to parse firecracker config from proto message")
-	if outRuncOpts != nil {
-		// assert.Equal is insufficient here as the nil comparison fails for
-		// empty Any protobuf message
-		t.Error("unexpected value parsed for runc options")
-	}
-	assert.Equal(t, 1, len(outFirecrackerConfig.NetworkInterfaces))
-	assert.Equal(t, hostDevName, outFirecrackerConfig.NetworkInterfaces[0].HostDevName)
-	assert.Equal(t, mac, outFirecrackerConfig.NetworkInterfaces[0].MacAddress)
-}
-
-func TestParseCreateTaskLeavesNonFirecrackerConfigAlong(t *testing.T) {
-	in := &proto.FirecrackerNetworkInterface{
-		MacAddress:  mac,
-		HostDevName: hostDevName,
-	}
-	protoIn, err := typeurl.MarshalAny(in)
-	require.NoError(t, err, "unable to marshal proto message")
-	outFirecrackerConfig, outOpts, err := parseCreateTaskOpts(protoIn)
-	require.NoError(t, err, "unable to parse firecracker config from proto message")
-	if outFirecrackerConfig != nil {
-		// assert.Equal is insufficient here as the nil comparison fails for
-		// empty Any protobuf message
-		t.Error("unexpected value parsed for firecracker config")
-	}
-	assert.Equal(t, protoIn, outOpts)
 }

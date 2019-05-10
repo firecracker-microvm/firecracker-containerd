@@ -336,24 +336,6 @@ func logPanicAndDie(logger *logrus.Entry) {
 	}
 }
 
-func parseCreateTaskOpts(opts *ptypes.Any) (*proto.FirecrackerConfig, *ptypes.Any, error) {
-	cfg, err := typeurl.UnmarshalAny(opts)
-	if err != nil {
-		return nil, nil, errors.Wrapf(err, "unmarshaling task create request options")
-	}
-	// We've verified that this is a valid prototype at this point of time.
-	// Check if it's the FirecrackerConfig type
-	firecrackerConfig, ok := cfg.(*proto.FirecrackerConfig)
-	if ok {
-		// We've verified that the proto message was of FirecrackerConfig type.
-		// Get runc options based on what was set in FirecrackerConfig.
-		return firecrackerConfig, firecrackerConfig.RuncOptions, nil
-	}
-	// This is a valid proto message, but is not FirecrackerConfig type.
-	// Treat the message as runc opts
-	return nil, opts, nil
-}
-
 func (s *service) generateExtraData(bundleDir bundle.Dir, options *ptypes.Any) (*proto.ExtraData, error) {
 	// Add the bundle/config.json to the request so it can be recreated
 	// inside the vm:
@@ -698,7 +680,7 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 
 	logger.Info("creating task")
 
-	extraData, err := s.generateExtraData(bundleDir, runcOpts)
+	extraData, err := s.generateExtraData(bundleDir, request.Options)
 	if err != nil {
 		err = errors.Wrap(err, "failed to generate extra data")
 		logger.WithError(err).Error()

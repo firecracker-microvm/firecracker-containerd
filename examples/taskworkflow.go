@@ -29,6 +29,7 @@ import (
 	"github.com/containerd/containerd/oci"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	fccontrol "github.com/firecracker-microvm/firecracker-containerd/proto/service/fccontrol/grpc"
+	"github.com/firecracker-microvm/firecracker-containerd/runtime/firecrackeroci"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 )
@@ -116,6 +117,7 @@ func taskWorkflow(containerIP string, gateway string, netMask string) (err error
 			oci.WithHostNamespace(specs.NetworkNamespace),
 			oci.WithHostHostsFile,
 			oci.WithHostResolvconf,
+			firecrackeroci.WithVMID(vmID),
 		),
 		containerd.WithRuntime("aws.firecracker", nil),
 	)
@@ -124,26 +126,7 @@ func taskWorkflow(containerIP string, gateway string, netMask string) (err error
 	}
 	defer container.Delete(ctx, containerd.WithSnapshotCleanup)
 
-	task, err := container.NewTask(ctx,
-		cio.NewCreator(cio.WithStdio),
-		func(ctx context.Context, _ *containerd.Client, ti *containerd.TaskInfo) error {
-			if containerIP == "" {
-				return nil
-			}
-			// An IP address for the container has been provided. Configure
-			// the VM opts accordingly.
-			firecrackerConfig := &proto.FirecrackerConfig{
-				NetworkInterfaces: []*proto.FirecrackerNetworkInterface{
-					{
-						MacAddress:  macAddress,
-						HostDevName: hostDevName,
-					},
-				},
-				KernelArgs: fmt.Sprintf(kernelArgsFormat, containerIP, gateway, netMask),
-			}
-			ti.Options = firecrackerConfig
-			return nil
-		})
+	task, err := container.NewTask(ctx, cio.NewCreator(cio.WithStdio))
 	if err != nil {
 		return errors.Wrapf(err, "creating task")
 

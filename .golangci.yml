@@ -21,6 +21,7 @@ linters:
     - gocritic
     - interfacer # Suggests narrower interface types
     - scopelint # Checks for unpinned variables
+    - gofmt
 
 issues:
   exclude-use-default: false

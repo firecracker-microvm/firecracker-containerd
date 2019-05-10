@@ -45,7 +45,7 @@ distclean: clean
 
 lint:
 	$(BINPATH)/ltag -t ./.headers -excludes "tools $(SUBMODULES)" -check -v
-	$(BINPATH)/git-validation -run DCO,dangling-whitespace,short-subject -range HEAD~20..HEAD
+	$(BINPATH)/git-validation -run DCO,short-subject -range HEAD~20..HEAD
 	$(BINPATH)/golangci-lint run
 
 deps:

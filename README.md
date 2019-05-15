@@ -111,7 +111,7 @@ You must have the following components available in order to run Firecracker
 microVMs with containerd:
 
 * containerd >= 1.2
-* Firecracker >= 0.10.1 with [vsock
+* Firecracker >= 0.15.0 with [vsock
   support](https://github.com/firecracker-microvm/firecracker/blob/master/docs/experimental-vsock.md)
   enabled.
 * A firecracker compatible kernel

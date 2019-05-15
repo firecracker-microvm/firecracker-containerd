@@ -19,16 +19,20 @@ import (
 	"os"
 
 	"github.com/pkg/errors"
+
+	models "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 )
 
 const (
-	configPathEnvName = "FIRECRACKER_CONTAINERD_RUNTIME_CONFIG_PATH"
-	defaultConfigPath = "/etc/containerd/firecracker-runtime.json"
-	defaultKernelArgs = "console=ttyS0 noapic reboot=k panic=1 pci=off nomodules rw"
-	defaultFilesPath  = "/var/lib/firecracker-containerd/runtime/"
-	defaultKernelPath = defaultFilesPath + "default-vmlinux.bin"
-	defaultRootfsPath = defaultFilesPath + "default-rootfs.img"
-	defaultCPUCount   = 1
+	configPathEnvName  = "FIRECRACKER_CONTAINERD_RUNTIME_CONFIG_PATH"
+	defaultConfigPath  = "/etc/containerd/firecracker-runtime.json"
+	defaultKernelArgs  = "console=ttyS0 noapic reboot=k panic=1 pci=off nomodules rw"
+	defaultFilesPath   = "/var/lib/firecracker-containerd/runtime/"
+	defaultKernelPath  = defaultFilesPath + "default-vmlinux.bin"
+	defaultRootfsPath  = defaultFilesPath + "default-rootfs.img"
+	defaultCPUCount    = 1
+	defaultCPUTemplate = models.CPUTemplateT2
+	defaultMemSizeMb   = 128
 )
 
 // Config represents runtime configuration parameters

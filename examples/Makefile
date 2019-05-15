@@ -11,8 +11,13 @@
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
+# Set this to pass additional commandline flags to the go compiler, e.g. "make test EXTRAGOARGS=-v"
+EXTRAGOARGS?=
+
+SOURCES:=$(shell find . -name '*.go')
 GOMOD := $(shell go env GOMOD)
 GOSUM := $(GOMOD:.mod=.sum)
+DOCKER_IMAGE_TAG?=latest
 
 all: examples
 
@@ -20,6 +25,19 @@ examples: taskworkflow
 
 taskworkflow: taskworkflow.go $(GOMOD) $(GOSUM)
 	go build -o taskworkflow taskworkflow.go
+
+test-docker: $(SOURCES) $(GOMOD) $(GOSUM)
+	docker run --rm \
+		--privileged \
+		--ipc=host \
+		--volume /dev:/dev \
+		--volume /sys:/sys \
+		--volume /run/udev/control:/run/udev/control \
+		--volume $(shell pwd)/logs:/var/log/firecracker-containerd-test \
+		--workdir="/firecracker-containerd/examples" \
+		--env EXTRAGOARGS="${EXTRAGOARGS}" \
+		localhost/firecracker-containerd-e2etest-naive:${DOCKER_IMAGE_TAG} \
+		"make examples && ./taskworkflow"
 
 clean:
 	- rm -f taskworkflow

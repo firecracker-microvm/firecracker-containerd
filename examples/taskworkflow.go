@@ -28,6 +28,8 @@ import (
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/oci"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
+	fccontrol "github.com/firecracker-microvm/firecracker-containerd/proto/service/fccontrol/grpc"
+	"github.com/firecracker-microvm/firecracker-containerd/runtime/firecrackeroci"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 )
@@ -52,7 +54,7 @@ func main() {
 	}
 }
 
-func taskWorkflow(containerIP string, gateway string, netMask string) error {
+func taskWorkflow(containerIP string, gateway string, netMask string) (err error) {
 	log.Println("Creating containerd client")
 	client, err := containerd.New("/run/containerd/containerd.sock")
 	if err != nil {
@@ -71,6 +73,39 @@ func taskWorkflow(containerIP string, gateway string, netMask string) error {
 		return errors.Wrapf(err, "creating container")
 
 	}
+
+	fcClient := fccontrol.NewFirecrackerClient(client.Conn())
+
+	vmID := "fc-example"
+	createVMRequest := &proto.CreateVMRequest{
+		VMID: vmID,
+	}
+
+	if containerIP != "" {
+		createVMRequest.NetworkInterfaces = []*proto.FirecrackerNetworkInterface{
+			{
+				MacAddress:  macAddress,
+				HostDevName: hostDevName,
+			},
+		}
+		createVMRequest.KernelArgs = fmt.Sprintf(kernelArgsFormat, containerIP, gateway, netMask)
+	}
+
+	_, err = fcClient.CreateVM(ctx, createVMRequest)
+	if err != nil {
+		return errors.Wrap(err, "failed to create VM")
+	}
+
+	defer func() {
+		_, stopErr := fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
+		if stopErr != nil {
+			log.Printf("failed to stop VM, err: %v\n", stopErr)
+		}
+		if err == nil {
+			err = stopErr
+		}
+	}()
+
 	log.Printf("Successfully pulled %s image\n", image.Name())
 	container, err := client.NewContainer(
 		ctx,
@@ -82,6 +117,7 @@ func taskWorkflow(containerIP string, gateway string, netMask string) error {
 			oci.WithHostNamespace(specs.NetworkNamespace),
 			oci.WithHostHostsFile,
 			oci.WithHostResolvconf,
+			firecrackeroci.WithVMID(vmID),
 		),
 		containerd.WithRuntime("aws.firecracker", nil),
 	)
@@ -90,26 +126,7 @@ func taskWorkflow(containerIP string, gateway string, netMask string) error {
 	}
 	defer container.Delete(ctx, containerd.WithSnapshotCleanup)
 
-	task, err := container.NewTask(ctx,
-		cio.NewCreator(cio.WithStdio),
-		func(ctx context.Context, _ *containerd.Client, ti *containerd.TaskInfo) error {
-			if containerIP == "" {
-				return nil
-			}
-			// An IP address for the container has been provided. Configure
-			// the VM opts accordingly.
-			firecrackerConfig := &proto.FirecrackerConfig{
-				NetworkInterfaces: []*proto.FirecrackerNetworkInterface{
-					{
-						MacAddress:  macAddress,
-						HostDevName: hostDevName,
-					},
-				},
-				KernelArgs: fmt.Sprintf(kernelArgsFormat, containerIP, gateway, netMask),
-			}
-			ti.Options = firecrackerConfig
-			return nil
-		})
+	task, err := container.NewTask(ctx, cio.NewCreator(cio.WithStdio))
 	if err != nil {
 		return errors.Wrapf(err, "creating task")
 

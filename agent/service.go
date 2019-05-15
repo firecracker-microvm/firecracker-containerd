@@ -103,25 +103,25 @@ func (ts *TaskService) Create(requestCtx context.Context, req *taskAPI.CreateTas
 
 	extraData, err := unmarshalExtraData(req.Options)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to unmarshal extra data")
 	}
 
 	bundleDir := bundle.Dir(filepath.Join(containerRootDir, req.ID))
 	err = bundleDir.Create()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to create bundle dir")
 	}
 
 	err = bundleDir.OCIConfig().Write(extraData.JsonSpec)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to write oci config file")
 	}
 
 	// TODO replace with proper drive mounting once that PR is merged. Right now, all containers in
 	// this VM start up with the same rootfs image no matter their configuration
 	err = bundleDir.MountRootfs("/dev/vdb", "ext4", nil)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to mount rootfs device")
 	}
 
 	// Create a runc shim to manage this task
@@ -130,7 +130,7 @@ func (ts *TaskService) Create(requestCtx context.Context, req *taskAPI.CreateTas
 	taskCtx, taskCancel := context.WithCancel(ts.shimCtx)
 	runcService, err := runc.New(taskCtx, req.ID, ts.publisher, taskCancel)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to create runc shim for task")
 	}
 
 	defer func() {
@@ -143,7 +143,7 @@ func (ts *TaskService) Create(requestCtx context.Context, req *taskAPI.CreateTas
 	fifoSet, err := cio.NewFIFOSetInDir(bundleDir.RootPath(), req.ID, req.Terminal)
 	if err != nil {
 		logger.WithError(err).Error("failed opening stdio FIFOs")
-		return nil, err
+		return nil, errors.Wrap(err, "failed to open stdio FIFOs")
 	}
 
 	// Don't try to connect any io streams that weren't requested by the client
@@ -161,7 +161,7 @@ func (ts *TaskService) Create(requestCtx context.Context, req *taskAPI.CreateTas
 
 	task, err := ts.taskManager.AddTask(req.ID, runcService, bundleDir, extraData, fifoSet, taskCtx.Done(), taskCancel)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to add task")
 	}
 
 	logger.Debug("calling runc create")
@@ -180,13 +180,13 @@ func (ts *TaskService) Create(requestCtx context.Context, req *taskAPI.CreateTas
 	// the task to ensure we capture all task output
 	err = <-task.StartStdioProxy(taskCtx, vm.VSockToFIFO, acceptVSock)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to initialize stdio proxy")
 	}
 
 	resp, err := task.Create(requestCtx, req)
 	if err != nil {
 		logger.WithError(err).Error("error creating container")
-		return nil, err
+		return nil, errors.Wrap(err, "failed create container")
 	}
 
 	logger.WithField("pid", resp.Pid).Debugf("create succeeded")

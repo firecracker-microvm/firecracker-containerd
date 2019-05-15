@@ -13,21 +13,6 @@ message ExtraData {
 	uint32 StderrPort = 5;
 }
 
-// Message to specify the various Firecracker VM configurations for a task
-message FirecrackerConfig {
-	google.protobuf.Any RuncOptions = 1; // Specifies Runc options that need to relayed to the CreateTask request
-	repeated FirecrackerNetworkInterface NetworkInterfaces = 2; // Specifies the networking configuration for a VM
-	string KernelImagePath = 3; // Specifies the file path where the kernel image is located
-	string KernelArgs = 4; // Specifies the commandline arguments that should be passed to the kernel
-	FirecrackerMachineConfiguration MachineCfg = 5; // Specifies the machine configuration for the VM
-	FirecrackerDrive RootDrive = 6; // Specifies the root block device for the VM
-	// Specifies the additional block device config for the VM. Note that
-	// the snapshotter used might itself present block devices to the be
-	// attached to the VM. This fields allows additional block devices to
-	// that list.
-	repeated FirecrackerDrive AdditionalDrives = 7;
-}
-
 // Message to specify network config for a Firecracker VM
 message FirecrackerNetworkInterface {
 	string MacAddress = 1; // Specifies the mac address for the the device

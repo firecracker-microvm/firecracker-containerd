@@ -13,30 +13,7 @@
 
 package service
 
-import (
-	"time"
-
-	models "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
-	"github.com/pkg/errors"
-)
-
 const (
 	localPluginID = "fc-control"
 	grpcPluginID  = "fc-control-service"
-)
-
-var (
-	// ErrVMNotFound means that a VM with the given ID not found
-	ErrVMNotFound = errors.New("vm not found")
-)
-
-const (
-	firecrackerStartTimeout = 5 * time.Second
-	defaultCPUTemplate      = models.CPUTemplateT2
-	defaultCPUCount         = 1
-	defaultMemSizeMb        = 128
-	defaultKernelArgs       = "console=ttyS0 noapic reboot=k panic=1 pci=off nomodules rw"
-	defaultFilesPath        = "/var/lib/firecracker-containerd/runtime/"
-	defaultKernelPath       = defaultFilesPath + "default-vmlinux.bin"
-	defaultRootfsPath       = defaultFilesPath + "default-rootfs.img"
 )

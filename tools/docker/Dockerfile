@@ -101,30 +101,6 @@ RUN --mount=type=cache,from=build-base,source=/home/builder/cargo/registry,targe
 
 
 
-# Build containerd
-FROM build-base as containerd-build
-# we don't need their btrfs snapshotter, which requires more dependencies
-ENV BUILDTAGS='no_btrfs'
-# The commit ID being used ensures we have the following commit IDs (which currently are not in a tagged release):
-# * 82f2ac7edec03dfc301d99d8910c9e53a9d71d90 - Stop logging error on v2 multi shim log failure
-# * 810b3c37bb13662a289b9f6b028b5b5435be72b7 - Support disabling default setup of shim logger.
-# * 665715b8a6c595a1a96e6b60cbf8b544ad63cc78 - Allow reuse client for external GRPC services
-# Once those commits are in a tagged release it should make sense to go back to using a release branch instead of
-# a commit ID off the master containerd branch.
-RUN --mount=type=cache,from=build-base,source=/home/builder/go/pkg/mod,target=/home/builder/go/pkg/mod,sharing=locked \
-	mkdir -p /home/builder/go/src/github.com/containerd/containerd \
-	&& git clone https://github.com/containerd/containerd.git /home/builder/go/src/github.com/containerd/containerd \
-	&& cd /home/builder/go/src/github.com/containerd/containerd \
-  && git checkout 82f2ac7edec03dfc301d99d8910c9e53a9d71d90 \
-	&& go mod verify || go mod download
-RUN --mount=type=cache,from=build-base,source=/home/builder/go/pkg/mod,target=/home/builder/go/pkg/mod \
-	cd /home/builder/go/src/github.com/containerd/containerd \
-	&& make \
-	&& cp -R /home/builder/go/src/github.com/containerd/containerd/bin/* /output
-
-
-
-
 # Build runc
 FROM build-base as runc-build
 ENV BUILDTAGS='seccomp'
@@ -165,6 +141,12 @@ RUN --mount=type=cache,from=build-base,source=/home/builder/go/pkg/mod,target=/h
 		snapshotter/cmd/devmapper/devmapper_snapshotter \
 		snapshotter/cmd/naive/naive_snapshotter \
 		/output
+RUN --mount=type=cache,from=build-base,source=/home/builder/go/pkg/mod,target=/home/builder/go/pkg/mod \
+  cd firecracker-containerd/firecracker-control/cmd/containerd/ \
+  && make \
+  && cp \
+  firecracker-containerd \
+  /output/containerd
 
 
 
@@ -233,16 +215,15 @@ RUN mkdir -p /etc/apt/sources.list.d \
 
 COPY --from=firecracker-containerd-build /home/builder/firecracker-containerd /firecracker-containerd
 COPY --from=firecracker-build /output/* /usr/local/bin/
-COPY --from=containerd-build /output/* /usr/local/bin/
-COPY --from=firecracker-vm-root-builder /output/vm.ext4 /var/lib/firecracker-containerd/runtime/hello-rootfs.ext4
+COPY --from=firecracker-vm-root-builder /output/vm.ext4 /var/lib/firecracker-containerd/runtime/default-rootfs.img
 COPY --from=firecracker-containerd-build /output/* /usr/local/bin/
 COPY --from=runc-build /output/* /usr/local/bin/
 COPY tools/docker/firecracker-runtime.json /etc/containerd/firecracker-runtime.json
 
-RUN curl --silent --show-error --retry 3 --max-time 30 --output hello-vmlinux.bin \
+RUN curl --silent --show-error --retry 3 --max-time 30 --output default-vmlinux.bin \
 	"https://s3.amazonaws.com/spec.ccfc.min/img/hello/kernel/hello-vmlinux.bin" \
-	&& echo "882fa465c43ab7d92e31bd4167da3ad6a82cb9230f9b0016176df597c6014cef hello-vmlinux.bin" | sha256sum -c - \
-	&& mv hello-vmlinux.bin /var/lib/firecracker-containerd/runtime/hello-vmlinux.bin
+	&& echo "882fa465c43ab7d92e31bd4167da3ad6a82cb9230f9b0016176df597c6014cef default-vmlinux.bin" | sha256sum -c - \
+	&& mv default-vmlinux.bin /var/lib/firecracker-containerd/runtime/default-vmlinux.bin
 
 RUN --mount=type=cache,from=build-base,source=/home/builder/go/pkg/mod,target=/tmp/go/pkg/mod,readonly \
 	mkdir -p /root/go/pkg/mod \

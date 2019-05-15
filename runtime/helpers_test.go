@@ -11,7 +11,7 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package service
+package main
 
 import (
 	"testing"
@@ -29,8 +29,6 @@ const (
 	capacity     = 400
 	memSize      = 4096
 	vcpuCount    = 2
-	mac          = "AA:FC:00:00:00:01"
-	hostDevName  = "tap0"
 )
 
 func TestMachineConfigurationFromProto(t *testing.T) {

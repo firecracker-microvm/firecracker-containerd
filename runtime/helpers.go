@@ -11,7 +11,7 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package service
+package main
 
 import (
 	"time"
@@ -29,19 +29,23 @@ func machineConfigurationFromProto(req *proto.FirecrackerMachineConfiguration) m
 		MemSizeMib:  defaultMemSizeMb,
 	}
 
-	if name := req.GetCPUTemplate(); name != "" {
+	if req == nil {
+		return config
+	}
+
+	if name := req.CPUTemplate; name != "" {
 		config.CPUTemplate = models.CPUTemplate(name)
 	}
 
-	if count := req.GetVcpuCount(); count > 0 {
+	if count := req.VcpuCount; count > 0 {
 		config.VcpuCount = int64(count)
 	}
 
-	if size := req.GetMemSizeMib(); size > 0 {
+	if size := req.MemSizeMib; size > 0 {
 		config.MemSizeMib = int64(size)
 	}
 
-	config.HtEnabled = req.GetHtEnabled()
+	config.HtEnabled = req.HtEnabled
 
 	return config
 }
@@ -68,15 +72,15 @@ func networkConfigFromProto(nwIface *proto.FirecrackerNetworkInterface) firecrac
 
 func addDriveFromProto(builder firecracker.DrivesBuilder, drive *proto.FirecrackerDrive) firecracker.DrivesBuilder {
 	opt := func(d *models.Drive) {
-		d.IsRootDevice = firecracker.Bool(drive.GetIsRootDevice())
-		d.Partuuid = drive.GetPartuuid()
+		d.IsRootDevice = firecracker.Bool(drive.IsRootDevice)
+		d.Partuuid = drive.Partuuid
 
-		if limiter := drive.GetRateLimiter(); limiter != nil {
+		if limiter := drive.RateLimiter; limiter != nil {
 			d.RateLimiter = rateLimiterFromProto(limiter)
 		}
 	}
 
-	return builder.AddDrive(drive.GetPathOnHost(), drive.GetIsReadOnly(), opt)
+	return builder.AddDrive(drive.PathOnHost, drive.IsReadOnly, opt)
 }
 
 // rateLimiterFromProto creates a firecracker RateLimiter object from the

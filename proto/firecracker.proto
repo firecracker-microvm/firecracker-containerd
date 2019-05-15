@@ -29,6 +29,9 @@ message CreateVMRequest {
 
     // The number of dummy drives to reserve in advance before running FC instance.
     int32 ContainerCount = 8;
+
+    // Whether the VM should exit after all tasks running in it have exited
+    bool ExitAfterAllTasksGone = 9;
 }
 
 message StopVMRequest {

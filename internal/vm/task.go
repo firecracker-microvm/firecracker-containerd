@@ -19,6 +19,7 @@ import (
 	"net"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/containerd/containerd/cio"
 	taskAPI "github.com/containerd/containerd/runtime/v2/task"
@@ -301,33 +302,25 @@ func (task *Task) proxyIO(initializeCtx context.Context, fifoPath string, port u
 	// the FIFO and vsock have been opened, so go off proxying between them asynchronously
 	// until Cancel is called.
 	go func() {
+		defer sock.Close()
+		defer fifoFile.Close()
+
 		buf := make([]byte, internal.DefaultBufferSize)
 
 		logger.Debug("begin copying io")
 
+		go func() {
+			<-task.doneCh
+			// the task has exited, give any last data a 5 second window to be flushed
+			// across vsock before closing down
+			sock.SetDeadline(time.Now().Add(5 * time.Second))
+		}()
+
 		switch ioDirection {
 		case FIFOtoVSock:
-			go func() {
-				<-task.doneCh
-				// If we are copying from FIFO to vsock, be sure to first close just the FIFO,
-				// allowing any buffered data to be flushed into the vsock first.
-				fifoFile.Close()
-			}()
-
 			_, err = io.CopyBuffer(sock, fifoFile, buf)
-			sock.Close()
-
 		case VSockToFIFO:
-			go func() {
-				<-task.doneCh
-				// If we are copying from vsock to FIFO, be sure to first close just the vsock,
-				// allowing any buffered data to be flushed into the FIFO first.
-				sock.Close()
-			}()
-
 			_, err = io.CopyBuffer(fifoFile, sock, buf)
-			fifoFile.Close()
-
 		default:
 			logger.Fatalf("undefined io direction") // should not be possible, direction is a bool
 		}

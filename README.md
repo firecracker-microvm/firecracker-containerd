@@ -28,17 +28,22 @@ Potential use cases of Firecracker-based containers include:
 To maintain compatibility with the container ecosystem, where possible, we use
 container standards such as the OCI image format.
 
-There are three separate components in this repository that enable containerd
-to use Firecracker microVMs to run containers:
+There are several components in this repository that enable containerd to use
+Firecracker microVMs to run containers:
 
 * A [snapshotter](snapshotter) that creates files used as block-devices for
   pass-through into the microVM.  This snapshotter is used for providing the
   container image to the microVM.  The snapshotter runs as an out-of-process
   gRPC proxy plugin.  We currently have two implementations of a snapshotter: a
   [naive](snapshotter/cmd/naive) copy-ahead implementation and a
-  [devmapper-based] copy-on-write implementation.
+  [devmapper-based](snapshotter/cmd/devmapper) copy-on-write implementation.
+* A [control plugin](../firecracker-control) managing the lifecycle of the
+  runtime and implementing our [control API](../proto/firecracker.proto) to
+  manage the lifecycle of microVMs.  The control plugin is compiled in to the
+  containerd binary, which requires us to build a specialized containerd binary
+  for firecracker-containerd.
 * A [runtime](runtime) linking containerd (outside the microVM) to the
-  Firecracker virtual machine manager (VMM).  The runtime is implemented as an
+  Firecracker virtual machine monitor (VMM).  The runtime is implemented as an
   out-of-process
   [shim runtime](https://github.com/containerd/containerd/issues/2426)
   communicating over ttrpc.
@@ -54,13 +59,14 @@ For more detailed information on the components and how they work, see
 Initially, this project allows you to launch one container per microVM.  We
 intend it to be a drop-in component that can run a variety of containerized
 applications, so the short term roadmap contains work to support container
-standards such as OCI and CNI. In addition, we intend to support launching multiple
-containers inside of one microVM.  To support the widest variety of workloads,
-the new runtime component has to work with popular container orchestration
-frameworks such as Kubernetes and Amazon ECS, so we will work to ensure that the
-software is conformant or compatible where necessary.
+standards such as OCI and CNI. In addition, we intend to support launching
+multiple containers inside of one microVM.  To support the widest variety of
+workloads, the new runtime component has to work with popular container
+orchestration frameworks such as Kubernetes and Amazon ECS, so we will work to
+ensure that the software is conformant or compatible where necessary.
 
-Details of specific roadmap items are tracked in [GitHub issues](https://github.com/firecracker-microvm/firecracker-containerd/issues).
+Details of specific roadmap items are tracked in [GitHub
+issues](https://github.com/firecracker-microvm/firecracker-containerd/issues).
 
 ## Usage
 
@@ -70,13 +76,15 @@ For help using firecracker-containerd, see the
 
 ## Questions?
 
-Please use [GitHub issues](https://github.com/firecracker-microvm/firecracker-containerd/issues) to report problems, discuss roadmap items,
-or make feature requests.
+Please use [GitHub
+issues](https://github.com/firecracker-microvm/firecracker-containerd/issues) to
+report problems, discuss roadmap items, or make feature requests.
 
 If you've discovered an issue that may have security implications to
 users or developers of this software, please do not report it using
 GitHub issues, but instead follow
-[Firecracker's security reporting guidelines](https://github.com/firecracker-microvm/firecracker/blob/master/SECURITY-POLICY.md).
+[Firecracker's security reporting
+guidelines](https://github.com/firecracker-microvm/firecracker/blob/master/SECURITY-POLICY.md).
 
 Other discussion: For general discussion, please join us in the `#containerd`
 channel on the [Firecracker Slack](https://tinyurl.com/firecracker-microvm).
@@ -85,13 +93,13 @@ channel on the [Firecracker Slack](https://tinyurl.com/firecracker-microvm).
 
 ### Building
 
-Each of the components requires Go 1.11 and utilizes Go modules. You must have
-a properly set up Go toolchain capable of building the components.
-Note that Modules are an experimental opt-in feature in Go 1.11, there are two
-ways to activate module support:
+Each of the components requires Go 1.11 and utilizes Go modules. You must have a
+properly set up Go toolchain capable of building the components. Note that
+Modules are an experimental opt-in feature in Go 1.11, there are two ways to
+activate module support:
 
-* Invoke the go command in a directory outside of the `$GOPATH`.
-* set GO111MODULE=on before invoke the go command.
+* Invoke the `go` command in a directory outside of the `$GOPATH`.
+* set `GO111MODULE=on` before invoking the `go` command.
 
 The devicemapper snapshotter requires `dmsetup` command line tool to be
 installed and available on your computer. On Ubuntu, it can be installed
@@ -103,11 +111,14 @@ You must have the following components available in order to run Firecracker
 microVMs with containerd:
 
 * containerd >= 1.2
-* Firecracker >= 0.10.1 with [vsock support](https://github.com/firecracker-microvm/firecracker/blob/master/docs/experimental-vsock.md) enabled.
+* Firecracker >= 0.15.0 with [vsock
+  support](https://github.com/firecracker-microvm/firecracker/blob/master/docs/experimental-vsock.md)
+  enabled.
 * A firecracker compatible kernel
 * A filesystem image for the microVM, including the [agent](agent)
   component configured to start on boot
-* The [snapshotter](snapshotter) component, configured to be loaded by containerd
+* The [snapshotter](snapshotter) component, configured to be loaded by
+  containerd
 * The [runtime](runtime) component, configured to be loaded by containerd
 
 ## License

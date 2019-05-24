@@ -101,25 +101,6 @@ RUN --mount=type=cache,from=build-base,source=/home/builder/cargo/registry,targe
 
 
 
-# Build runc
-FROM build-base as runc-build
-ENV BUILDTAGS='seccomp'
-# The magic commit ID being used for RunC ensures we have the fix for CVE-2019-5736 built in. This can be updated to
-# a nicer looking tag once RunC cuts a new release including that fix.
-RUN --mount=type=cache,from=build-base,source=/home/builder/go/pkg/mod,target=/home/builder/go/pkg/mod,sharing=locked \
-	mkdir -p /home/builder/go/src/github.com/opencontainers/runc \
-	&& git clone https://github.com/opencontainers/runc /home/builder/go/src/github.com/opencontainers/runc \
-	&& cd /home/builder/go/src/github.com/opencontainers/runc \
-	&& git checkout 6635b4f0c6af3810594d2770f662f34ddc15b40d \
-	&& go mod verify || go mod download
-RUN --mount=type=cache,from=build-base,source=/home/builder/go/pkg/mod,target=/home/builder/go/pkg/mod \
-	cd /home/builder/go/src/github.com/opencontainers/runc \
-	&& make static \
-	&& make install BINDIR='/output'
-
-
-
-
 # Build firecracker-containerd
 FROM build-base as firecracker-containerd-build
 ENV STATIC_AGENT='true'
@@ -161,7 +142,7 @@ RUN --mount=type=cache,from=build-base,source=/home/builder/go/pkg/mod,target=/h
 
 # Build a rootfs for the microVM, including runc and firecracker-containerd's agent
 FROM alpine:3.8 as firecracker-vm-root
-COPY --from=runc-build /output/runc /usr/local/bin/
+COPY _submodules/runc/runc /usr/local/bin
 COPY --from=firecracker-containerd-build /output/agent /usr/local/bin/
 ADD tools/docker/fc-agent.start /etc/local.d/fc-agent.start
 RUN apk add openrc \
@@ -217,7 +198,7 @@ COPY --from=firecracker-containerd-build /home/builder/firecracker-containerd /f
 COPY --from=firecracker-build /output/* /usr/local/bin/
 COPY --from=firecracker-vm-root-builder /output/vm.ext4 /var/lib/firecracker-containerd/runtime/default-rootfs.img
 COPY --from=firecracker-containerd-build /output/* /usr/local/bin/
-COPY --from=runc-build /output/* /usr/local/bin/
+COPY _submodules/runc/runc /usr/local/bin
 COPY tools/docker/firecracker-runtime.json /etc/containerd/firecracker-runtime.json
 
 RUN curl --silent --show-error --retry 3 --max-time 30 --output default-vmlinux.bin \

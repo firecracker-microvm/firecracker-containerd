@@ -88,21 +88,21 @@ install:
 	for d in $(SUBDIRS); do $(MAKE) -C $$d install; done
 
 docker-image-unittest: $(RUNC_BIN)
-	docker build \
+	DOCKER_BUILDKIT=1 docker build \
 		--progress=plain \
 		--file tools/docker/Dockerfile \
 		--target firecracker-containerd-unittest \
 		--tag localhost/firecracker-containerd-unittest:${DOCKER_IMAGE_TAG} .
 
 docker-image-unittest-nonroot: $(RUNC_BIN)
-	docker build \
+	DOCKER_BUILDKIT=1 docker build \
 		--progress=plain \
 		--file tools/docker/Dockerfile \
 		--target firecracker-containerd-unittest-nonroot \
 		--tag localhost/firecracker-containerd-unittest-nonroot:${DOCKER_IMAGE_TAG} .
 
 docker-image-e2etest-naive: $(RUNC_BIN)
-	docker build \
+	DOCKER_BUILDKIT=1 docker build \
 		--progress=plain \
 		--file tools/docker/Dockerfile \
 		--target firecracker-containerd-e2etest-naive \

@@ -75,7 +75,7 @@ $(RUNC_BIN): $(RUNC_DIR)/VERSION runc-builder-stamp
 		-e GOPATH=/gopath \
 		--workdir /gopath/src/github.com/opencontainers/runc \
 		localhost/runc-builder:latest \
-		make runc
+		make static
 
 image: $(RUNC_BIN) agent
 	mkdir -p tools/image-builder/files_ephemeral/usr/local/bin
@@ -87,22 +87,22 @@ image: $(RUNC_BIN) agent
 install:
 	for d in $(SUBDIRS); do $(MAKE) -C $$d install; done
 
-docker-image-unittest:
-	docker build \
+docker-image-unittest: $(RUNC_BIN)
+	DOCKER_BUILDKIT=1 docker build \
 		--progress=plain \
 		--file tools/docker/Dockerfile \
 		--target firecracker-containerd-unittest \
 		--tag localhost/firecracker-containerd-unittest:${DOCKER_IMAGE_TAG} .
 
-docker-image-unittest-nonroot:
-	docker build \
+docker-image-unittest-nonroot: $(RUNC_BIN)
+	DOCKER_BUILDKIT=1 docker build \
 		--progress=plain \
 		--file tools/docker/Dockerfile \
 		--target firecracker-containerd-unittest-nonroot \
 		--tag localhost/firecracker-containerd-unittest-nonroot:${DOCKER_IMAGE_TAG} .
 
-docker-image-e2etest-naive:
-	docker build \
+docker-image-e2etest-naive: $(RUNC_BIN)
+	DOCKER_BUILDKIT=1 docker build \
 		--progress=plain \
 		--file tools/docker/Dockerfile \
 		--target firecracker-containerd-e2etest-naive \

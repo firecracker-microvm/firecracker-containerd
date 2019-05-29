@@ -11,7 +11,7 @@
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
-SUBDIRS:=agent runtime snapshotter examples
+SUBDIRS:=agent runtime snapshotter examples firecracker-control/cmd/containerd
 export INSTALLROOT?=/usr/local
 export STATIC_AGENT
 

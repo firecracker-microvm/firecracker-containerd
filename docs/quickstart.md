@@ -55,94 +55,80 @@ sudo cp target/x86_64-unknown-linux-musl/release/{firecracker,jailer} /usr/local
 
 cd ~
 
-# Check out containerd and build it from the v1.2.4 tag
-mkdir -p ~/go/src/github.com/containerd/containerd
-git clone https://github.com/containerd/containerd.git ~/go/src/github.com/containerd/containerd
-cd ~/go/src/github.com/containerd/containerd
-git checkout v1.2.4
-sudo DEBIAN_FRONTEND=noninteractive apt-get install -y libseccomp-dev btrfs-progs
-make
-sudo cp bin/* /usr/local/bin
+# Install Docker CE
+# Docker CE includes containerd, but we need a separate containerd binary, built
+# in a later step
+curl -fsSL https://download.docker.com/linux/debian/gpg | sudo apt-key add -
+apt-key finger docker@docker.com | grep '9DC8 5822 9FC7 DD38 854A  E2D8 8D81 803C 0EBF CD88' || echo '**Cannot find Docker key**'
+echo "deb [arch=amd64] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | \
+     sudo tee /etc/apt/sources.list.d/docker.list
+sudo DEBIAN_FRONTEND=noninteractive apt-get update
+sudo DEBIAN_FRONTEND=noninteractive apt-get \
+     install --yes \
+     docker-ce aufs-tools-
+sudo usermod -aG docker $(whoami)
+exec newgrp docker
 
 cd ~
 
-# Check out runc and build it from the 6635b4f0c6af3810594d2770f662f34ddc15b40d
-# commit.  Note that this is the version described in
-# https://github.com/containerd/containerd/blob/v1.2.4/RUNC.md and
-# https://github.com/containerd/containerd/blob/v1.2.4/vendor.conf#L23
-mkdir -p ~/go/src/github.com/opencontainers/runc
-git clone https://github.com/opencontainers/runc ~/go/src/github.com/opencontainers/runc
-cd ~/go/src/github.com/opencontainers/runc
-git checkout 6635b4f0c6af3810594d2770f662f34ddc15b40d
-make static BUILDTAGS='seccomp'
-sudo make BINDIR='/usr/local/bin' install
-
-cd ~
-
-# Check out firecracker-containerd and build it
+# Check out firecracker-containerd and build it.  This includes:
+# * block-device snapshotter gRPC proxy plugins
+# * firecracker-containerd runtime, a containerd v2 runtime
+# * firecracker-containerd agent, an inside-VM component
+# * runc, to run containers inside the VM
+# * a Debian-based root filesystem configured as read-only with a read-write
+#   overlay
+# * firecracker-containerd, an alternative containerd binary that includes the
+#   firecracker VM lifecycle plugin and API
 git clone https://github.com/firecracker-microvm/firecracker-containerd.git
 cd firecracker-containerd
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y dmsetup
-make STATIC_AGENT='true'
-sudo cp runtime/containerd-shim-aws-firecracker snapshotter/cmd/{devmapper/devmapper_snapshotter,naive/naive_snapshotter} /usr/local/bin
+make all image
+sudo make install
 
 cd ~
 
-# Download kernel and generic VM image
+# Download kernel
 curl -fsSL -o hello-vmlinux.bin https://s3.amazonaws.com/spec.ccfc.min/img/hello/kernel/hello-vmlinux.bin
-curl -fsSL -o hello-rootfs.ext4 https://s3.amazonaws.com/spec.ccfc.min/img/hello/fsfiles/hello-rootfs.ext4
 
-# Inject the agent, runc, and a startup script into the VM image
-mkdir /tmp/mnt
-# Construct fc-agent.start
-cat >fc-agent.start <<EOF
-#!/bin/sh
-mkdir -p /container
-exec > /container/agent-debug.log # Debug logs from the agent
-exec 2>&1
-touch /container/runtime
-mkdir /container/rootfs
-mount -t auto -o rw /dev/vdb /container/rootfs
-cd /container
-/usr/local/bin/agent -id 1 -debug &
-EOF
-chmod +x fc-agent.start
-truncate --size=+50M hello-rootfs.ext4
-/sbin/e2fsck -f hello-rootfs.ext4
-/sbin/resize2fs hello-rootfs.ext4
-sudo mount hello-rootfs.ext4 /tmp/mnt
-sudo cp $(which runc) firecracker-containerd/agent/agent /tmp/mnt/usr/local/bin
-sudo cp fc-agent.start /tmp/mnt/etc/local.d
-sudo ln -s /etc/init.d/local /tmp/mnt/etc/runlevels/default/local
-sudo ln -s /etc/init.d/cgroups /tmp/mnt/etc/runlevels/default/cgroups
-sudo umount /tmp/mnt
-rmdir /tmp/mnt
-
-cd ~
-
-# Configure containerd to use our new snapshotter
-sudo mkdir -p /etc/containerd
-sudo tee -a /etc/containerd/config.toml <<EOF
+# Configure our firecracker-containerd binary to use our new snapshotter and
+# separate storage from the default containerd binary
+sudo mkdir -p /etc/firecracker-containerd
+sudo mkdir -p /var/lib/firecracker-containerd/containerd
+sudo mkdir -p /run/firecracker-containerd
+sudo tee /etc/firecracker-containerd/config.toml <<EOF
+disabled_plugins = ["cri"]
+root = "/var/lib/firecracker-containerd/containerd"
+state = "/run/firecracker-containerd"
+[grpc]
+  address = "/run/firecracker-containerd/containerd.sock"
 [proxy_plugins]
   [proxy_plugins.firecracker-naive]
     type = "snapshot"
     address = "/var/run/firecracker-containerd/naive-snapshotter.sock"
+
+[debug]
+  level = "debug"
 EOF
 
 cd ~
 
 # Configure the aws.firecracker runtime
+# The long kernel command-line configures systemd inside the Debian-based image
+# and uses a special init process to create a read-write overlay on top of the
+# read-only image.
 sudo mkdir -p /var/lib/firecracker-containerd/runtime
-sudo cp hello-rootfs.ext4 /var/lib/firecracker-containerd/runtime/default-rootfs.img
-sudo cp hello-vmlinux.bin /var/lib/firecracker-containerd/runtime/default-vmlinux.bin
+sudo cp ~/firecracker-containerd/tools/image-builder/rootfs.img /var/lib/firecracker-containerd/runtime/default-rootfs.img
+sudo cp ~/hello-vmlinux.bin /var/lib/firecracker-containerd/runtime/default-vmlinux.bin
 sudo mkdir -p /etc/containerd
-sudo tee -a /etc/containerd/firecracker-runtime.json <<EOF
+sudo tee /etc/containerd/firecracker-runtime.json <<EOF
 {
   "firecracker_binary_path": "/usr/local/bin/firecracker",
   "cpu_template": "T2",
-  "log_fifo": "/tmp/fc-logs.fifo",
+  "log_fifo": "fc-logs.fifo",
   "log_level": "Debug",
-  "metrics_fifo": "/tmp/fc-metrics.fifo"
+  "metrics_fifo": "fc-metrics.fifo",
+  "kernel_args": "console=ttyS0 noapic reboot=k panic=1 pci=off nomodules ro systemd.journald.forward_to_console systemd.unit=firecracker.target init=/sbin/overlay-init"
 }
 EOF
 
@@ -161,25 +147,32 @@ sudo naive_snapshotter \
      -debug
 ```
 
-5. Open a new terminal and start `containerd` in the foreground
+5. Open a new terminal and start `firecracker-containerd` in the foreground
 
 ```bash
-sudo containerd
+sudo firecracker-containerd --config /etc/firecracker-containerd/config.toml
 ```
 
 6. Open a new terminal, pull an image, and run a container!
 
 ```bash
-sudo ctr image pull \
+sudo ctr --address /run/firecracker-containerd/containerd.sock \
+     image pull \
      --snapshotter firecracker-naive \
      docker.io/library/debian:latest
-sudo ctr run \
+sudo ctr --address /run/firecracker-containerd/containerd.sock \
+     run \
      --snapshotter firecracker-naive \
      --runtime aws.firecracker \
      --tty \
      docker.io/library/debian:latest \
      test
 ```
+
+In the commands above, note the `--address` argument targeting the
+`firecracker-containerd` binary instead of the normal `containerd` binary, the
+`--snapshotter` argument targeting the block-device snapshotter, and the
+`--runtime` argument targeting the firecracker-containerd runtime.
 
 When you're done, you can stop or terminate your i3.metal EC2 instance to avoid
 incurring additional charges from EC2.

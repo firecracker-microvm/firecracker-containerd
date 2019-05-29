@@ -1,7 +1,6 @@
 [Unit]
 Description=Firecracker VM agent
 StartLimitIntervalSec=2
-ConditionPathIsMountPoint=/container/rootfs
 After=local-fs.target
 Requires=local-fs.target
 

@@ -22,10 +22,10 @@ import (
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 )
 
-func machineConfigurationFromProto(req *proto.FirecrackerMachineConfiguration) models.MachineConfiguration {
+func machineConfigurationFromProto(cfg *Config, req *proto.FirecrackerMachineConfiguration) models.MachineConfiguration {
 	config := models.MachineConfiguration{
-		CPUTemplate: defaultCPUTemplate,
-		VcpuCount:   defaultCPUCount,
+		CPUTemplate: models.CPUTemplate(cfg.CPUTemplate),
+		VcpuCount:   int64(cfg.CPUCount),
 		MemSizeMib:  defaultMemSizeMb,
 	}
 

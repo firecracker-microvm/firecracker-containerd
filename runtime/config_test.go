@@ -33,6 +33,7 @@ func TestLoadConfigDefaults(t *testing.T) {
 	assert.Equal(t, defaultKernelPath, cfg.KernelImagePath, "expected default kernel path")
 	assert.Equal(t, defaultRootfsPath, cfg.RootDrive, "expected default rootfs path")
 	assert.Equal(t, defaultCPUCount, cfg.CPUCount, "expected default CPU count")
+	assert.Equal(t, string(defaultCPUTemplate), cfg.CPUTemplate, "expected default CPU template")
 }
 
 func TestLoadConfigOverrides(t *testing.T) {
@@ -40,13 +41,15 @@ func TestLoadConfigOverrides(t *testing.T) {
 	overrideKernelPath := "OVERRIDE KERNEL PATH"
 	overrideRootfsPath := "OVERRIDE ROOTFS PATH"
 	overrideCPUCount := 42
+	overrideCPUTemplate := "OVERRIDE CPU TEMPLATE"
 	configContent := fmt.Sprintf(
 		`{
 			"kernel_args":"%s",
 			"kernel_image_path":"%s",
 			"root_drive":"%s",
-			"cpu_count": %d
-		}`, overrideKernelArgs, overrideKernelPath, overrideRootfsPath, overrideCPUCount)
+			"cpu_count": %d,
+            "cpu_template": "%s"
+		}`, overrideKernelArgs, overrideKernelPath, overrideRootfsPath, overrideCPUCount, overrideCPUTemplate)
 	configFile, cleanup := createTempConfig(t, configContent)
 	defer cleanup()
 	cfg, err := LoadConfig(configFile)
@@ -55,7 +58,8 @@ func TestLoadConfigOverrides(t *testing.T) {
 	assert.Equal(t, overrideKernelArgs, cfg.KernelArgs, "expected overridden kernel args")
 	assert.Equal(t, overrideKernelPath, cfg.KernelImagePath, "expected overridden kernel path")
 	assert.Equal(t, overrideRootfsPath, cfg.RootDrive, "expected overridden rootfs path")
-	assert.Equal(t, overrideCPUCount, cfg.CPUCount, "expected overridden cpu count")
+	assert.Equal(t, overrideCPUCount, cfg.CPUCount, "expected overridden CPU count")
+	assert.Equal(t, overrideCPUTemplate, cfg.CPUTemplate, "expected overridden CPU template")
 }
 
 func createTempConfig(t *testing.T, contents string) (string, func()) {

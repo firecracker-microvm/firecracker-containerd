@@ -18,6 +18,11 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/firecracker-microvm/firecracker-containerd/proto"
+	"github.com/firecracker-microvm/firecracker-go-sdk"
+	models "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
+	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -46,4 +51,140 @@ func TestFindNextAvailableVsockCID(t *testing.T) {
 
 	_, _, err = findNextAvailableVsockCID(ctx)
 	require.Equal(t, context.Canceled, err)
+}
+
+func TestBuildVMConfiguration(t *testing.T) {
+	namespace := "TestBuildVMConfiguration"
+	rootfsDrive := models.Drive{
+		DriveID:      firecracker.String("containerRootfs"), // TODO: See https://github.com/firecracker-microvm/firecracker-containerd/pull/154
+		PathOnHost:   firecracker.String("/dev/null"),
+		IsReadOnly:   firecracker.Bool(false),
+		IsRootDevice: firecracker.Bool(false),
+	}
+	testcases := []struct {
+		name        string
+		request     *proto.CreateVMRequest
+		config      *Config
+		expectedCfg *firecracker.Config
+	}{
+		{
+			name:    "ConfigFile",
+			request: &proto.CreateVMRequest{},
+			config: &Config{
+				KernelArgs:      "KERNEL ARGS",
+				KernelImagePath: "KERNEL IMAGE",
+				RootDrive:       "ROOT DRIVE",
+				CPUTemplate:     "C3",
+				CPUCount:        2,
+			},
+			expectedCfg: &firecracker.Config{
+				KernelArgs:      "KERNEL ARGS",
+				KernelImagePath: "KERNEL IMAGE",
+				Drives: []models.Drive{
+					rootfsDrive,
+					{
+						DriveID:      firecracker.String("root_drive"),
+						PathOnHost:   firecracker.String("ROOT DRIVE"),
+						IsReadOnly:   firecracker.Bool(false),
+						IsRootDevice: firecracker.Bool(true),
+					},
+				},
+				MachineCfg: models.MachineConfiguration{
+					CPUTemplate: models.CPUTemplateC3,
+					VcpuCount:   2,
+					MemSizeMib:  defaultMemSizeMb,
+				},
+			},
+		},
+		{
+			name: "Input",
+			request: &proto.CreateVMRequest{
+				KernelArgs:      "REQUEST KERNEL ARGS",
+				KernelImagePath: "REQUEST KERNEL IMAGE",
+				RootDrive: &proto.FirecrackerDrive{
+					PathOnHost: "REQUEST ROOT DRIVE",
+				},
+				MachineCfg: &proto.FirecrackerMachineConfiguration{
+					CPUTemplate: "C3",
+					VcpuCount:   2,
+				},
+			},
+			config: &Config{},
+			expectedCfg: &firecracker.Config{
+				KernelArgs:      "REQUEST KERNEL ARGS",
+				KernelImagePath: "REQUEST KERNEL IMAGE",
+				Drives: []models.Drive{
+					rootfsDrive,
+					{
+						DriveID:      firecracker.String("root_drive"),
+						PathOnHost:   firecracker.String("REQUEST ROOT DRIVE"),
+						IsReadOnly:   firecracker.Bool(false),
+						IsRootDevice: firecracker.Bool(true),
+					},
+				},
+				MachineCfg: models.MachineConfiguration{
+					CPUTemplate: models.CPUTemplateC3,
+					VcpuCount:   2,
+					MemSizeMib:  defaultMemSizeMb,
+				},
+			},
+		},
+		{
+			name: "Priority",
+			request: &proto.CreateVMRequest{
+				KernelArgs: "REQUEST KERNEL ARGS",
+				RootDrive: &proto.FirecrackerDrive{
+					PathOnHost: "REQUEST ROOT DRIVE",
+				},
+				MachineCfg: &proto.FirecrackerMachineConfiguration{
+					CPUTemplate: "T2",
+					VcpuCount:   3,
+				},
+			},
+			config: &Config{
+				KernelArgs:      "KERNEL ARGS",
+				KernelImagePath: "KERNEL IMAGE",
+				CPUTemplate:     "C3",
+				CPUCount:        2,
+			},
+			expectedCfg: &firecracker.Config{
+				KernelArgs:      "REQUEST KERNEL ARGS",
+				KernelImagePath: "KERNEL IMAGE",
+				Drives: []models.Drive{
+					rootfsDrive,
+					{
+						DriveID:      firecracker.String("root_drive"),
+						PathOnHost:   firecracker.String("REQUEST ROOT DRIVE"),
+						IsReadOnly:   firecracker.Bool(false),
+						IsRootDevice: firecracker.Bool(true),
+					},
+				},
+				MachineCfg: models.MachineConfiguration{
+					CPUTemplate: models.CPUTemplateT2,
+					VcpuCount:   3,
+					MemSizeMib:  defaultMemSizeMb,
+				},
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		tc := tc // see https://github.com/kyoh86/scopelint/issues/4
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &service{
+				namespace: namespace,
+				logger:    logrus.WithField("test", namespace+"/"+tc.name),
+				config:    tc.config,
+			}
+			// For values that remain constant between tests, they are written here
+			tc.expectedCfg.SocketPath = svc.shimDir().FirecrackerSockPath()
+			tc.expectedCfg.VsockDevices = []firecracker.VsockDevice{{Path: "root", CID: svc.machineCID}}
+			tc.expectedCfg.LogFifo = svc.shimDir().FirecrackerLogFifoPath()
+			tc.expectedCfg.MetricsFifo = svc.shimDir().FirecrackerMetricsFifoPath()
+
+			actualCfg, err := svc.buildVMConfiguration(tc.request)
+			assert.NoError(t, err)
+			require.Equal(t, tc.expectedCfg, actualCfg)
+		})
+	}
 }

@@ -44,7 +44,7 @@ build-time dependency is that you can launch Docker container directly
 Alternatively, to build outside a container, you'll need:
 
 * To run the build process as root.
-* `[debootstrap](https://salsa.debian.org/installer-team/debootstrap)`
+* [`debootstrap`](https://salsa.debian.org/installer-team/debootstrap)
   (Install via the package of the same name on Debian and Ubuntu)
 * `mksquashfs`, available in the
    `[squashfs-tools](https://packages.debian.org/stretch/squashfs-tools)

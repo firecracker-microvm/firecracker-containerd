@@ -24,8 +24,8 @@ build: firecracker-containerd
 firecracker-containerd: $(SRC) $(GOMOD) $(GOSUM)
 	go build -v -o firecracker-containerd
 
-install: containerd
-	cp firecracker-containerd /usr/local/bin/
+install: firecracker-containerd
+	install -D -o root -g root -m755 -t $(INSTALLROOT)/bin firecracker-containerd
 
 test: $(SOURCES)
 	go test ./... $(EXTRAGOARGS)

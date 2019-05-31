@@ -32,32 +32,81 @@ const (
 )
 
 func TestMachineConfigurationFromProto(t *testing.T) {
-	config := machineConfigurationFromProto(&proto.FirecrackerMachineConfiguration{
-		CPUTemplate: string(models.CPUTemplateC3),
-		VcpuCount:   vcpuCount,
-		MemSizeMib:  memSize,
-		HtEnabled:   true,
-	})
-
-	assert.EqualValues(t, models.CPUTemplateC3, config.CPUTemplate)
-	assert.EqualValues(t, vcpuCount, config.VcpuCount)
-	assert.EqualValues(t, memSize, config.MemSizeMib)
-	assert.True(t, config.HtEnabled)
-}
-
-func TestDefaultMachineConfigurationFromProto(t *testing.T) {
-	configs := map[string]models.MachineConfiguration{
-		"Nil":          machineConfigurationFromProto(nil),
-		"Empty struct": machineConfigurationFromProto(&proto.FirecrackerMachineConfiguration{}),
+	testcases := []struct {
+		name                  string
+		config                *Config
+		proto                 *proto.FirecrackerMachineConfiguration
+		expectedMachineConfig models.MachineConfiguration
+	}{
+		{
+			name:   "ProtoOnly",
+			config: &Config{},
+			proto: &proto.FirecrackerMachineConfiguration{
+				CPUTemplate: string(models.CPUTemplateC3),
+				VcpuCount:   vcpuCount,
+				MemSizeMib:  memSize,
+				HtEnabled:   true,
+			},
+			expectedMachineConfig: models.MachineConfiguration{
+				CPUTemplate: models.CPUTemplateC3,
+				VcpuCount:   vcpuCount,
+				MemSizeMib:  memSize,
+				HtEnabled:   true,
+			},
+		},
+		{
+			name: "ConfigOnly",
+			config: &Config{
+				CPUTemplate: "C3",
+				CPUCount:    vcpuCount,
+			},
+			proto: &proto.FirecrackerMachineConfiguration{},
+			expectedMachineConfig: models.MachineConfiguration{
+				CPUTemplate: models.CPUTemplateC3,
+				VcpuCount:   vcpuCount,
+				MemSizeMib:  defaultMemSizeMb,
+				HtEnabled:   false,
+			},
+		},
+		{
+			name: "NilProto",
+			config: &Config{
+				CPUTemplate: "C3",
+				CPUCount:    vcpuCount,
+			},
+			expectedMachineConfig: models.MachineConfiguration{
+				CPUTemplate: models.CPUTemplateC3,
+				VcpuCount:   vcpuCount,
+				MemSizeMib:  defaultMemSizeMb,
+				HtEnabled:   false,
+			},
+		},
+		{
+			name: "Overrides",
+			config: &Config{
+				CPUTemplate: "T2",
+				CPUCount:    vcpuCount + 1,
+			},
+			proto: &proto.FirecrackerMachineConfiguration{
+				CPUTemplate: string(models.CPUTemplateC3),
+				VcpuCount:   vcpuCount,
+				MemSizeMib:  memSize,
+				HtEnabled:   true,
+			},
+			expectedMachineConfig: models.MachineConfiguration{
+				CPUTemplate: models.CPUTemplateC3,
+				VcpuCount:   vcpuCount,
+				MemSizeMib:  memSize,
+				HtEnabled:   true,
+			},
+		},
 	}
 
-	for name, config := range configs {
-		cfg := config
-		t.Run(name, func(t *testing.T) {
-			assert.EqualValues(t, defaultCPUTemplate, cfg.CPUTemplate)
-			assert.EqualValues(t, defaultCPUCount, cfg.VcpuCount)
-			assert.EqualValues(t, defaultMemSizeMb, cfg.MemSizeMib)
-			assert.False(t, cfg.HtEnabled)
+	for _, tc := range testcases {
+		tc := tc // see https://github.com/kyoh86/scopelint/issues/4
+		t.Run(tc.name, func(t *testing.T) {
+			machineConfig := machineConfigurationFromProto(tc.config, tc.proto)
+			assert.Equal(t, tc.expectedMachineConfig, machineConfig)
 		})
 	}
 }

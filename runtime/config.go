@@ -68,6 +68,7 @@ func LoadConfig(path string) (*Config, error) {
 		KernelImagePath: defaultKernelPath,
 		RootDrive:       defaultRootfsPath,
 		CPUCount:        defaultCPUCount,
+		CPUTemplate:     string(defaultCPUTemplate),
 	}
 	if err := json.Unmarshal(data, cfg); err != nil {
 		return nil, errors.Wrapf(err, "failed to unmarshal config from %q", path)

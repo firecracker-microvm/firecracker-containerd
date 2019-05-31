@@ -584,7 +584,7 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 		VsockDevices: []firecracker.VsockDevice{{Path: "root", CID: s.machineCID}},
 		LogFifo:      s.shimDir().FirecrackerLogFifoPath(),
 		MetricsFifo:  s.shimDir().FirecrackerMetricsFifoPath(),
-		MachineCfg:   machineConfigurationFromProto(req.MachineCfg),
+		MachineCfg:   machineConfigurationFromProto(s.config, req.MachineCfg),
 	}
 
 	logger.Debugf("using socket path: %s", cfg.SocketPath)
@@ -594,13 +594,13 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 	if val := req.KernelArgs; val != "" {
 		cfg.KernelArgs = val
 	} else {
-		cfg.KernelArgs = defaultKernelArgs
+		cfg.KernelArgs = s.config.KernelArgs
 	}
 
 	if val := req.KernelImagePath; val != "" {
 		cfg.KernelImagePath = val
 	} else {
-		cfg.KernelImagePath = defaultKernelPath
+		cfg.KernelImagePath = s.config.KernelImagePath
 	}
 
 	// Drives configuration
@@ -609,7 +609,7 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 	if root := req.RootDrive; root != nil {
 		driveBuilder = firecracker.NewDrivesBuilder(root.PathOnHost)
 	} else {
-		driveBuilder = firecracker.NewDrivesBuilder(defaultRootfsPath)
+		driveBuilder = firecracker.NewDrivesBuilder(s.config.RootDrive)
 	}
 
 	// TODO: Reserve fake drives here (https://github.com/firecracker-microvm/firecracker-containerd/pull/154)

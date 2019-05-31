@@ -40,15 +40,10 @@ You need to have the following things in order to use firecracker-containerd:
 * The Firecracker binary with the optional `vsock` feature enabled.  This
   feature requires building from source; instructions for doing so are in the
   [Firecracker getting started guide](https://github.com/firecracker-microvm/firecracker/blob/master/docs/getting-started.md#building-from-source)
-* An uncompressed ELF-format kernel image (you can use the one
-  [described here](https://github.com/firecracker-microvm/firecracker/blob/master/docs/getting-started.md#running-firecracker)
-  as `hello-vmlinux.bin`).
 * A root filesystem image (you can use the one
   [described here](https://github.com/firecracker-microvm/firecracker/blob/master/docs/getting-started.md#running-firecracker)
   as `hello-rootfs.ext4`). 
-* A recent installation of
-  [containerd](https://github.com/containerd/containerd/releases).  We suggest
-  [containerd v1.2.1](https://github.com/containerd/containerd/releases/tag/v1.2.1).
+* A recent installation of [Docker CE](https://docker.com).
 * Go 1.11 or later, which you can download from [here](https://golang.org/dl/).
 * Rust (and Cargo), which you can download from [here](https://rustup.rs/).
 
@@ -75,42 +70,18 @@ git checkout v0.12.0 # latest released tag
 cargo build --release --features vsock # --target x86_64-unknown-linux-gnu
 ```
 
-### Download appropriate filesystem images
+### Download appropriate kernel
 
-You can use the following images for the kernel and a default user-space:
+You can use the following kernel:
 
 ```bash
 curl -fsSL -o hello-vmlinux.bin https://s3.amazonaws.com/spec.ccfc.min/img/hello/kernel/hello-vmlinux.bin
-curl -fsSL -o hello-rootfs.ext4 https://s3.amazonaws.com/spec.ccfc.min/img/hello/fsfiles/hello-rootfs.ext4
 ```
 
-We will be modifying the `hello-rootfs.ext4` file in a subsequent step.
+### Install Docker
 
-### Install containerd
-
-You can install containerd from the
-[upstream binaries](https://github.com/containerd/containerd/releases/tag/v1.2.1),
-[build it yourself](https://github.com/containerd/containerd/blob/master/BUILDING.md),
-or use the containerd binary included with recent releases of Docker (like
-18.09).  We do not recommend using older versions of containerd.
-
-The [quickstart guide](quickstart.md) has example commands for building and
-installing containerd.
-
-### Install runc
-
-You can install runc from the
-[upstream binaries](https://github.com/opencontainers/runc/releases/tag/v1.0.0-rc6),
-[build it yourself](https://github.com/containerd/containerd/blob/v1.2.1/RUNC.md),
-or use the runc binary included with recent releases of Docker (like 18.06).  We
-do not recommend using older versions of containerd.
-
-Depending on whether or not the root filesystem of the microVM contains an
-installation of glibc, you may need to have a statically-linked build of runc.
-
-The [quickstart guide](quickstart.md) has example commands for building and
-installing runc, with static linking.
-
+You can install Docker CE from the [upstream
+binaries](https://docs.docker.com/install/) or from your Linux distribution.
 
 ### Clone this repository and build the components
 
@@ -119,85 +90,66 @@ We recommend choosing a directory outside of `$GOPATH` or `~/go`.
 
 ```bash
 git clone https://github.com/firecracker-microvm/firecracker-containerd
-make STATIC_AGENT=true
+make all
 ```
 
 If you clone repository inside the `$GOPATH` and golang version is 1.11.x, should explicitly set `GO111MODULE=on` before build.
 
 ```bash
-GO111MODULE=on make STATIC_AGENT=true
+GO111MODULE=on make all
 ```
 
-Once you have built the runtime, be sure to place the
-`containerd-shim-aws-firecracker` binary on your `$PATH`.
+Once you have built the runtime, be sure to place the following binaries on your
+`$PATH`:
+* `runtime/containerd-shim-aws-firecracker`
+* `snapshotter/cmd/devmapper/devmapper_snapshotter`
+* `snapshotter/cmd/naive/naive_snapshotter`
+* `firecracker-control/cmd/containerd/firecracker-containerd`
 
-### Inject the agent, runc shim, and runc into the rootfs image
+You can use the `make install` target to install the files to `/usr/local/bin`,
+or specify a different `INSTALLROOT` if you prefer another location.
 
-firecracker-containerd needs two components to be embedded in the root
-filesystem image.  They are:
+### Build a root filesystem
 
-* `runc` - used to run containers
-* firecracker-containerd's `agent` - this is a process that communicates with
-  the outer firecracker-containerd `runtime` process over a `vsock` and proxies
-  commands to `containerd-shim-runc-v1`
+The firecracker-containerd repository includes an image builder component that
+constructs a Debian-based root filesystem for the VM.  This root filesystem
+bundles the necessary firecracker-containerd components and is configured to be
+safely shared among multiple VMs by overlaying a read-write filesystem layer on
+top of a read-only image.
 
-In order to inject these components in the root filesystem image above, we'll
-need to do a few steps.  These instructions assume that you're using the image
-described above; they are specific to the Alpine Linux user user-space and its
-init system.
+The image builder uses Docker, and expects you to be a member of the `docker`
+group (or otherwise have access to the Docker API socket).
 
-1. Increase the size of the root filesystem image.  The image that is supplied
-   by Firecracker (`hello-rootfs.ext4`) is an ext4 filesystem that is sized
-   exactly to the files already in it; no free space.  We can resize this
-   filesystem (while unmounted) by running
-   `e2fsck -f hello-rootfs.ext4 && resize2fs hello-rootfs.ext4`.
-2. Construct a `fc-agent.start` file so that the agent starts on boot:
-   <details>
-   <summary>fc-agent.start</summary>
-   
-   ```bash
-   #!/bin/sh
-   mkdir -p /container/rootfs
-   exec > /container/agent-debug.log # Debug logs from the agent
-   exec 2>&1
-   touch /container/runtime
-   mount -t auto -o rw /dev/vdb /container/rootfs
-   cd /container
-   /usr/local/bin/agent -id 1 -debug &
-   ```
-   </details>
-3. Mount the filesystem to a location like `/tmp/mnt`
-   <details>
-   <summary>Mounting at /tmp/mnt</summary>
-   
-   ```bash
-   sudo mkdir /tmp/mnt
-   sudo mount hello-rootfs.ext4 /tmp/mnt
-   ```
-   </details>
-4. Copy in the binaries, copy the `fc-agent.start` file, and set up OpenRC to
-   launch the necessary components
-   <details>
-   <summary>Copy in the binaries to /tmp/mnt</summary>
-   
-   ```bash
-   sudo cp $(which runc) firecracker-containerd/agent/agent /tmp/mnt/usr/local/bin
-   sudo cp fc-agent.start /tmp/mnt/etc/local.d
-   sudo chmod +x /tmp/mnt/etc/local.d/fc-agent.start
-   sudo ln -s /etc/init.d/local /tmp/mnt/etc/runlevels/default/local
-   sudo ln -s /etc/init.d/cgroups /tmp/mnt/etc/runlevels/default/cgroups
-   sudo umount /tmp/mnt
-   ```
-   </details>
+You can build an image like this:
 
-### Configure containerd snapshotter
+```bash
+make image
+sudo mkdir -p /var/lib/firecracker-containerd/runtime
+sudo cp tools/image-builder/rootfs.img /var/lib/firecracker-containerd/runtime/default-rootfs.img
+```
 
-Add the snapshotter plugin to your `/etc/containerd/config.toml`
+### Configure `firecracker-containerd` binary
+
+The `firecracker-containerd` binary is a `containerd` binary that includes an
+additional plugin.  Configure it with a separate config file and have it use a
+separate location for on-disk state.  Make sure to include configuration for the
+snapshotter you intend to use.
+
+We recommend a configuration like the following:
+
 ```toml
+disabled_plugins = ["cri"]
+root = "/var/lib/firecracker-containerd/containerd"
+state = "/run/firecracker-containerd"
+[grpc]
+  address = "/run/firecracker-containerd/containerd.sock"
 [proxy_plugins]
   [proxy_plugins.firecracker-naive]
     type = "snapshot"
     address = "/var/run/firecracker-containerd/naive-snapshotter.sock"
+
+[debug]
+  level = "debug"
 ```
 
 ### Configure containerd runtime plugin
@@ -241,13 +193,13 @@ configuration file has the following fields:
 {
   "firecracker_binary_path": "/usr/local/bin/firecracker",
   "kernel_image_path": "/var/lib/firecracker-containerd/runtime/hello-vmlinux.bin",
-  "kernel_args": "console=ttyS0 noapic reboot=k panic=1 pci=off nomodules rw",
-  "root_drive": "/var/lib/firecracker-containerd/runtime/hello-rootfs.ext4",
-  "cpu_count": 1,
+  "kernel_args": "console=ttyS0 noapic reboot=k panic=1 pci=off nomodules ro systemd.journald.forward_to_console systemd.unit=firecracker.target init=/sbin/overlay-init",
+  "root_drive": "/var/lib/firecracker-containerd/runtime/default-rootfs.img",
   "cpu_template": "T2",
-  "log_fifo": "/tmp/fc-logs.fifo",
+  "log_fifo": "fc-logs.fifo",
   "log_level": "Debug",
-  "metrics_fifo": "/tmp/fc-metrics.fifo"
+  "metrics_fifo": "fc-metrics.fifo",
+
 }
 ```
 </details>
@@ -257,23 +209,30 @@ configuration file has the following fields:
 Start the containerd snapshotter
 
 ```bash
-$ ./naive_snapshotter -address /var/run/firecracker-containerd/naive-snapshotter.sock -path /tmp/fc-snapshot
+$ ./naive_snapshotter \
+  -address /var/run/firecracker-containerd/naive-snapshotter.sock \
+  -path /tmp/fc-snapshot
 ```
 
 In another terminal, start containerd
 
 ```bash
-sudo PATH=$PATH /usr/local/bin/containerd
+$ sudo PATH=$PATH /usr/local/bin/firecracker-containerd \
+  --config /etc/firecracker-containerd/config.toml
 ```
 
 Pull an image
 
 ```bash
-$ sudo ctr images pull --snapshotter firecracker-naive docker.io/library/busybox:latest
+$ sudo ctr --address /run/firecracker-containerd/containerd.sock images \
+  pull --snapshotter firecracker-naive \
+  docker.io/library/busybox:latest
 ```
 
 And start a container!
 
 ```bash
-$ sudo ctr run --snapshotter firecracker-naive --runtime aws.firecracker --tty docker.io/library/busybox:latest busybox-test
+$ sudo ctr --address /run/firecracker-containerd/containerd.sock \
+  run --snapshotter firecracker-naive --runtime aws.firecracker --tty \
+  docker.io/library/busybox:latest busybox-test
 ```

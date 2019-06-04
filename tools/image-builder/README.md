@@ -51,3 +51,26 @@ Alternatively, to build outside a container, you'll need:
    package on Debian and Ubuntu.
 
 Then execute `make rootfs.img`
+
+### Usage ###
+
+The generated root filesystem contains all the components necessary
+for use with firecracker-containerd, including the runc and agent
+binaries.
+
+You can tell the firecracker-containerd runtime component where to
+find the root filesystem image by setting the `root_drive` value in
+`/etc/containerd/firecracker-runtime.json` to the complete path to the
+generated image file.
+
+In order to start the agent at VM startup, systemd should be
+instructed to boot to the `firecracker.target` via the kernel
+command line.
+
+In order to use the root filesystem as a reusable "lower layer" for an
+overlay-based based filesystem, `init=/sbin/overlay-init` should be
+the final parameter passed on the kernel command line.
+
+A complete command line, settable via the `kernel_args` setting in `/etc/containerd/firecracker-runtime.json`, is:
+
+    ro console=ttyS0 noapic reboot=k panic=1 pci=off nomodules systemd.journald.forward_to_console systemd.unit=firecracker.target init=/sbin/overlay-init

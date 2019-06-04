@@ -50,6 +50,9 @@ Firecracker microVMs to run containers:
 * An [agent](agent) running inside the microVM, which invokes
   [runC](https://runc.io) via containerd's `containerd-shim-runc-v1`
   to create standard Linux containers inside the microVM.
+* A [root file filesystem image builder](tools/image-builder) that
+  constructs a firecracker microVM root filesystem containing runc and
+  the firecracker-containerd agent.
   
 For more detailed information on the components and how they work, see
 [architecture.md](docs/architecture.md).
@@ -70,7 +73,8 @@ issues](https://github.com/firecracker-microvm/firecracker-containerd/issues).
 
 ## Usage
 
-For help using firecracker-containerd, see the
+For detailed instructions on building and running
+firecracker-containerd, see the
 [getting started guide](docs/getting-started.md) and the
 [quickstart guide](docs/quickstart.md).
 
@@ -88,38 +92,6 @@ guidelines](https://github.com/firecracker-microvm/firecracker/blob/master/SECUR
 
 Other discussion: For general discussion, please join us in the `#containerd`
 channel on the [Firecracker Slack](https://tinyurl.com/firecracker-microvm).
-
-## Requirements
-
-### Building
-
-Each of the components requires Go 1.11 and utilizes Go modules. You must have a
-properly set up Go toolchain capable of building the components. Note that
-Modules are an experimental opt-in feature in Go 1.11, there are two ways to
-activate module support:
-
-* Invoke the `go` command in a directory outside of the `$GOPATH`.
-* set `GO111MODULE=on` before invoking the `go` command.
-
-The devicemapper snapshotter requires `dmsetup` command line tool to be
-installed and available on your computer. On Ubuntu, it can be installed
-with `apt-get install dmsetup` command.
-
-### Running
-
-You must have the following components available in order to run Firecracker
-microVMs with containerd:
-
-* containerd >= 1.2
-* Firecracker >= 0.15.0 with [vsock
-  support](https://github.com/firecracker-microvm/firecracker/blob/master/docs/experimental-vsock.md)
-  enabled.
-* A firecracker compatible kernel
-* A filesystem image for the microVM, including the [agent](agent)
-  component configured to start on boot
-* The [snapshotter](snapshotter) component, configured to be loaded by
-  containerd
-* The [runtime](runtime) component, configured to be loaded by containerd
 
 ## License
 

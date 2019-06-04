@@ -19,11 +19,11 @@ import (
 
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/plugin"
+	"github.com/containerd/ttrpc"
 	"github.com/golang/protobuf/ptypes/empty"
-	"google.golang.org/grpc"
 
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
-	fccontrol "github.com/firecracker-microvm/firecracker-containerd/proto/service/fccontrol/grpc"
+	fccontrol "github.com/firecracker-microvm/firecracker-containerd/proto/service/fccontrol/ttrpc"
 )
 
 func init() {
@@ -51,19 +51,19 @@ func init() {
 				return nil, err
 			}
 
-			return &service{local: instance.(fccontrol.FirecrackerServer)}, nil
+			return &service{local: instance.(fccontrol.FirecrackerService)}, nil
 		},
 	})
 }
 
 type service struct {
-	local fccontrol.FirecrackerServer
+	local fccontrol.FirecrackerService
 }
 
-var _ fccontrol.FirecrackerServer = (*service)(nil)
+var _ fccontrol.FirecrackerService = (*service)(nil)
 
-func (s *service) Register(server *grpc.Server) error {
-	fccontrol.RegisterFirecrackerServer(server, s)
+func (s *service) RegisterTTRPC(server *ttrpc.Server) error {
+	fccontrol.RegisterFirecrackerService(server, s)
 	return nil
 }
 

@@ -38,12 +38,11 @@ import (
 	fcShim "github.com/firecracker-microvm/firecracker-containerd/internal/shim"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
-	fccontrolGrpc "github.com/firecracker-microvm/firecracker-containerd/proto/service/fccontrol/grpc"
 	fccontrolTtrpc "github.com/firecracker-microvm/firecracker-containerd/proto/service/fccontrol/ttrpc"
 )
 
 var (
-	_ fccontrolGrpc.FirecrackerServer = (*local)(nil)
+	_ fccontrolTtrpc.FirecrackerService = (*local)(nil)
 )
 
 func init() {

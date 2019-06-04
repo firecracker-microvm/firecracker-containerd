@@ -1,17 +1,16 @@
 module github.com/firecracker-microvm/firecracker-containerd
 
 require (
-	github.com/BurntSushi/toml v0.3.1 // indirect
 	github.com/Microsoft/go-winio v0.4.12 // indirect
 	github.com/Microsoft/hcsshim v0.8.1 // indirect
 	github.com/StackExchange/wmi v0.0.0-20181212234831-e0a55b97c705 // indirect
 	github.com/containerd/cgroups v0.0.0-20181105182409-82cb49fc1779 // indirect
 	github.com/containerd/console v0.0.0-20181022165439-0650fd9eeb50 // indirect
-	github.com/containerd/containerd v1.2.1-0.20190504000349-82f2ac7edec0
+	github.com/containerd/containerd v1.2.1-0.20190604174651-04e7747e2952
 	github.com/containerd/continuity v0.0.0-20181027224239-bea7585dbfac
 	github.com/containerd/fifo v0.0.0-20180307165137-3d5202aec260
 	github.com/containerd/go-runc v0.0.0-20190226155025-7d11b49dc076 // indirect
-	github.com/containerd/ttrpc v0.0.0-20190411181408-699c4e40d1e7
+	github.com/containerd/ttrpc v0.0.0-20190529185706-a5bd8ce9e40b
 	github.com/containerd/typeurl v0.0.0-20181015155603-461401dc8f19
 	github.com/coreos/go-systemd v0.0.0-20181031085051-9002847aa142 // indirect
 	github.com/docker/distribution v2.7.1+incompatible // indirect
@@ -24,7 +23,6 @@ require (
 	github.com/gofrs/uuid v3.2.0+incompatible
 	github.com/gogo/googleapis v1.1.0 // indirect
 	github.com/gogo/protobuf v1.2.1
-	github.com/golang/mock v1.1.1
 	github.com/golang/protobuf v1.2.0
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0 // indirect
 	github.com/hashicorp/go-multierror v1.0.0
@@ -45,7 +43,7 @@ require (
 	golang.org/x/sync v0.0.0-20181108010431-42b317875d0f
 	golang.org/x/sys v0.0.0-20190329044733-9eb1bfa1ce65
 	google.golang.org/genproto v0.0.0-20181109154231-b5d43981345b // indirect
-	google.golang.org/grpc v1.16.0
+	google.golang.org/grpc v1.21.0
 	gotest.tools v2.2.0+incompatible // indirect
 )
 

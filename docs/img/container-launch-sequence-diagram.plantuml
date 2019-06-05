@@ -1,0 +1,51 @@
+A graphical version of this description can be generated with PlantUML. An
+online render server is available at http://www.plantuml.com/plantuml.
+
+@startuml
+participant orchestrator
+participant containerd
+participant snapshotter
+participant "control plugin"
+
+
+loop "for each container"
+orchestrator -> containerd: prepare snapshot
+containerd -> snapshotter: prepare snapshot
+snapshotter --> containerd: snapshot $foo
+containerd --> orchestrator: snapshot $foo
+end
+
+orchestrator -> "control plugin": create VM $id
+create runtime
+"control plugin" -> runtime: launch VM $id
+create Firecracker
+runtime -> Firecracker: launch
+runtime -> Firecracker ++: configure & boot
+create agent
+runtime <-> agent: connect
+"control plugin" --> orchestrator: VM $id running
+
+loop "for each container"
+orchestrator -> containerd: run container\n$bar with\nsnapshot $foo
+containerd -> runtime: run container $bar with snapshot $foo
+runtime->Firecracker: attach snapshot\n$foo as device
+runtime->agent: mount snapshot $foo
+runtime->agent: run container $bar
+create "container process"
+agent->"container process": start process
+activate "container process"
+note left of "container process"
+After some
+time, container
+process exits
+end note
+return
+agent -> runtime: container $bar exited
+runtime -> containerd: container $bar exited
+containerd -> orchestrator: container $bar exited
+end
+
+orchestrator -> "control plugin": stop VM $id
+"control plugin" -> Firecracker: stop
+deactivate Firecracker
+@enduml

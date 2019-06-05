@@ -65,6 +65,11 @@ seen below:
 
 ![firecracker-containerd architecture](img/architecture-diagram.png)
 
+A high-level diagram of how the components interact for starting a container can
+be seen below:
+
+![firecracker-containerd container launch sequence diagram](img/container-launch-sequence-diagram.svg)
+
 * Overview of possible design approaches can be found in the [design approaches
   doc](design-approaches.md).
 * More details on the architecture of the shims and design decisions behind

@@ -33,6 +33,7 @@ import (
 	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/oci"
+	"github.com/containerd/containerd/pkg/ttrpcutil"
 	"github.com/containerd/containerd/runtime"
 	"github.com/containerd/typeurl"
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -42,7 +43,7 @@ import (
 
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
-	fccontrol "github.com/firecracker-microvm/firecracker-containerd/proto/service/fccontrol/grpc"
+	fccontrol "github.com/firecracker-microvm/firecracker-containerd/proto/service/fccontrol/ttrpc"
 	"github.com/firecracker-microvm/firecracker-containerd/runtime/firecrackeroci"
 )
 
@@ -199,6 +200,9 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 	rootfsBytes, err := ioutil.ReadFile(defaultVMRootfsPath)
 	require.NoError(t, err, "failed to read rootfs file")
 
+	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
+	require.NoError(t, err, "failed to create ttrpc client")
+
 	// This test spawns separate VMs in parallel and ensures containers are spawned within each expected VM. It asserts each
 	// container ends up in the right VM by assigning each VM a network device with a unique mac address and having each container
 	// print the mac address it sees inside its VM.
@@ -218,7 +222,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 			err = ioutil.WriteFile(rootfsPath, rootfsBytes, 0600)
 			require.NoError(t, err, "failed to copy vm rootfs to %s", rootfsPath)
 
-			fcClient := fccontrol.NewFirecrackerClient(client.Conn())
+			fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
 			_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
 				VMID: strconv.Itoa(vmID),
 				RootDrive: &proto.FirecrackerDrive{

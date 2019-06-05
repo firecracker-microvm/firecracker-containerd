@@ -27,17 +27,21 @@ import (
 	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/oci"
+	"github.com/containerd/containerd/pkg/ttrpcutil"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
-	fccontrol "github.com/firecracker-microvm/firecracker-containerd/proto/service/fccontrol/grpc"
+	fccontrol "github.com/firecracker-microvm/firecracker-containerd/proto/service/fccontrol/ttrpc"
 	"github.com/firecracker-microvm/firecracker-containerd/runtime/firecrackeroci"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 )
 
 const (
-	kernelArgsFormat = "console=ttyS0 noapic reboot=k panic=1 pci=off nomodules rw ip=%s::%s:%s:::off::::"
-	macAddress       = "AA:FC:00:00:00:01"
-	hostDevName      = "tap0"
+	containerdAddress      = "/run/containerd/containerd.sock"
+	containerdTTRPCAddress = containerdAddress + ".ttrpc"
+	namespaceName          = "firecracker-containerd-example"
+	kernelArgsFormat       = "console=ttyS0 noapic reboot=k panic=1 pci=off nomodules rw ip=%s::%s:%s:::off::::"
+	macAddress             = "AA:FC:00:00:00:01"
+	hostDevName            = "tap0"
 )
 
 func main() {
@@ -56,7 +60,7 @@ func main() {
 
 func taskWorkflow(containerIP string, gateway string, netMask string) (err error) {
 	log.Println("Creating containerd client")
-	client, err := containerd.New("/run/containerd/containerd.sock")
+	client, err := containerd.New(containerdAddress)
 	if err != nil {
 		return errors.Wrapf(err, "creating client")
 
@@ -64,22 +68,24 @@ func taskWorkflow(containerIP string, gateway string, netMask string) (err error
 	defer client.Close()
 	log.Println("Created containerd client")
 
-	ctx := namespaces.WithNamespace(context.Background(), "firecracker-containerd-example")
+	ctx := namespaces.WithNamespace(context.Background(), namespaceName)
 	image, err := client.Pull(ctx, "docker.io/library/nginx:latest",
 		containerd.WithPullUnpack,
 		containerd.WithPullSnapshotter("firecracker-naive"),
 	)
 	if err != nil {
 		return errors.Wrapf(err, "creating container")
-
 	}
 
-	fcClient := fccontrol.NewFirecrackerClient(client.Conn())
+	pluginClient, err := ttrpcutil.NewClient(containerdTTRPCAddress)
+	if err != nil {
+		return errors.Wrap(err, "failed to create ttrpc client")
+	}
+
+	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
 
 	vmID := "fc-example"
-	createVMRequest := &proto.CreateVMRequest{
-		VMID: vmID,
-	}
+	createVMRequest := &proto.CreateVMRequest{VMID: vmID}
 
 	if containerIP != "" {
 		createVMRequest.NetworkInterfaces = []*proto.FirecrackerNetworkInterface{

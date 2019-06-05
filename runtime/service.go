@@ -32,13 +32,13 @@ import (
 	// secure randomness
 	"math/rand" // #nosec
 
-	"github.com/containerd/containerd"
 	eventsAPI "github.com/containerd/containerd/api/events"
 	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/events"
 	"github.com/containerd/containerd/events/exchange"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/namespaces"
+	"github.com/containerd/containerd/pkg/ttrpcutil"
 	"github.com/containerd/containerd/runtime"
 	"github.com/containerd/containerd/runtime/v2/shim"
 	taskAPI "github.com/containerd/containerd/runtime/v2/task"
@@ -63,7 +63,6 @@ import (
 	fcShim "github.com/firecracker-microvm/firecracker-containerd/internal/shim"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
-	fccontrolGrpc "github.com/firecracker-microvm/firecracker-containerd/proto/service/fccontrol/grpc"
 	fccontrolTtrpc "github.com/firecracker-microvm/firecracker-containerd/proto/service/fccontrol/ttrpc"
 )
 
@@ -308,12 +307,12 @@ func (s *service) StartShim(shimCtx context.Context, containerID, containerdBina
 		exitAfterAllTasksGone = true
 	}
 
-	client, err := containerd.New(containerdAddress)
+	client, err := ttrpcutil.NewClient(containerdAddress + ".ttrpc")
 	if err != nil {
 		return "", err
 	}
 
-	fcControlClient := fccontrolGrpc.NewFirecrackerClient(client.Conn())
+	fcControlClient := fccontrolTtrpc.NewFirecrackerClient(client.Client())
 
 	_, err = fcControlClient.CreateVM(shimCtx, &proto.CreateVMRequest{
 		VMID:                  s.vmID,

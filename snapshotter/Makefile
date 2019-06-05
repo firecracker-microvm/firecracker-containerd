@@ -41,7 +41,7 @@ test-docker-all: $(SOURCES) $(GOMOD) $(GOSUM)
 		--env EXTRAGOARGS="${EXTRAGOARGS}" \
 		--workdir="/firecracker-containerd/snapshotter" \
 		localhost/firecracker-containerd-unittest:${DOCKER_IMAGE_TAG} \
-		"make test"
+		'EXTRAGOARGS="-timeout 15m" make test'
 
 test-docker-unit: $(SOURCES) $(GOMOD) $(GOSUM)
 	docker run --rm \
@@ -49,7 +49,7 @@ test-docker-unit: $(SOURCES) $(GOMOD) $(GOSUM)
 		--env DISABLE_ROOT_TESTS="true" \
 		--workdir="/firecracker-containerd/snapshotter" \
 		localhost/firecracker-containerd-unittest-nonroot:${DOCKER_IMAGE_TAG} \
-		"make test"
+		'EXTRAGOARGS="-timeout 15m" make test'
 
 
 clean:

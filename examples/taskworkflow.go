@@ -27,12 +27,12 @@ import (
 	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/oci"
-	"github.com/containerd/containerd/pkg/ttrpcutil"
-	"github.com/firecracker-microvm/firecracker-containerd/proto"
-	fccontrol "github.com/firecracker-microvm/firecracker-containerd/proto/service/fccontrol/ttrpc"
-	"github.com/firecracker-microvm/firecracker-containerd/runtime/firecrackeroci"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
+
+	fcclient "github.com/firecracker-microvm/firecracker-containerd/firecracker-control/client"
+	"github.com/firecracker-microvm/firecracker-containerd/proto"
+	"github.com/firecracker-microvm/firecracker-containerd/runtime/firecrackeroci"
 )
 
 const (
@@ -77,12 +77,12 @@ func taskWorkflow(containerIP string, gateway string, netMask string) (err error
 		return errors.Wrapf(err, "creating container")
 	}
 
-	pluginClient, err := ttrpcutil.NewClient(containerdTTRPCAddress)
+	fcClient, err := fcclient.New(containerdTTRPCAddress)
 	if err != nil {
-		return errors.Wrap(err, "failed to create ttrpc client")
+		return err
 	}
 
-	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
+	defer fcClient.Close()
 
 	vmID := "fc-example"
 	createVMRequest := &proto.CreateVMRequest{VMID: vmID}

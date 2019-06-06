@@ -27,13 +27,13 @@ import (
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/plugin"
 	"github.com/containerd/containerd/runtime/v2/shim"
-	"github.com/containerd/ttrpc"
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	fcclient "github.com/firecracker-microvm/firecracker-containerd/firecracker-control/client"
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	fcShim "github.com/firecracker-microvm/firecracker-containerd/internal/shim"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
@@ -171,6 +171,8 @@ func (s *local) CreateVM(requestCtx context.Context, req *proto.CreateVMRequest)
 		return nil, err
 	}
 
+	defer client.Close()
+
 	resp, err := client.CreateVM(requestCtx, req)
 	if err != nil {
 		err = errors.Wrap(err, "shim CreateVM returned error")
@@ -181,7 +183,7 @@ func (s *local) CreateVM(requestCtx context.Context, req *proto.CreateVMRequest)
 	return resp, nil
 }
 
-func (s *local) shimFirecrackerClient(requestCtx context.Context, vmID string) (fccontrolTtrpc.FirecrackerService, error) {
+func (s *local) shimFirecrackerClient(requestCtx context.Context, vmID string) (*fcclient.Client, error) {
 	socketAddr, err := fcShim.FCControlSocketAddress(requestCtx, vmID)
 	if err != nil {
 		err = errors.Wrap(err, "failed to get shim's fccontrol socket address")
@@ -189,14 +191,7 @@ func (s *local) shimFirecrackerClient(requestCtx context.Context, vmID string) (
 		return nil, err
 	}
 
-	conn, err := shim.Connect(socketAddr, shim.AnonDialer)
-	if err != nil {
-		err = errors.Wrap(err, "failed to connect to shim's fccontrol endpoint")
-		s.logger.WithError(err).Error()
-		return nil, err
-	}
-
-	return fccontrolTtrpc.NewFirecrackerClient(ttrpc.NewClient(conn)), nil
+	return fcclient.New("\x00" + socketAddr)
 }
 
 // StopVM stops running VM instance by VM ID. This stops the VM, all tasks within the VM and the runtime shim
@@ -206,6 +201,8 @@ func (s *local) StopVM(requestCtx context.Context, req *proto.StopVMRequest) (*e
 	if err != nil {
 		return nil, err
 	}
+
+	defer client.Close()
 
 	resp, err := client.StopVM(requestCtx, req)
 	if err != nil {
@@ -224,6 +221,8 @@ func (s *local) GetVMInfo(requestCtx context.Context, req *proto.GetVMInfoReques
 		return nil, err
 	}
 
+	defer client.Close()
+
 	resp, err := client.GetVMInfo(requestCtx, req)
 	if err != nil {
 		err = errors.Wrap(err, "shim client failed to get vm info")
@@ -240,6 +239,8 @@ func (s *local) SetVMMetadata(requestCtx context.Context, req *proto.SetVMMetada
 	if err != nil {
 		return nil, err
 	}
+
+	defer client.Close()
 
 	resp, err := client.SetVMMetadata(requestCtx, req)
 	if err != nil {

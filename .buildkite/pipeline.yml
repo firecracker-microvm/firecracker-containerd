@@ -30,6 +30,8 @@ steps:
     agents:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
     command: 'sudo losetup -D'
+    concurrency: 1
+    concurrency_group: 'loop-device test'
 
   - wait
 
@@ -54,6 +56,8 @@ steps:
       DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
       EXTRAGOARGS: "-v -count=1"
     command: 'cd snapshotter && make test-docker-all'
+    concurrency: 1
+    concurrency_group: 'loop-device test'
 
   - label: ":running_shirt_with_sash: runtime unit tests"
     agents:
@@ -72,6 +76,8 @@ steps:
     artifact_paths:
       - "runtime/logs/*"
     command: 'cd runtime && make test-docker-isolated'
+    concurrency: 1
+    concurrency_group: 'loop-device test'
 
   - label: ":fencer: agent unit tests"
     agents:

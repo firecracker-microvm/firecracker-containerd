@@ -1,3 +1,6 @@
+run:
+  tests: false # disable running linters on tests
+
 linters:
   disable-all: true
   enable:

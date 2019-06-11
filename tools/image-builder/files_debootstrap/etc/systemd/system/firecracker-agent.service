@@ -19,5 +19,5 @@ Requires=local-fs.target
 [Service]
 Type=simple
 WorkingDirectory=/container
-ExecStart=/usr/local/bin/agent -id 1
+ExecStart=/usr/local/bin/agent
 Restart=always

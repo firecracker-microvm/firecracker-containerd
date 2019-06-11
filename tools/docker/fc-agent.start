@@ -6,4 +6,4 @@ touch /container/runtime
 
 cd /container
 
-exec /usr/local/bin/agent -id 1 -debug
+exec /usr/local/bin/agent -debug

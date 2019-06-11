@@ -15,7 +15,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"os"
 	"os/signal"
@@ -48,12 +47,10 @@ const (
 
 func main() {
 	var (
-		id    string
 		port  int
 		debug bool
 	)
 
-	flag.StringVar(&id, "id", "", "ContainerID (required)")
 	flag.IntVar(&port, "port", defaultPort, "Vsock port to listen to")
 	flag.BoolVar(&debug, "debug", false, "Turn on debug mode")
 	flag.Parse()
@@ -68,11 +65,6 @@ func main() {
 	shimCtx, shimCancel := context.WithCancel(namespaces.WithNamespace(context.Background(), defaultNamespace))
 	group, shimCtx := errgroup.WithContext(shimCtx)
 
-	// verify arguments, id is required
-	if id == "" {
-		log.G(shimCtx).WithError(errors.New("invalid argument")).Fatal("id not set")
-	}
-
 	// Ensure this process is a subreaper or else containers created via runc will
 	// not be its children.
 	if err := sys.SetSubreaper(enableSubreaper); err != nil {
@@ -83,7 +75,7 @@ func main() {
 	// This can be wrapped to add missing functionality (like
 	// running multiple containers inside one Firecracker VM)
 
-	log.G(shimCtx).WithField("id", id).Info("creating runc shim")
+	log.G(shimCtx).Info("creating task service")
 
 	eventExchange := &event.ExchangeCloser{Exchange: exchange.NewExchange()}
 	taskService := NewTaskService(shimCtx, shimCancel, eventExchange)

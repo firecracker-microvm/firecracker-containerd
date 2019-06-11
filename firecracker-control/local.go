@@ -23,6 +23,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/containerd/containerd/identifiers"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/plugin"
@@ -79,8 +80,7 @@ func (s *local) CreateVM(requestCtx context.Context, req *proto.CreateVMRequest)
 	var err error
 
 	id := req.GetVMID()
-	if id == "" {
-		err = errors.New("invalid VM ID")
+	if err := identifiers.Validate(id); err != nil {
 		s.logger.WithError(err).Error()
 		return nil, err
 	}
@@ -184,6 +184,10 @@ func (s *local) CreateVM(requestCtx context.Context, req *proto.CreateVMRequest)
 }
 
 func (s *local) shimFirecrackerClient(requestCtx context.Context, vmID string) (*fcclient.Client, error) {
+	if err := identifiers.Validate(vmID); err != nil {
+		return nil, errors.Wrap(err, "invalid id")
+	}
+
 	socketAddr, err := fcShim.FCControlSocketAddress(requestCtx, vmID)
 	if err != nil {
 		err = errors.Wrap(err, "failed to get shim's fccontrol socket address")

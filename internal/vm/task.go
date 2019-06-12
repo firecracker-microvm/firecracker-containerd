@@ -62,7 +62,7 @@ type VSockConnector func(ctx context.Context, port uint32) (net.Conn, error)
 // being executed via a firecracker-containerd runtime. It's intended to be
 // abstracted over whether it's being executed on the Host or inside a VM Guest.
 type TaskManager interface {
-	AddTask(string, taskAPI.TaskService, bundle.Dir, *proto.ExtraData, *cio.FIFOSet, <-chan struct{}, context.CancelFunc) (*Task, error)
+	AddTask(string, bundle.Dir, *proto.ExtraData, *cio.FIFOSet, <-chan struct{}, context.CancelFunc) (*Task, error)
 	Task(string) (*Task, error)
 	TaskCount() uint
 	Remove(string)
@@ -70,24 +70,25 @@ type TaskManager interface {
 }
 
 // NewTaskManager initializes a new TaskManager
-func NewTaskManager(logger *logrus.Entry) TaskManager {
+func NewTaskManager(logger *logrus.Entry, taskService taskAPI.TaskService) TaskManager {
 	return &taskManager{
-		tasks:  make(map[string]*Task),
-		logger: logger,
+		tasks:       make(map[string]*Task),
+		logger:      logger,
+		taskService: taskService,
 	}
 }
 
 type taskManager struct {
-	mu     sync.RWMutex
-	tasks  map[string]*Task
-	logger *logrus.Entry
+	mu          sync.RWMutex
+	tasks       map[string]*Task
+	logger      *logrus.Entry
+	taskService taskAPI.TaskService
 }
 
 // AddTask registers a task with the provided metadata with the taskManager.
 // taskService should implement the TaskService API for the task (i.e. Create, Kill, Exec, etc.).
 func (m *taskManager) AddTask(
 	containerID string,
-	taskService taskAPI.TaskService,
 	bundleDir bundle.Dir,
 	extraData *proto.ExtraData,
 	fifoSet *cio.FIFOSet,
@@ -107,7 +108,7 @@ func (m *taskManager) AddTask(
 	}
 
 	task := &Task{
-		TaskService: taskService,
+		TaskService: m.taskService,
 		ID:          containerID,
 		logger:      m.logger.WithField("id", containerID),
 

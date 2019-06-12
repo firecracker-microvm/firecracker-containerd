@@ -78,7 +78,10 @@ func main() {
 	log.G(shimCtx).Info("creating task service")
 
 	eventExchange := &event.ExchangeCloser{Exchange: exchange.NewExchange()}
-	taskService := NewTaskService(shimCtx, shimCancel, eventExchange)
+	taskService, err := NewTaskService(shimCtx, shimCancel, eventExchange)
+	if err != nil {
+		log.G(shimCtx).WithError(err).Fatal("failed to create task service")
+	}
 
 	server, err := ttrpc.NewServer()
 	if err != nil {

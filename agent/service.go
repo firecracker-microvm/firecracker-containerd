@@ -22,7 +22,7 @@ import (
 
 	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/log"
-	runc "github.com/containerd/containerd/runtime/v2/runc/v1"
+	runc "github.com/containerd/containerd/runtime/v2/runc/v2"
 	"github.com/containerd/containerd/runtime/v2/shim"
 	taskAPI "github.com/containerd/containerd/runtime/v2/task"
 	"github.com/gogo/protobuf/types"
@@ -67,14 +67,23 @@ type TaskService struct {
 }
 
 // NewTaskService creates new runc shim wrapper
-func NewTaskService(shimCtx context.Context, shimCancel context.CancelFunc, publisher shim.Publisher) taskAPI.TaskService {
+func NewTaskService(shimCtx context.Context, shimCancel context.CancelFunc, publisher shim.Publisher) (taskAPI.TaskService, error) {
+	// We provide an empty string for "id" as the service manages multiple tasks; there is no single
+	// "id" being managed. As noted in the comments of the called code, the "id" arg is only used by
+	// the Cleanup function, so it will never be invoked as part of the task service API, which is all
+	// we need.
+	runcService, err := runc.New(shimCtx, "", publisher, shimCancel)
+	if err != nil {
+		return nil, err
+	}
+
 	return &TaskService{
-		taskManager: vm.NewTaskManager(log.G(shimCtx)),
+		taskManager: vm.NewTaskManager(log.G(shimCtx), runcService),
 
 		publisher:  publisher,
 		shimCtx:    shimCtx,
 		shimCancel: shimCancel,
-	}
+	}, nil
 }
 
 func logPanicAndDie(logger *logrus.Entry) {
@@ -128,11 +137,6 @@ func (ts *TaskService) Create(requestCtx context.Context, req *taskAPI.CreateTas
 	// TODO if we update to the v2 runc implementation in containerd, we can use a single
 	// runc service instance to manage all tasks instead of creating a new one for each
 	taskCtx, taskCancel := context.WithCancel(ts.shimCtx)
-	runcService, err := runc.New(taskCtx, req.ID, ts.publisher, taskCancel)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to create runc shim for task")
-	}
-
 	defer func() {
 		if err != nil {
 			taskCancel()
@@ -159,7 +163,7 @@ func (ts *TaskService) Create(requestCtx context.Context, req *taskAPI.CreateTas
 		fifoSet.Stderr = ""
 	}
 
-	task, err := ts.taskManager.AddTask(req.ID, runcService, bundleDir, extraData, fifoSet, taskCtx.Done(), taskCancel)
+	task, err := ts.taskManager.AddTask(req.ID, bundleDir, extraData, fifoSet, taskCtx.Done(), taskCancel)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to add task")
 	}

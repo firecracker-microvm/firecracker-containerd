@@ -55,7 +55,6 @@ type mockTaskService struct {
 func defaultMockTaskArgs(id string) addTaskArgs {
 	return addTaskArgs{
 		id:        fmt.Sprintf("container-%s", id),
-		ts:        &mockTaskService{},
 		bundleDir: mockBundleDir,
 		extraData: mockExtraData,
 		fifoSet:   mockFIFOSet,
@@ -64,26 +63,24 @@ func defaultMockTaskArgs(id string) addTaskArgs {
 
 type addTaskArgs struct {
 	id        string
-	ts        task.TaskService
 	bundleDir bundle.Dir
 	extraData *proto.ExtraData
 	fifoSet   *cio.FIFOSet
 }
 
 func addTaskFromArgs(tm TaskManager, args addTaskArgs) (*Task, error) {
-	return tm.AddTask(args.id, args.ts, args.bundleDir, args.extraData, args.fifoSet, context.Background().Done(), func() {})
+	return tm.AddTask(args.id, args.bundleDir, args.extraData, args.fifoSet, context.Background().Done(), func() {})
 }
 
 func TestTaskManager_AddRemoveTask(t *testing.T) {
 	logger, _ := test.NewNullLogger()
-	tm := NewTaskManager(logger.WithField("test", t.Name()))
+	tm := NewTaskManager(logger.WithField("test", t.Name()), &mockTaskService{})
 
 	taskAArgs := defaultMockTaskArgs("A")
 	taskBArgs := defaultMockTaskArgs("B")
 	taskCArgs := defaultMockTaskArgs("C")
 
 	assertExpectedTask := func(args addTaskArgs, createdTask *Task) {
-		require.Equal(t, args.ts, createdTask.TaskService, "AddTask sets expected task service")
 		require.Equal(t, args.id, createdTask.ID, "AddTask sets expected container ID")
 		require.Equal(t, args.extraData, createdTask.extraData, "AddTask sets expected container ID")
 		require.Equal(t, args.bundleDir, createdTask.bundleDir, "AddTask sets expected container ID")
@@ -180,7 +177,7 @@ func TestTaskManager_StartStdioProxy_VSockToFIFO(t *testing.T) {
 
 func testStdioProxy(t *testing.T, inputDirection IODirection) {
 	logger, _ := test.NewNullLogger()
-	tm := NewTaskManager(logger.WithField("test", t.Name()))
+	tm := NewTaskManager(logger.WithField("test", t.Name()), &mockTaskService{})
 
 	taskArgs := defaultMockTaskArgs("A")
 

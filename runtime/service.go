@@ -92,8 +92,6 @@ var (
 
 // implements shimapi
 type service struct {
-	taskManager vm.TaskManager
-
 	eventExchange *exchange.Exchange
 	namespace     string
 
@@ -127,6 +125,10 @@ type service struct {
 	rootfsOnce        sync.Once // TODO remove once stub drives are merged
 	agentClient       taskAPI.TaskService
 	eventBridgeClient eventbridge.Getter
+
+	// taskManager is only instantiated after CreateVM has run successfully.
+	// Any use of it must be guarded by service.waitVMReady()
+	taskManager vm.TaskManager
 
 	machine          *firecracker.Machine
 	machineConfig    *firecracker.Config
@@ -172,8 +174,6 @@ func NewService(shimCtx context.Context, id string, remotePublisher shim.Publish
 	}
 
 	s := &service{
-		taskManager: vm.NewTaskManager(logger),
-
 		eventExchange: exchange.NewExchange(),
 		namespace:     namespace,
 
@@ -494,6 +494,7 @@ func (s *service) createVM(requestCtx context.Context, request *proto.CreateVMRe
 	rpcClient := ttrpc.NewClient(conn, ttrpc.WithOnClose(func() { _ = conn.Close() }))
 	s.agentClient = taskAPI.NewTaskClient(rpcClient)
 	s.eventBridgeClient = eventbridge.NewGetterClient(rpcClient)
+	s.taskManager = vm.NewTaskManager(s.logger, s.agentClient)
 
 	s.logger.Info("successfully started the VM")
 
@@ -687,7 +688,7 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 	}
 
 	taskCtx, taskCancel := context.WithCancel(s.shimCtx)
-	task, err := s.taskManager.AddTask(request.ID, s.agentClient, bundleDir, extraData, cio.NewFIFOSet(cio.Config{
+	task, err := s.taskManager.AddTask(request.ID, bundleDir, extraData, cio.NewFIFOSet(cio.Config{
 		Stdin:    request.Stdin,
 		Stdout:   request.Stdout,
 		Stderr:   request.Stderr,

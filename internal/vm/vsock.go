@@ -60,13 +60,13 @@ func VSockDial(reqCtx context.Context, logger *logrus.Entry, contextID, port uin
 
 // VSockDialConnector provides an IOConnector interface to the VSockDial function.
 func VSockDialConnector(contextID, port uint32) IOConnector {
-	return func(taskCtx context.Context, logger *logrus.Entry) <-chan IOConnectorResult {
+	return func(procCtx context.Context, logger *logrus.Entry) <-chan IOConnectorResult {
 		returnCh := make(chan IOConnectorResult)
 
 		go func() {
 			defer close(returnCh)
 
-			conn, err := VSockDial(taskCtx, logger, contextID, port)
+			conn, err := VSockDial(procCtx, logger, contextID, port)
 			returnCh <- IOConnectorResult{
 				ReadWriteCloser: conn,
 				Err:             err,
@@ -80,7 +80,7 @@ func VSockDialConnector(contextID, port uint32) IOConnector {
 // VSockAcceptConnector provides an IOConnector that establishes the connection by listening on the provided
 // vsock port and accepting the first connection that comes in.
 func VSockAcceptConnector(port uint32) IOConnector {
-	return func(reqCtx context.Context, logger *logrus.Entry) <-chan IOConnectorResult {
+	return func(procCtx context.Context, logger *logrus.Entry) <-chan IOConnectorResult {
 		returnCh := make(chan IOConnectorResult)
 
 		go func() {
@@ -98,7 +98,7 @@ func VSockAcceptConnector(port uint32) IOConnector {
 
 			for range time.NewTicker(10 * time.Millisecond).C {
 				select {
-				case <-reqCtx.Done():
+				case <-procCtx.Done():
 					returnCh <- IOConnectorResult{
 						Err: procCtx.Err(),
 					}

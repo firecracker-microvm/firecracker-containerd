@@ -156,7 +156,7 @@ func (ts *TaskService) Create(requestCtx context.Context, req *taskAPI.CreateTas
 
 	err = bundleDir.MountRootfs(drive.Path(), "ext4", nil)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to mount rootfs")
 	}
 
 	req.Bundle = bundleDir.RootPath()
@@ -246,7 +246,7 @@ func (ts *TaskService) Delete(requestCtx context.Context, req *taskAPI.DeleteReq
 	defer logPanicAndDie(log.G(requestCtx))
 	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("delete")
 
-	resp, err := ts.taskManager.DeleteTask(requestCtx, req, ts.runcService)
+	resp, err := ts.taskManager.DeleteProcess(requestCtx, req, ts.runcService)
 	if err != nil {
 		return nil, err
 	}
@@ -336,15 +336,61 @@ func (ts *TaskService) Kill(requestCtx context.Context, req *taskAPI.KillRequest
 // Exec runs an additional process inside the container
 func (ts *TaskService) Exec(requestCtx context.Context, req *taskAPI.ExecProcessRequest) (*types.Empty, error) {
 	defer logPanicAndDie(log.G(requestCtx))
-	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("exec")
+	logger := log.G(requestCtx).WithField("TaskID", req.ID).WithField("ExecID", req.ExecID)
+	logger.Debug("exec")
 
-	resp, err := ts.runcService.Exec(requestCtx, req)
+	extraData, err := unmarshalExtraData(req.Spec)
 	if err != nil {
-		log.G(requestCtx).WithError(err).Error("exec failed")
+		return nil, errors.Wrap(err, "failed to unmarshal extra data")
+	}
+
+	// Just provide runc the options it knows about, not our wrapper
+	req.Spec = extraData.RuncOptions
+
+	bundleDir := bundle.Dir(filepath.Join(containerRootDir, req.ID))
+
+	// Override the incoming stdio FIFOs, which have paths from the host that we can't use
+	fifoSet, err := cio.NewFIFOSetInDir(bundleDir.RootPath(), req.ExecID, req.Terminal)
+	if err != nil {
+		logger.WithError(err).Error("failed opening stdio FIFOs")
+		return nil, errors.Wrap(err, "failed to open stdio FIFOs")
+	}
+
+	var stdinConnectorPair *vm.IOConnectorPair
+	if req.Stdin != "" {
+		req.Stdin = fifoSet.Stdin
+		stdinConnectorPair = &vm.IOConnectorPair{
+			ReadConnector:  vm.VSockAcceptConnector(extraData.StdinPort),
+			WriteConnector: vm.FIFOConnector(fifoSet.Stdin),
+		}
+	}
+
+	var stdoutConnectorPair *vm.IOConnectorPair
+	if req.Stdout != "" {
+		req.Stdout = fifoSet.Stdout
+		stdoutConnectorPair = &vm.IOConnectorPair{
+			ReadConnector:  vm.FIFOConnector(fifoSet.Stdout),
+			WriteConnector: vm.VSockAcceptConnector(extraData.StdoutPort),
+		}
+	}
+
+	var stderrConnectorPair *vm.IOConnectorPair
+	if req.Stderr != "" {
+		req.Stderr = fifoSet.Stderr
+		stderrConnectorPair = &vm.IOConnectorPair{
+			ReadConnector:  vm.FIFOConnector(fifoSet.Stderr),
+			WriteConnector: vm.VSockAcceptConnector(extraData.StderrPort),
+		}
+	}
+
+	ioConnectorSet := vm.NewIOConnectorProxy(stdinConnectorPair, stdoutConnectorPair, stderrConnectorPair)
+	resp, err := ts.taskManager.ExecProcess(requestCtx, req, ts.runcService, ioConnectorSet)
+	if err != nil {
+		logger.WithError(err).Error("exec failed")
 		return nil, err
 	}
 
-	log.G(requestCtx).Debug("exec succeeded")
+	logger.Debug("exec succeeded")
 	return resp, nil
 }
 

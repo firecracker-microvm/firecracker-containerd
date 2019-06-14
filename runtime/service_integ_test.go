@@ -14,7 +14,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"fmt"
@@ -204,7 +203,9 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 		containersPerVM = 5
 	)
 
-	ctx := namespaces.WithNamespace(context.Background(), defaultNamespace)
+	testTimeout := 600 * time.Second
+	ctx, cancel := context.WithTimeout(namespaces.WithNamespace(context.Background(), defaultNamespace), testTimeout)
+	defer cancel()
 
 	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
@@ -266,6 +267,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 				go func(containerID int) {
 					defer containerWg.Done()
 					containerName := fmt.Sprintf("container-%d-%d", vmID, containerID)
+					execName := fmt.Sprintf("exec-%d-%d", vmID, containerID)
 					snapshotName := fmt.Sprintf("snapshot-%d-%d", vmID, containerID)
 
 					// spawn a container that just prints the VM's eth0 mac address (which we have set uniquely per VM)
@@ -274,44 +276,93 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 						containerd.WithSnapshotter(naiveSnapshotterName),
 						containerd.WithNewSnapshot(snapshotName, image),
 						containerd.WithNewSpec(
-							oci.WithProcessArgs("cat", fmt.Sprintf("/sys/class/net/%s/address", defaultVMNetDevName)),
+							oci.WithProcessArgs("/bin/sh", "-c", strings.Join([]string{
+								fmt.Sprintf("/bin/cat /sys/class/net/%s/address", defaultVMNetDevName),
+								"/bin/readlink /proc/self/ns/mnt",
+								fmt.Sprintf("/bin/sleep %d", testTimeout/time.Second),
+							}, " && ")),
 							oci.WithHostNamespace(specs.NetworkNamespace),
 							firecrackeroci.WithVMID(strconv.Itoa(vmID)),
 						),
 					)
 					require.NoError(t, err, "failed to create container %s", containerName)
 
-					var stdout bytes.Buffer
-					var stderr bytes.Buffer
+					var taskStdout bytes.Buffer
+					var taskStderr bytes.Buffer
 
 					newTask, err := newContainer.NewTask(ctx,
-						cio.NewCreator(cio.WithStreams(nil, bufio.NewWriter(&stdout), bufio.NewWriter(&stderr))))
+						cio.NewCreator(cio.WithStreams(nil, &taskStdout, &taskStderr)))
 					require.NoError(t, err, "failed to create task for container %s", containerName)
 
-					exitCh, err := newTask.Wait(ctx)
+					taskExitCh, err := newTask.Wait(ctx)
 					require.NoError(t, err, "failed to wait on task for container %s", containerName)
+
+					var execStdout bytes.Buffer
+					var execStderr bytes.Buffer
+
+					newExec, err := newTask.Exec(ctx, execName, &specs.Process{
+						Args: []string{"/bin/readlink", "/proc/self/ns/mnt"},
+						Cwd:  "/",
+					}, cio.NewCreator(cio.WithStreams(nil, &execStdout, &execStderr)))
+					require.NoError(t, err, "failed to exec %s", execName)
+
+					execExitCh, err := newExec.Wait(ctx)
+					require.NoError(t, err, "failed to wait on exec %s", execName)
 
 					err = newTask.Start(ctx)
 					require.NoError(t, err, "failed to start task for container %s", containerName)
 
+					err = newExec.Start(ctx)
+					require.NoError(t, err, "failed to start exec %s", execName)
+
+					// First wait for the exec to exit, getting what it saw as its mnt namespace from the stdout
+					// so that we can make sure its the same namespace as the task
 					select {
-					case exitStatus := <-exitCh:
+					case exitStatus := <-execExitCh:
+						_, err = client.TaskService().DeleteProcess(ctx, &tasks.DeleteProcessRequest{
+							ContainerID: containerName,
+							ExecID:      execName,
+						})
+						require.NoError(t, err, "failed to delete exec %q", execName)
+
+						// if there was anything on stderr, print it to assist debugging
+						stderrOutput := execStderr.String()
+						if len(stderrOutput) != 0 {
+							fmt.Printf("stderr output from exec %q: %q", execName, stderrOutput)
+						}
+
+						require.Equal(t, uint32(0), exitStatus.ExitCode())
+					case <-ctx.Done():
+						require.Fail(t, "context cancelled",
+							"context cancelled while waiting for exec %s to exit, err: %v", execName, ctx.Err())
+					}
+
+					// Now kill the task and verify it was in the right VM and has the same mnt namespace as its exec
+					err = newTask.Kill(ctx, syscall.SIGKILL)
+					require.NoError(t, err, "failed to kill task %q", containerName)
+
+					select {
+					case <-taskExitCh:
 						_, err = client.TaskService().DeleteProcess(ctx, &tasks.DeleteProcessRequest{
 							ContainerID: containerName,
 						})
 						require.NoError(t, err, "failed to delete task %q", containerName)
 
 						// if there was anything on stderr, print it to assist debugging
-						stderrOutput := stderr.String()
+						stderrOutput := taskStderr.String()
 						if len(stderrOutput) != 0 {
 							fmt.Printf("stderr output from task %q: %q", containerName, stderrOutput)
 						}
 
-						require.NoError(t, exitStatus.Error(), "failed to retrieve exitStatus")
-						require.Equal(t, uint32(0), exitStatus.ExitCode())
-						require.Equal(t, vmIDtoMacAddr(uint(vmID)), strings.TrimSpace(stdout.String()),
-							"unexpected output from container %q", containerName,
-						)
+						stdoutLines := strings.Split(strings.TrimSpace(taskStdout.String()), "\n")
+						require.Len(t, stdoutLines, 2)
+
+						printedVMID := strings.TrimSpace(stdoutLines[0])
+						require.Equal(t, vmIDtoMacAddr(uint(vmID)), printedVMID, "unexpected VMID output from container %q", containerName)
+
+						taskMntNS := strings.TrimSpace(stdoutLines[1])
+						execMntNS := strings.TrimSpace(execStdout.String())
+						require.Equal(t, execMntNS, taskMntNS, "unexpected mnt NS output from container %q", containerName)
 
 					case <-ctx.Done():
 						require.Fail(t, "context cancelled",
@@ -415,7 +466,7 @@ func TestStubBlockDevices_Isolated(t *testing.T) {
 	var stderr bytes.Buffer
 
 	newTask, err := newContainer.NewTask(ctx,
-		cio.NewCreator(cio.WithStreams(nil, bufio.NewWriter(&stdout), bufio.NewWriter(&stderr))))
+		cio.NewCreator(cio.WithStreams(nil, &stdout, &stderr)))
 	require.NoError(t, err, "failed to create task for container %s", containerName)
 
 	exitCh, err := newTask.Wait(ctx)

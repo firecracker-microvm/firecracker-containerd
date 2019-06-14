@@ -335,15 +335,7 @@ func logPanicAndDie(logger *logrus.Entry) {
 	}
 }
 
-func (s *service) generateExtraData(driveID string, bundleDir bundle.Dir, options *ptypes.Any) (*proto.ExtraData, error) {
-	// Add the bundle/config.json to the request so it can be recreated
-	// inside the vm:
-	// Read bundle json
-	jsonBytes, err := bundleDir.OCIConfig().Bytes()
-	if err != nil {
-		return nil, err
-	}
-
+func (s *service) generateExtraData(jsonBytes []byte, driveID *string, options *ptypes.Any) (*proto.ExtraData, error) {
 	var opts *ptypes.Any
 	if options != nil {
 		// Copy values of existing options over
@@ -361,7 +353,7 @@ func (s *service) generateExtraData(driveID string, bundleDir bundle.Dir, option
 		StdinPort:   s.nextVSockPort(),
 		StdoutPort:  s.nextVSockPort(),
 		StderrPort:  s.nextVSockPort(),
-		DriveID:     driveID,
+		DriveID:     firecracker.StringValue(driveID),
 	}, nil
 }
 
@@ -693,7 +685,12 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 
 	}
 
-	extraData, err := s.generateExtraData(firecracker.StringValue(driveID), bundleDir, request.Options)
+	ociConfigBytes, err := bundleDir.OCIConfig().Bytes()
+	if err != nil {
+		return nil, err
+	}
+
+	extraData, err := s.generateExtraData(ociConfigBytes, driveID, request.Options)
 	if err != nil {
 		err = errors.Wrap(err, "failed to generate extra data")
 		logger.WithError(err).Error()
@@ -758,7 +755,7 @@ func (s *service) Delete(requestCtx context.Context, req *taskAPI.DeleteRequest)
 	defer logPanicAndDie(log.G(requestCtx))
 	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("delete")
 
-	resp, err := s.taskManager.DeleteTask(requestCtx, req, s.agentClient)
+	resp, err := s.taskManager.DeleteProcess(requestCtx, req, s.agentClient)
 	if err != nil {
 		return nil, err
 	}
@@ -769,9 +766,50 @@ func (s *service) Delete(requestCtx context.Context, req *taskAPI.DeleteRequest)
 // Exec an additional process inside the container
 func (s *service) Exec(requestCtx context.Context, req *taskAPI.ExecProcessRequest) (*ptypes.Empty, error) {
 	defer logPanicAndDie(log.G(requestCtx))
+	logger := s.logger.WithField("TaskID", req.ID).WithField("ExecID", req.ExecID)
+	logger.Debug("exec")
 
-	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("exec")
-	resp, err := s.agentClient.Exec(requestCtx, req)
+	// no OCI config bytes or DriveID to provide for Exec, just leave those fields empty
+	extraData, err := s.generateExtraData(nil, nil, req.Spec)
+	if err != nil {
+		err = errors.Wrap(err, "failed to generate extra data")
+		logger.WithError(err).Error()
+		return nil, err
+	}
+
+	req.Spec, err = ptypes.MarshalAny(extraData)
+	if err != nil {
+		err = errors.Wrap(err, "failed to marshal extra data")
+		logger.WithError(err).Error()
+		return nil, err
+	}
+
+	var stdinConnectorPair *vm.IOConnectorPair
+	if req.Stdin != "" {
+		stdinConnectorPair = &vm.IOConnectorPair{
+			ReadConnector:  vm.FIFOConnector(req.Stdin),
+			WriteConnector: vm.VSockDialConnector(s.machineCID, extraData.StdinPort),
+		}
+	}
+
+	var stdoutConnectorPair *vm.IOConnectorPair
+	if req.Stdout != "" {
+		stdoutConnectorPair = &vm.IOConnectorPair{
+			ReadConnector:  vm.VSockDialConnector(s.machineCID, extraData.StdoutPort),
+			WriteConnector: vm.FIFOConnector(req.Stdout),
+		}
+	}
+
+	var stderrConnectorPair *vm.IOConnectorPair
+	if req.Stderr != "" {
+		stderrConnectorPair = &vm.IOConnectorPair{
+			ReadConnector:  vm.VSockDialConnector(s.machineCID, extraData.StderrPort),
+			WriteConnector: vm.FIFOConnector(req.Stderr),
+		}
+	}
+
+	ioConnectorSet := vm.NewIOConnectorProxy(stdinConnectorPair, stdoutConnectorPair, stderrConnectorPair)
+	resp, err := s.taskManager.ExecProcess(requestCtx, req, s.agentClient, ioConnectorSet)
 	if err != nil {
 		return nil, err
 	}

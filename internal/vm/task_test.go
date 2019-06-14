@@ -14,305 +14,404 @@
 package vm
 
 import (
+	"bytes"
 	"context"
-	"fmt"
 	"io"
 	"net"
-	"os"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/runtime/v2/task"
-	"github.com/firecracker-microvm/firecracker-containerd/internal/bundle"
-	"github.com/firecracker-microvm/firecracker-containerd/proto"
+	taskAPI "github.com/containerd/containerd/runtime/v2/task"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/require"
 )
 
-var (
-	mockBundleDir = bundle.Dir("/tmp")
-
-	mockExtraData = &proto.ExtraData{
-		JsonSpec:    []byte{},
-		RuncOptions: nil,
-		StdinPort:   1,
-		StdoutPort:  2,
-		StderrPort:  3,
-	}
-
-	mockFIFOSet = cio.NewFIFOSet(cio.Config{
-		Stdin:  "/dev/null",
-		Stdout: "/dev/null",
-		Stderr: "/dev/null",
-	}, nil)
-)
-
 type mockTaskService struct {
 	task.TaskService
+
+	// map of taskID to chan *taskAPI.CreateTaskRequest holding each Create request for that taskID
+	createRequests sync.Map
+
+	// map of taskID to chan *taskAPI.DeleteRequest holding each Delete request for that taskID
+	deleteRequests sync.Map
+
+	// map of taskID to chan *taskAPI.WaitRequest holding each Wait request for that taskID
+	waitRequests sync.Map
+
+	// map of taskID to chan struct{} that will be used to block Wait requests
+	waitCh sync.Map
 }
 
-func defaultMockTaskArgs(id string) addTaskArgs {
-	return addTaskArgs{
-		id:        fmt.Sprintf("container-%s", id),
-		bundleDir: mockBundleDir,
-		extraData: mockExtraData,
-		fifoSet:   mockFIFOSet,
-	}
+func (s *mockTaskService) Create(reqCtx context.Context, req *taskAPI.CreateTaskRequest) (*taskAPI.CreateTaskResponse, error) {
+	reqCh, _ := s.createRequests.LoadOrStore(req.ID, make(chan *taskAPI.CreateTaskRequest, 128))
+	reqCh.(chan *taskAPI.CreateTaskRequest) <- req
+	return &taskAPI.CreateTaskResponse{
+		Pid: 123,
+	}, nil
 }
 
-type addTaskArgs struct {
-	id        string
-	bundleDir bundle.Dir
-	extraData *proto.ExtraData
-	fifoSet   *cio.FIFOSet
-}
-
-func addTaskFromArgs(tm TaskManager, args addTaskArgs) (*Task, error) {
-	return tm.AddTask(args.id, args.bundleDir, args.extraData, args.fifoSet, context.Background().Done(), func() {})
-}
-
-func TestTaskManager_AddRemoveTask(t *testing.T) {
-	logger, _ := test.NewNullLogger()
-	tm := NewTaskManager(logger.WithField("test", t.Name()), &mockTaskService{})
-
-	taskAArgs := defaultMockTaskArgs("A")
-	taskBArgs := defaultMockTaskArgs("B")
-	taskCArgs := defaultMockTaskArgs("C")
-
-	assertExpectedTask := func(args addTaskArgs, createdTask *Task) {
-		require.Equal(t, args.id, createdTask.ID, "AddTask sets expected container ID")
-		require.Equal(t, args.extraData, createdTask.extraData, "AddTask sets expected container ID")
-		require.Equal(t, args.bundleDir, createdTask.bundleDir, "AddTask sets expected container ID")
-		require.Equal(t, args.fifoSet, createdTask.fifoSet, "AddTask sets expected container ID")
+func (s *mockTaskService) PopCreateRequests(id string) (reqs []*taskAPI.CreateTaskRequest) {
+	reqCh, _ := s.createRequests.Load(id)
+	if reqCh == nil {
+		return reqs
 	}
 
-	// Basic adding of tasks
-	taskA, err := addTaskFromArgs(tm, taskAArgs)
-	require.NoError(t, err, "add first task")
-	assertExpectedTask(taskAArgs, taskA)
-
-	taskB, err := addTaskFromArgs(tm, taskBArgs)
-	require.NoError(t, err, "add second task")
-	assertExpectedTask(taskBArgs, taskB)
-
-	taskC, err := addTaskFromArgs(tm, taskCArgs)
-	require.NoError(t, err, "add third task")
-	assertExpectedTask(taskCArgs, taskC)
-
-	_, err = addTaskFromArgs(tm, taskAArgs)
-	require.Error(t, err, "add duplicate task should fail")
-
-	require.EqualValues(t, 3, tm.TaskCount(), "task count should return correct number of tasks")
-
-	// We should be able to get return the tasks we added
-	supposedlyTaskA, err := tm.Task(taskAArgs.id)
-	require.NoError(t, err, "get task")
-	require.Exactly(t, taskA, supposedlyTaskA, "get should return expected task")
-
-	supposedlyTaskB, err := tm.Task(taskBArgs.id)
-	require.NoError(t, err, "get task")
-	require.Exactly(t, taskB, supposedlyTaskB, "get should return expected task")
-
-	supposedlyTaskC, err := tm.Task(taskCArgs.id)
-	require.NoError(t, err, "get task")
-	require.Exactly(t, taskC, supposedlyTaskC, "get should return expected task")
-
-	_, err = tm.Task("never-existed")
-	require.Error(t, err, "get non-existent task should fail")
-
-	// Removing a task should remove the task requested but have no effect on the others
-	tm.Remove(taskBArgs.id)
-	require.EqualValues(t, 2, tm.TaskCount(), "task count should return correct number of tasks after remove")
-
-	supposedlyTaskA, err = tm.Task(taskAArgs.id)
-	require.NoError(t, err, "get task")
-	require.Exactly(t, taskA, supposedlyTaskA, "get should return expected task")
-
-	_, err = tm.Task(taskBArgs.id)
-	require.Error(t, err, "get removed task should fail")
-
-	supposedlyTaskC, err = tm.Task(taskCArgs.id)
-	require.NoError(t, err, "get task")
-	require.Exactly(t, taskC, supposedlyTaskC, "get should return expected task")
-
-	// Remove all should remove all the tasks
-	tm.RemoveAll()
-	require.EqualValues(t, 0, tm.TaskCount(), "task count should return correct number of tasks after remove all")
-
-	_, err = tm.Task(taskAArgs.id)
-	require.Error(t, err, "get removed task should fail")
-
-	_, err = tm.Task(taskCArgs.id)
-	require.Error(t, err, "get removed task should fail")
-
-	tm.RemoveAll()
-	require.EqualValues(t, 0, tm.TaskCount(), "remove all on empty task manager should have no effect")
-	tm.Remove(taskAArgs.id)
-	require.EqualValues(t, 0, tm.TaskCount(), "remove on non-existent task should have no effect")
-
-	// Tasks should still be able to be added after removes
-	taskC, err = addTaskFromArgs(tm, taskCArgs)
-	require.NoError(t, err, "re-add task after deletion")
-	assertExpectedTask(taskCArgs, taskC)
-
-	supposedlyTaskC, err = tm.Task(taskCArgs.id)
-	require.NoError(t, err, "get re-added task")
-	require.Exactly(t, taskC, supposedlyTaskC, "get should return expected task")
-
-	require.EqualValues(t, 1, tm.TaskCount(), "re-add task should set task count")
-}
-
-func pathOfFile(f *os.File) string {
-	return fmt.Sprintf("/proc/self/fd/%d", f.Fd())
-}
-
-func TestTaskManager_StartStdioProxy_FIFOtoVSock(t *testing.T) {
-	testStdioProxy(t, FIFOtoVSock)
-}
-
-func TestTaskManager_StartStdioProxy_VSockToFIFO(t *testing.T) {
-	testStdioProxy(t, VSockToFIFO)
-}
-
-func testStdioProxy(t *testing.T, inputDirection IODirection) {
-	logger, _ := test.NewNullLogger()
-	tm := NewTaskManager(logger.WithField("test", t.Name()), &mockTaskService{})
-
-	taskArgs := defaultMockTaskArgs("A")
-
-	// Use pipes to serve as fake FIFOs. We provide the io proxy
-	// paths to their /proc/self/fd
-	stdinR, stdinW, err := os.Pipe()
-	require.NoError(t, err, "get os pipe FDs")
-
-	stdoutR, stdoutW, err := os.Pipe()
-	require.NoError(t, err, "get os pipe FDs")
-
-	stderrR, stderrW, err := os.Pipe()
-	require.NoError(t, err, "get os pipe FDs")
-
-	switch inputDirection {
-	case FIFOtoVSock:
-		taskArgs.fifoSet = cio.NewFIFOSet(cio.Config{
-			Stdin:  pathOfFile(stdinR),
-			Stdout: pathOfFile(stdoutW),
-			Stderr: pathOfFile(stderrW),
-		}, nil)
-
-	case VSockToFIFO:
-		taskArgs.fifoSet = cio.NewFIFOSet(cio.Config{
-			Stdin:  pathOfFile(stdinW),
-			Stdout: pathOfFile(stdoutR),
-			Stderr: pathOfFile(stderrR),
-		}, nil)
-	}
-
-	// Use net.Conn as fake vsocks. *Local represents the side the io proxy
-	// will interact with. We will fake remote data by reading/writing from/to
-	// the *Remote conns in the test case code itself.
-	stdinSockLocal, stdinSockRemote := net.Pipe()
-	stdoutSockLocal, stdoutSockRemote := net.Pipe()
-	stderrSockLocal, stderrSockRemote := net.Pipe()
-
-	vsockConnector := func(ctx context.Context, port uint32) (net.Conn, error) {
-		switch port {
-		case taskArgs.extraData.StdinPort:
-			return stdinSockLocal, nil
-		case taskArgs.extraData.StdoutPort:
-			return stdoutSockLocal, nil
-		case taskArgs.extraData.StderrPort:
-			return stderrSockLocal, nil
+	for {
+		select {
+		case req := <-(reqCh.(chan *taskAPI.CreateTaskRequest)):
+			reqs = append(reqs, req)
 		default:
-			require.Failf(t, "unexpected vsock port", "port: %d", port)
-			return nil, nil // just here to appease the compiler, Failf exits
+			return reqs
 		}
 	}
+}
 
-	// add the task and start the io proxy
-	task, err := addTaskFromArgs(tm, taskArgs)
-	require.NoError(t, err, "add first task")
+func (s *mockTaskService) Delete(reqCtx context.Context, req *taskAPI.DeleteRequest) (*taskAPI.DeleteResponse, error) {
+	reqCh, _ := s.deleteRequests.LoadOrStore(req.ID, make(chan *taskAPI.DeleteRequest, 128))
+	reqCh.(chan *taskAPI.DeleteRequest) <- req
+	return nil, nil
+}
 
-	readyCh := task.StartStdioProxy(context.TODO(), inputDirection, vsockConnector)
-	select {
-	case err := <-readyCh:
-		require.NoError(t, err, "initialize stdio")
-	case <-time.After(10 * time.Second):
-		require.Fail(t, "timed out waiting for stdio initialization to finish")
+func (s *mockTaskService) PopDeleteRequests(id string) (reqs []*taskAPI.DeleteRequest) {
+	reqCh, _ := s.deleteRequests.Load(id)
+	if reqCh == nil {
+		return reqs
 	}
 
-	// stdin
-	var stdinWriter io.WriteCloser
-	var stdinReader io.ReadCloser
-	switch inputDirection {
-	case FIFOtoVSock:
-		stdinWriter = stdinW
-		stdinReader = stdinSockRemote
-	case VSockToFIFO:
-		stdinWriter = stdinSockRemote
-		stdinReader = stdinR
+	for {
+		select {
+		case req := <-(reqCh.(chan *taskAPI.DeleteRequest)):
+			reqs = append(reqs, req)
+		default:
+			return reqs
+		}
+	}
+}
+
+func (s *mockTaskService) Wait(reqCtx context.Context, req *taskAPI.WaitRequest) (*taskAPI.WaitResponse, error) {
+	reqCh, _ := s.waitRequests.LoadOrStore(req.ID, make(chan *taskAPI.WaitRequest, 128))
+	reqCh.(chan *taskAPI.WaitRequest) <- req
+
+	waitCh, _ := s.waitCh.Load(req.ID)
+	if waitCh != nil {
+		<-(waitCh.(chan struct{}))
 	}
 
-	writtenStdinBytes := []byte("stdin")
-	readStdinBytes := make([]byte, len(writtenStdinBytes))
+	return &taskAPI.WaitResponse{
+		ExitStatus: 0,
+		ExitedAt:   time.Now(),
+	}, nil
+}
 
-	_, err = stdinWriter.Write(writtenStdinBytes)
-	require.NoError(t, err, "write to stdin")
-
-	err = stdinWriter.Close()
-	require.NoError(t, err, "close stdin socket")
-
-	_, err = stdinReader.Read(readStdinBytes)
-	require.NoError(t, err, "read stdout")
-	require.Equal(t, writtenStdinBytes, readStdinBytes, "stdin proxied transparently")
-
-	// stdout
-	var stdoutWriter io.WriteCloser
-	var stdoutReader io.ReadCloser
-	switch inputDirection {
-	case FIFOtoVSock:
-		stdoutWriter = stdoutSockRemote
-		stdoutReader = stdoutR
-	case VSockToFIFO:
-		stdoutWriter = stdoutW
-		stdoutReader = stdoutSockRemote
+func (s *mockTaskService) PopWaitRequests(id string) (reqs []*taskAPI.WaitRequest) {
+	reqCh, _ := s.waitRequests.Load(id)
+	if reqCh == nil {
+		return reqs
 	}
 
-	writtenStdoutBytes := []byte("stdout")
-	readStdoutBytes := make([]byte, len(writtenStdoutBytes))
+	for {
+		select {
+		case req := <-(reqCh.(chan *taskAPI.WaitRequest)):
+			reqs = append(reqs, req)
+		default:
+			return reqs
+		}
+	}
+}
 
-	stdoutWriter.Write(writtenStdoutBytes)
-	require.NoError(t, err, "write stdout")
+func (s *mockTaskService) SetWaitCh(id string, waitCh chan struct{}) {
+	s.waitCh.Store(id, waitCh)
+}
 
-	err = stdoutWriter.Close()
-	require.NoError(t, err, "close stdout socket")
+func mockIOConnector(conn io.ReadWriteCloser) IOConnector {
+	return func(_ context.Context, _ *logrus.Entry) <-chan IOConnectorResult {
+		returnCh := make(chan IOConnectorResult)
+		go func() {
+			defer close(returnCh)
+			time.Sleep(100 * time.Millisecond) // simulate async stuff taking a little bit
 
-	_, err = stdoutReader.Read(readStdoutBytes)
-	require.NoError(t, err, "read stdout")
-	require.Equal(t, writtenStdoutBytes, readStdoutBytes, "stdout proxied transparently")
+			returnCh <- IOConnectorResult{ReadWriteCloser: conn}
+		}()
 
-	// stderr
-	var stderrWriter io.WriteCloser
-	var stderrReader io.ReadCloser
-	switch inputDirection {
-	case FIFOtoVSock:
-		stderrWriter = stderrSockRemote
-		stderrReader = stderrR
-	case VSockToFIFO:
-		stderrWriter = stderrW
-		stderrReader = stderrSockRemote
+		return returnCh
+	}
+}
+
+func mockIOFailConnector(conn io.ReadWriteCloser) IOConnector {
+	return func(_ context.Context, _ *logrus.Entry) <-chan IOConnectorResult {
+		returnCh := make(chan IOConnectorResult)
+		go func() {
+			defer close(returnCh)
+			time.Sleep(100 * time.Millisecond) // simulate async stuff taking a little bit
+			conn.Close()
+			returnCh <- IOConnectorResult{Err: errors.New("nothing works")}
+		}()
+
+		return returnCh
+	}
+}
+
+type mockTask struct {
+	ID             string
+	WaitCh         chan struct{}
+	IOConnectorSet *ioConnectorSet
+
+	stdinInput  io.ReadWriteCloser
+	stdinOutput *bytes.Buffer
+
+	stdoutInput  io.ReadWriteCloser
+	stdoutOutput *bytes.Buffer
+
+	stderrInput  io.ReadWriteCloser
+	stderrOutput *bytes.Buffer
+
+	ioDone sync.WaitGroup
+}
+
+func (t *mockTask) WriteStdin(bytes []byte) error {
+	_, err := t.stdinInput.Write(bytes)
+	return err
+}
+
+func (t *mockTask) WriteStdout(bytes []byte) error {
+	_, err := t.stdoutInput.Write(bytes)
+	return err
+}
+
+func (t *mockTask) WriteStderr(bytes []byte) error {
+	_, err := t.stderrInput.Write(bytes)
+	return err
+}
+
+func (t *mockTask) CloseStdin() {
+	t.stdinInput.Close()
+}
+
+func (t *mockTask) CloseStdout() {
+	t.stdoutInput.Close()
+}
+
+func (t *mockTask) CloseStderr() {
+	t.stderrInput.Close()
+}
+
+func (t *mockTask) StdinOutput() []byte {
+	t.ioDone.Wait()
+	return t.stdinOutput.Bytes()
+}
+
+func (t *mockTask) StdoutOutput() []byte {
+	t.ioDone.Wait()
+	return t.stdoutOutput.Bytes()
+}
+
+func (t *mockTask) StderrOutput() []byte {
+	t.ioDone.Wait()
+	return t.stderrOutput.Bytes()
+}
+
+func newMockTask(
+	id, string,
+	getStdinConnector func(io.ReadWriteCloser) IOConnector,
+	getStdoutConnector func(io.ReadWriteCloser) IOConnector,
+	getStderrConnector func(io.ReadWriteCloser) IOConnector,
+) *mockTask {
+	var ioDone sync.WaitGroup
+
+	taskStdinR, taskStdinW := net.Pipe()
+	clientStdinR, clientStdinW := net.Pipe()
+	var stdinBuf bytes.Buffer
+	ioDone.Add(1)
+	go func() {
+		defer ioDone.Done()
+		io.Copy(&stdinBuf, taskStdinR)
+	}()
+
+	taskStdoutR, taskStdoutW := net.Pipe()
+	clientStdoutR, clientStdoutW := net.Pipe()
+	var stdoutBuf bytes.Buffer
+	ioDone.Add(1)
+	go func() {
+		defer ioDone.Done()
+		io.Copy(&stdoutBuf, clientStdoutR)
+	}()
+
+	taskStderrR, taskStderrW := net.Pipe()
+	clientStderrR, clientStderrW := net.Pipe()
+	var stderrBuf bytes.Buffer
+	ioDone.Add(1)
+	go func() {
+		defer ioDone.Done()
+		io.Copy(&stderrBuf, clientStderrR)
+	}()
+
+	return &mockTask{
+		ID:     id,
+		WaitCh: make(chan struct{}),
+
+		IOConnectorSet: &ioConnectorSet{
+			stdin: &IOConnectorPair{
+				ReadConnector:  getStdinConnector(clientStdinR),
+				WriteConnector: getStdinConnector(taskStdinW),
+			},
+			stdout: &IOConnectorPair{
+				ReadConnector:  getStdoutConnector(taskStdoutR),
+				WriteConnector: getStdoutConnector(clientStdoutW),
+			},
+			stderr: &IOConnectorPair{
+				ReadConnector:  getStderrConnector(taskStderrR),
+				WriteConnector: getStderrConnector(clientStderrW),
+			},
+		},
+
+		stdinInput:  clientStdinW,
+		stdinOutput: &stdinBuf,
+
+		stdoutInput:  taskStdoutW,
+		stdoutOutput: &stdoutBuf,
+
+		stderrInput:  taskStderrW,
+		stderrOutput: &stderrBuf,
+	}
+}
+
+func TestTaskManager_CreateDeleteTask(t *testing.T) {
+	shimCtx, shimCancel := context.WithCancel(context.Background())
+	defer shimCancel()
+
+	logger, logHook := test.NewNullLogger()
+	logger.SetLevel(logrus.DebugLevel)
+	defer func() {
+		for _, entry := range logHook.AllEntries() {
+			logLine, _ := entry.String()
+			t.Log(logLine)
+		}
+	}()
+
+	tm := NewTaskManager(shimCtx, logger.WithField("test", t.Name()))
+	ts := &mockTaskService{}
+
+	mockTask := newMockTask("fakeTask", mockIOConnector, mockIOConnector, mockIOConnector)
+	ts.SetWaitCh(mockTask.ID, mockTask.WaitCh)
+
+	// Create a task, simulate data on stdin, stdout, stderr
+	createReqCtx, createReqCancel := context.WithCancel(shimCtx)
+	_, err := tm.CreateTask(createReqCtx, &taskAPI.CreateTaskRequest{ID: mockTask.ID}, ts, mockTask.IOConnectorSet)
+	require.NoError(t, err, "create task failed")
+	createReqCancel()
+
+	stdinData := []byte("stdin")
+	err = mockTask.WriteStdin(stdinData)
+	require.NoError(t, err, "write stdin failed")
+
+	firstStdoutData := []byte("stdout1")
+	err = mockTask.WriteStdout(firstStdoutData)
+	require.NoError(t, err, "first write stdout to failed")
+
+	firstStderrData := []byte("stderr1")
+	err = mockTask.WriteStderr(firstStderrData)
+	require.NoError(t, err, "first write stderr to failed")
+
+	// simulate the task exiting
+	close(mockTask.WaitCh)
+	mockTask.CloseStdin()
+
+	// test that lingering stdout/stderr can still be flushed after the task exits (actual assertions happen at end of test)
+	secondStdoutData := []byte("stdout2")
+	err = mockTask.WriteStdout(secondStdoutData)
+	require.NoError(t, err, "second write to stdout failed")
+	mockTask.CloseStdout()
+
+	secondStderrData := []byte("stderr2")
+	err = mockTask.WriteStderr(secondStderrData)
+	require.NoError(t, err, "second write stderr to failed")
+	mockTask.CloseStderr()
+
+	// delete the task, verifying that the shutdown fails before and succeeds after
+	didShutdown := tm.ShutdownIfEmpty()
+	require.False(t, didShutdown, "task manager shutdown while tasks not deleted")
+
+	deleteReqCtx, deleteReqCancel := context.WithCancel(shimCtx)
+	_, err = tm.DeleteTask(deleteReqCtx, &taskAPI.DeleteRequest{ID: mockTask.ID}, ts)
+	require.NoError(t, err, "delete task failed")
+	deleteReqCancel()
+
+	didShutdown = tm.ShutdownIfEmpty()
+	require.True(t, didShutdown, "task manager didn't shutdown when all tasks deleted")
+
+	tooLateTask := newMockTask("too.late", mockIOConnector, mockIOConnector, mockIOConnector)
+	createReqCtx, createReqCancel = context.WithCancel(shimCtx)
+	_, err = tm.CreateTask(createReqCtx, &taskAPI.CreateTaskRequest{ID: tooLateTask.ID}, ts, tooLateTask.IOConnectorSet)
+	require.Error(t, err, "create unexpectedly succeeded after shutdown")
+	createReqCancel()
+
+	// Verify all tasks had all APIs called as expected
+	mockTaskCreateReqs := ts.PopCreateRequests(mockTask.ID)
+	require.Lenf(t, mockTaskCreateReqs, 1, "Create called unexpected number of times for %q", mockTask.ID)
+	for _, req := range mockTaskCreateReqs {
+		require.Equalf(t, mockTask.ID, req.ID, "unexpected ID in Create request for %q", mockTask.ID)
 	}
 
-	writtenStderrBytes := []byte("stderr")
-	readStderrBytes := make([]byte, len(writtenStderrBytes))
+	mockTaskDeleteReqs := ts.PopDeleteRequests(mockTask.ID)
+	require.Lenf(t, mockTaskDeleteReqs, 1, "Delete called unexpected number of times for %q", mockTask.ID)
+	for _, req := range mockTaskDeleteReqs {
+		require.Equalf(t, mockTask.ID, req.ID, "unexpected ID in Delete request for %q", mockTask.ID)
+	}
 
-	stderrWriter.Write(writtenStderrBytes)
-	require.NoError(t, err, "write stderr")
+	mockTaskWaitReqs := ts.PopWaitRequests(mockTask.ID)
+	require.Lenf(t, mockTaskWaitReqs, 1, "Wait called unexpected number of times for %q", mockTask.ID)
+	for _, req := range mockTaskWaitReqs {
+		require.Equalf(t, mockTask.ID, req.ID, "unexpected ID in Wait request for %q", mockTask.ID)
+	}
 
-	err = stderrWriter.Close()
-	require.NoError(t, err, "close stderr socket")
+	tooLateTaskCreateReqs := ts.PopCreateRequests(tooLateTask.ID)
+	require.Lenf(t, tooLateTaskCreateReqs, 0, "Create called unexpected number of times for %q", tooLateTask.ID)
+	tooLateTaskDeleteReqs := ts.PopDeleteRequests(tooLateTask.ID)
+	require.Lenf(t, tooLateTaskDeleteReqs, 0, "Delete called unexpected number of times for %q", tooLateTask.ID)
+	tooLateTaskWaitReqs := ts.PopWaitRequests(tooLateTask.ID)
+	require.Lenf(t, tooLateTaskWaitReqs, 0, "Wait called unexpected number of times for %q", tooLateTask.ID)
 
-	_, err = stderrReader.Read(readStderrBytes)
-	require.NoError(t, err, "read stderr")
-	require.Equal(t, writtenStderrBytes, readStderrBytes, "stderr proxied transparently")
+	// Verify task had io proxied transparently
+	require.Equalf(t, stdinData, mockTask.StdinOutput(), "unexpected stdin data proxied for task %q", mockTask.ID)
+	require.Equalf(t, append(firstStdoutData, secondStdoutData...), mockTask.StdoutOutput(), "unexpected stdout data proxied for task %q", mockTask.ID)
+	require.Equalf(t, append(firstStderrData, secondStderrData...), mockTask.StderrOutput(), "unexpected stderr data proxied for task %q", mockTask.ID)
+}
+
+// verifies that if io connection initialization fails, then CreateTask fails too
+func TestTaskManager_IOCreateFails(t *testing.T) {
+	shimCtx, shimCancel := context.WithCancel(context.Background())
+	defer shimCancel()
+
+	logger, logHook := test.NewNullLogger()
+	logger.SetLevel(logrus.DebugLevel)
+	defer func() {
+		for _, entry := range logHook.AllEntries() {
+			logLine, _ := entry.String()
+			t.Log(logLine)
+		}
+	}()
+
+	tm := NewTaskManager(shimCtx, logger.WithField("test", t.Name()))
+	ts := &mockTaskService{}
+
+	// Try to create a task where the io initialization fails for stdin, make sure CreateTask also fails
+	mockTask := newMockTask("fakeTask", mockIOFailConnector, mockIOConnector, mockIOConnector)
+	ts.SetWaitCh(mockTask.ID, mockTask.WaitCh)
+
+	createReqCtx, createReqCancel := context.WithCancel(shimCtx)
+	_, err := tm.CreateTask(createReqCtx, &taskAPI.CreateTaskRequest{ID: mockTask.ID}, ts, mockTask.IOConnectorSet)
+	require.Error(t, err, "create task unexpectedly succeeded")
+	createReqCancel()
+
+	// Verify task had all APIs called as expected, specifically that Create was still called once
+	mockTaskCreateReqs := ts.PopCreateRequests(mockTask.ID)
+	require.Lenf(t, mockTaskCreateReqs, 1, "Create called unexpected number of times for %q", mockTask.ID)
+	mockTaskDeleteReqs := ts.PopDeleteRequests(mockTask.ID)
+	require.Lenf(t, mockTaskDeleteReqs, 0, "Delete called unexpected number of times for %q", mockTask.ID)
+	mockTaskWaitReqs := ts.PopWaitRequests(mockTask.ID)
+	require.Lenf(t, mockTaskWaitReqs, 0, "Wait called unexpected number of times for %q", mockTask.ID)
 }

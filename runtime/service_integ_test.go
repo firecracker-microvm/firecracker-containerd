@@ -30,6 +30,7 @@ import (
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/api/events"
+	"github.com/containerd/containerd/api/services/tasks/v1"
 	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/oci"
@@ -63,7 +64,7 @@ const (
 	varRunDir           = "/var/run/firecracker-containerd"
 )
 
-func TestShimExitsUponContainerKill_Isolated(t *testing.T) {
+func TestShimExitsUponContainerDelete_Isolated(t *testing.T) {
 	internal.RequiresIsolation(t)
 
 	ctx := namespaces.WithNamespace(context.Background(), defaultNamespace)
@@ -132,6 +133,9 @@ func TestShimExitsUponContainerKill_Isolated(t *testing.T) {
 	err = task.Kill(testCtx, syscall.SIGKILL)
 	require.NoError(t, err, "failed to SIGKILL containerd task %s", containerName)
 
+	_, err = task.Delete(testCtx)
+	require.NoError(t, err, "failed to Delete containerd task %s", containerName)
+
 	select {
 	case envelope := <-exitEventCh:
 		unmarshaledEvent, err := typeurl.UnmarshalAny(envelope.Event)
@@ -197,7 +201,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 
 	const (
 		numVMs          = 3
-		containersPerVM = 3
+		containersPerVM = 5
 	)
 
 	ctx := namespaces.WithNamespace(context.Background(), defaultNamespace)
@@ -237,6 +241,9 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 			fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
 			_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
 				VMID: strconv.Itoa(vmID),
+				MachineCfg: &proto.FirecrackerMachineConfiguration{
+					MemSizeMib: 512,
+				},
 				RootDrive: &proto.FirecrackerDrive{
 					PathOnHost:   rootfsPath,
 					IsReadOnly:   false,
@@ -289,15 +296,23 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 
 					select {
 					case exitStatus := <-exitCh:
+						_, err = client.TaskService().DeleteProcess(ctx, &tasks.DeleteProcessRequest{
+							ContainerID: containerName,
+						})
+						require.NoError(t, err, "failed to delete task %q", containerName)
+
 						// if there was anything on stderr, print it to assist debugging
 						stderrOutput := stderr.String()
 						if len(stderrOutput) != 0 {
-							fmt.Printf("stderr output from vm %d, container %d: %s", vmID, containerID, stderrOutput)
+							fmt.Printf("stderr output from task %q: %q", containerName, stderrOutput)
 						}
 
 						require.NoError(t, exitStatus.Error(), "failed to retrieve exitStatus")
 						require.Equal(t, uint32(0), exitStatus.ExitCode())
-						require.Equal(t, vmIDtoMacAddr(uint(vmID)), strings.TrimSpace(stdout.String()))
+						require.Equal(t, vmIDtoMacAddr(uint(vmID)), strings.TrimSpace(stdout.String()),
+							"unexpected output from container %q", containerName,
+						)
+
 					case <-ctx.Done():
 						require.Fail(t, "context cancelled",
 							"context cancelled while waiting for container %s to exit, err: %v", containerName, ctx.Err())

@@ -32,25 +32,21 @@ import (
 	// secure randomness
 	"math/rand" // #nosec
 
-	eventsAPI "github.com/containerd/containerd/api/events"
-	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/events"
 	"github.com/containerd/containerd/events/exchange"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/pkg/ttrpcutil"
-	"github.com/containerd/containerd/runtime"
 	"github.com/containerd/containerd/runtime/v2/shim"
 	taskAPI "github.com/containerd/containerd/runtime/v2/task"
 	"github.com/containerd/fifo"
 	"github.com/containerd/ttrpc"
-	"github.com/containerd/typeurl"
 	"github.com/firecracker-microvm/firecracker-go-sdk"
 	models "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 	"github.com/gofrs/uuid"
 	ptypes "github.com/gogo/protobuf/types"
 	"github.com/golang/protobuf/ptypes/empty"
-	"github.com/mdlayher/vsock"
+	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
@@ -92,6 +88,7 @@ var (
 
 // implements shimapi
 type service struct {
+	taskManager   vm.TaskManager
 	eventExchange *exchange.Exchange
 	namespace     string
 
@@ -120,15 +117,12 @@ type service struct {
 	config *Config
 
 	// vmReady is closed once CreateVM has been successfully called
-	vmReady           chan struct{}
-	vmStartOnce       sync.Once
-	agentClient       taskAPI.TaskService
-	eventBridgeClient eventbridge.Getter
-	stubDriveHandler  stubDriveHandler
-
-	// taskManager is only instantiated after CreateVM has run successfully.
-	// Any use of it must be guarded by service.waitVMReady()
-	taskManager vm.TaskManager
+	vmReady                  chan struct{}
+	vmStartOnce              sync.Once
+	agentClient              taskAPI.TaskService
+	eventBridgeClient        eventbridge.Getter
+	stubDriveHandler         stubDriveHandler
+	exitAfterAllTasksDeleted bool
 
 	machine          *firecracker.Machine
 	machineConfig    *firecracker.Config
@@ -174,6 +168,7 @@ func NewService(shimCtx context.Context, id string, remotePublisher shim.Publish
 	}
 
 	s := &service{
+		taskManager:   vm.NewTaskManager(shimCtx, logger),
 		eventExchange: exchange.NewExchange(),
 		namespace:     namespace,
 
@@ -284,15 +279,15 @@ func (s *service) StartShim(shimCtx context.Context, containerID, containerdBina
 	}
 	bundleDir := bundle.Dir(cwd)
 
-	var exitAfterAllTasksGone bool
-	containerCount := 0
-
 	// Since we're running a shim start routine, we need to determine the vmID for the incoming
 	// container. Start by looking at the container's OCI annotations
 	s.vmID, err = bundleDir.OCIConfig().VMID()
 	if err != nil {
 		return "", err
 	}
+
+	var exitAfterAllTasksDeleted bool
+	containerCount := 0
 
 	if s.vmID == "" {
 		// If here, no VMID has been provided by the client for this container, so auto-generate a new one.
@@ -305,10 +300,10 @@ func (s *service) StartShim(shimCtx context.Context, containerID, containerdBina
 
 		s.vmID = uuid.String()
 
-		// If the client didn't specify a VMID, the VM should exit after this task is gone
-		// and should expect to run a task
-		exitAfterAllTasksGone = true
+		// If the client didn't specify a VMID, this is a single-task VM and should thus exit after this
+		// task is deleted
 		containerCount = 1
+		exitAfterAllTasksDeleted = true
 	}
 
 	client, err := ttrpcutil.NewClient(containerdAddress + ".ttrpc")
@@ -319,9 +314,9 @@ func (s *service) StartShim(shimCtx context.Context, containerID, containerdBina
 	fcControlClient := fccontrolTtrpc.NewFirecrackerClient(client.Client())
 
 	_, err = fcControlClient.CreateVM(shimCtx, &proto.CreateVMRequest{
-		VMID:                  s.vmID,
-		ExitAfterAllTasksGone: exitAfterAllTasksGone,
-		ContainerCount:        int32(containerCount),
+		VMID:                     s.vmID,
+		ExitAfterAllTasksDeleted: exitAfterAllTasksDeleted,
+		ContainerCount:           int32(containerCount),
 	})
 	if err != nil {
 		errStatus, ok := status.FromError(err)
@@ -430,7 +425,6 @@ func (s *service) CreateVM(requestCtx context.Context, request *proto.CreateVMRe
 	}
 
 	go s.monitorVMExit()
-	go s.monitorTaskExit(request.ExitAfterAllTasksGone)
 
 	// let all the other methods know that the VM is ready for tasks
 	close(s.vmReady)
@@ -492,7 +486,7 @@ func (s *service) createVM(requestCtx context.Context, request *proto.CreateVMRe
 	}
 
 	s.logger.Info("calling agent")
-	conn, err := dialVsock(requestCtx, s.machineCID, defaultVsockPort)
+	conn, err := vm.VSockDial(requestCtx, s.logger, s.machineCID, defaultVsockPort)
 	if err != nil {
 		return errors.Wrapf(err, "failed to dial the VM over vsock")
 	}
@@ -500,7 +494,7 @@ func (s *service) createVM(requestCtx context.Context, request *proto.CreateVMRe
 	rpcClient := ttrpc.NewClient(conn, ttrpc.WithOnClose(func() { _ = conn.Close() }))
 	s.agentClient = taskAPI.NewTaskClient(rpcClient)
 	s.eventBridgeClient = eventbridge.NewGetterClient(rpcClient)
-	s.taskManager = vm.NewTaskManager(s.logger, s.agentClient)
+	s.exitAfterAllTasksDeleted = request.ExitAfterAllTasksDeleted
 
 	s.logger.Info("successfully started the VM")
 
@@ -508,32 +502,31 @@ func (s *service) createVM(requestCtx context.Context, request *proto.CreateVMRe
 }
 
 // StopVM will shutdown the firecracker VM and start this shim's shutdown procedure. If the VM has not been
-// created yet, an error will be returned but the shim will continue to shutdown.
-func (s *service) StopVM(requestCtx context.Context, request *proto.StopVMRequest) (*empty.Empty, error) {
+// created yet and the timeout is hit waiting for it to exist, an error will be returned but the shim will
+// continue to shutdown.
+func (s *service) StopVM(requestCtx context.Context, request *proto.StopVMRequest) (_ *empty.Empty, err error) {
 	defer logPanicAndDie(s.logger)
+	// If something goes wrong here, just shut down ungracefully. This eliminates some scenarios that would result
+	// in the user being unable to shut down the VM.
+	defer func() {
+		if err != nil {
+			s.logger.WithError(err).Error("StopVM error, shim is shutting down ungracefully")
+			s.shimCancel()
+		}
+	}()
 
-	// Shutdown the shim after this method is called, whether the clean StopVMM was successful or not.
-	// If StopVMM didn't work, the cancel results in the VM cmd context being cancelled, sending SIGKILL
-	// to the VM process.
-	defer s.shimCancel()
-
-	s.logger.Info("stopping the VM")
-
-	err := s.machine.StopVMM()
+	err = s.waitVMReady()
 	if err != nil {
-		err = errors.Wrap(err, "failed to gracefully stop VM")
-		s.logger.WithError(err).Error()
 		return nil, err
 	}
 
-	err = os.RemoveAll(s.shimDir().RootPath())
+	// The graceful shutdown logic, including stopping the VM, is centralized in Shutdown. We set "Now" to true
+	// to ensure that the service will actually shutdown even if there are still containers being managed.
+	_, err = s.Shutdown(requestCtx, &taskAPI.ShutdownRequest{Now: true})
 	if err != nil {
-		err = errors.Wrap(err, "failed to remove VM dir during shutdown")
-		s.logger.WithField("path", s.shimDir().RootPath()).WithError(err).Error()
 		return nil, err
 	}
 
-	s.logger.Info("successfully stopped the VM")
 	return &empty.Empty{}, nil
 }
 
@@ -707,52 +700,45 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 		return nil, err
 	}
 
-	taskCtx, taskCancel := context.WithCancel(s.shimCtx)
-	task, err := s.taskManager.AddTask(request.ID, bundleDir, extraData, cio.NewFIFOSet(cio.Config{
-		Stdin:    request.Stdin,
-		Stdout:   request.Stdout,
-		Stderr:   request.Stderr,
-		Terminal: request.Terminal,
-	}, nil), taskCtx.Done(), taskCancel)
-	if err != nil {
-		err = errors.Wrap(err, "failed to add task")
-		logger.WithError(err).Error()
-		return nil, err
-	}
-
-	defer func() {
-		if err != nil {
-			s.taskManager.Remove(request.ID)
-		}
-	}()
-
-	// Begin initializing stdio, but don't block on the initialization so we can send the Create
-	// call (which will allow the stdio initialization to complete).
-	// Use requestCtx as the ctx here is only used for initializing stdio, not the actual copying of io
-	stdioReadyCh := task.StartStdioProxy(requestCtx, vm.FIFOtoVSock, cidDialer(s.machineCID))
-
-	// Override the original request options with ExtraData needed by the VM Agent before sending it off
-	request.Options, err = task.MarshalExtraData()
+	request.Options, err = ptypes.MarshalAny(extraData)
 	if err != nil {
 		err = errors.Wrap(err, "failed to marshal extra data")
 		logger.WithError(err).Error()
 		return nil, err
 	}
 
-	resp, err := task.Create(requestCtx, request)
+	var stdinConnectorPair *vm.IOConnectorPair
+	if request.Stdin != "" {
+		stdinConnectorPair = &vm.IOConnectorPair{
+			ReadConnector:  vm.FIFOConnector(request.Stdin),
+			WriteConnector: vm.VSockDialConnector(s.machineCID, extraData.StdinPort),
+		}
+	}
+
+	var stdoutConnectorPair *vm.IOConnectorPair
+	if request.Stdout != "" {
+		stdoutConnectorPair = &vm.IOConnectorPair{
+			ReadConnector:  vm.VSockDialConnector(s.machineCID, extraData.StdoutPort),
+			WriteConnector: vm.FIFOConnector(request.Stdout),
+		}
+	}
+
+	var stderrConnectorPair *vm.IOConnectorPair
+	if request.Stderr != "" {
+		stderrConnectorPair = &vm.IOConnectorPair{
+			ReadConnector:  vm.VSockDialConnector(s.machineCID, extraData.StderrPort),
+			WriteConnector: vm.FIFOConnector(request.Stderr),
+		}
+	}
+
+	ioConnectorSet := vm.NewIOConnectorProxy(stdinConnectorPair, stdoutConnectorPair, stderrConnectorPair)
+	resp, err := s.taskManager.CreateTask(requestCtx, request, s.agentClient, ioConnectorSet)
 	if err != nil {
 		err = errors.Wrap(err, "failed to create task")
 		logger.WithError(err).Error()
 		return nil, err
 	}
 
-	// make sure stdio was initialized successfully
-	err = <-stdioReadyCh
-	if err != nil {
-		return nil, err
-	}
-
-	logger.WithField("pid_in_vm", resp.Pid).Info("successfully created task")
 	return resp, nil
 }
 
@@ -760,12 +746,7 @@ func (s *service) Start(requestCtx context.Context, req *taskAPI.StartRequest) (
 	defer logPanicAndDie(log.G(requestCtx))
 
 	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("start")
-	task, err := s.taskManager.Task(req.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := task.Start(requestCtx, req)
+	resp, err := s.agentClient.Start(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -775,20 +756,12 @@ func (s *service) Start(requestCtx context.Context, req *taskAPI.StartRequest) (
 
 func (s *service) Delete(requestCtx context.Context, req *taskAPI.DeleteRequest) (*taskAPI.DeleteResponse, error) {
 	defer logPanicAndDie(log.G(requestCtx))
-
 	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("delete")
 
-	task, err := s.taskManager.Task(req.ID)
+	resp, err := s.taskManager.DeleteTask(requestCtx, req, s.agentClient)
 	if err != nil {
 		return nil, err
 	}
-
-	resp, err := task.Delete(requestCtx, req)
-	if err != nil {
-		return nil, err
-	}
-
-	s.taskManager.Remove(req.ID)
 
 	return resp, nil
 }
@@ -798,12 +771,7 @@ func (s *service) Exec(requestCtx context.Context, req *taskAPI.ExecProcessReque
 	defer logPanicAndDie(log.G(requestCtx))
 
 	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("exec")
-	task, err := s.taskManager.Task(req.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := task.Exec(requestCtx, req)
+	resp, err := s.agentClient.Exec(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -816,12 +784,7 @@ func (s *service) ResizePty(requestCtx context.Context, req *taskAPI.ResizePtyRe
 	defer logPanicAndDie(log.G(requestCtx))
 
 	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("resize_pty")
-	task, err := s.taskManager.Task(req.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := task.ResizePty(requestCtx, req)
+	resp, err := s.agentClient.ResizePty(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -834,12 +797,7 @@ func (s *service) State(requestCtx context.Context, req *taskAPI.StateRequest) (
 	defer logPanicAndDie(log.G(requestCtx))
 
 	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("state")
-	task, err := s.taskManager.Task(req.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := task.State(requestCtx, req)
+	resp, err := s.agentClient.State(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -852,12 +810,7 @@ func (s *service) Pause(requestCtx context.Context, req *taskAPI.PauseRequest) (
 	defer logPanicAndDie(log.G(requestCtx))
 
 	log.G(requestCtx).WithField("id", req.ID).Debug("pause")
-	task, err := s.taskManager.Task(req.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := task.Pause(requestCtx, req)
+	resp, err := s.agentClient.Pause(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -870,12 +823,7 @@ func (s *service) Resume(requestCtx context.Context, req *taskAPI.ResumeRequest)
 	defer logPanicAndDie(log.G(requestCtx))
 
 	log.G(requestCtx).WithField("id", req.ID).Debug("resume")
-	task, err := s.taskManager.Task(req.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := task.Resume(requestCtx, req)
+	resp, err := s.agentClient.Resume(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -888,12 +836,7 @@ func (s *service) Kill(requestCtx context.Context, req *taskAPI.KillRequest) (*p
 	defer logPanicAndDie(log.G(requestCtx))
 
 	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("kill")
-	task, err := s.taskManager.Task(req.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := task.Kill(requestCtx, req)
+	resp, err := s.agentClient.Kill(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -905,12 +848,7 @@ func (s *service) Pids(requestCtx context.Context, req *taskAPI.PidsRequest) (*t
 	defer logPanicAndDie(log.G(requestCtx))
 
 	log.G(requestCtx).WithField("id", req.ID).Debug("pids")
-	task, err := s.taskManager.Task(req.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := task.Pids(requestCtx, req)
+	resp, err := s.agentClient.Pids(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -923,12 +861,7 @@ func (s *service) CloseIO(requestCtx context.Context, req *taskAPI.CloseIOReques
 	defer logPanicAndDie(log.G(requestCtx))
 
 	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("close_io")
-	task, err := s.taskManager.Task(req.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := task.CloseIO(requestCtx, req)
+	resp, err := s.agentClient.CloseIO(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -941,12 +874,7 @@ func (s *service) Checkpoint(requestCtx context.Context, req *taskAPI.Checkpoint
 	defer logPanicAndDie(log.G(requestCtx))
 
 	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "path": req.Path}).Info("checkpoint")
-	task, err := s.taskManager.Task(req.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := task.Checkpoint(requestCtx, req)
+	resp, err := s.agentClient.Checkpoint(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -959,12 +887,7 @@ func (s *service) Connect(requestCtx context.Context, req *taskAPI.ConnectReques
 	defer logPanicAndDie(log.G(requestCtx))
 
 	log.G(requestCtx).WithField("id", req.ID).Debug("connect")
-	task, err := s.taskManager.Task(req.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := task.Connect(requestCtx, req)
+	resp, err := s.agentClient.Connect(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -972,47 +895,61 @@ func (s *service) Connect(requestCtx context.Context, req *taskAPI.ConnectReques
 	return resp, nil
 }
 
+// Shutdown will attempt a graceful shutdown of the shim+VM. The shutdown procedure will only actually take
+// place if "Now" was set to true OR the VM started successfully, all tasks have been deleted and we were
+// told to shutdown when all tasks were deleted. Otherwise the call is just ignored.
+//
+// Shutdown can be called from a few code paths:
+// * If StopVM is called by the user (in which case "Now" is set to true)
+// * After any task is deleted via containerd's API (containerd calls on behalf of the user)
+// * After any task Create call returns an error (containerd calls on behalf of the user)
+// Shutdown is not directly exposed to containerd clients.
 func (s *service) Shutdown(requestCtx context.Context, req *taskAPI.ShutdownRequest) (*ptypes.Empty, error) {
 	defer logPanicAndDie(log.G(requestCtx))
-
 	s.logger.WithFields(logrus.Fields{"id": req.ID, "now": req.Now}).Debug("shutdown")
 
-	// If we are still managing containers, don't shutdown
-	if s.taskManager.TaskCount() > 0 {
+	shouldShutdown := req.Now || s.exitAfterAllTasksDeleted && s.taskManager.ShutdownIfEmpty()
+	if !shouldShutdown {
 		return &ptypes.Empty{}, nil
 	}
 
+	// cancel the shim context no matter what, which will result in the VM getting a SIGKILL (if not already
+	// dead from graceful shutdown) and the shim process itself to begin exiting
 	defer s.shimCancel()
 
-	err := s.waitVMReady()
+	s.logger.Info("stopping the VM")
+
+	var shutdownErr error
+
+	_, err := s.agentClient.Shutdown(requestCtx, req)
 	if err != nil {
-		s.logger.WithError(err).Error()
-		return nil, err
+		shutdownErr = multierror.Append(shutdownErr, errors.Wrap(err, "failed to shutdown VM Agent"))
 	}
 
-	_, err = s.agentClient.Shutdown(requestCtx, req)
+	err = s.machine.StopVMM()
 	if err != nil {
-		return nil, err
+		shutdownErr = multierror.Append(shutdownErr, errors.Wrap(err, "failed to gracefully stop VM"))
 	}
 
-	if _, err := s.StopVM(requestCtx, &proto.StopVMRequest{VMID: s.vmID}); err != nil {
-		s.logger.WithError(err).Error("failed to stop VM")
-		return nil, err
+	err = os.RemoveAll(s.shimDir().RootPath())
+	if err != nil {
+		shutdownErr = multierror.Append(shutdownErr, errors.Wrapf(err, "failed to remove VM dir %q during shutdown", s.shimDir().RootPath()))
 	}
 
+	if shutdownErr != nil {
+		s.logger.WithError(shutdownErr).Error()
+		return nil, shutdownErr
+	}
+
+	s.logger.Info("successfully stopped the VM")
 	return &ptypes.Empty{}, nil
 }
 
 func (s *service) Stats(requestCtx context.Context, req *taskAPI.StatsRequest) (*taskAPI.StatsResponse, error) {
 	defer logPanicAndDie(log.G(requestCtx))
-
 	log.G(requestCtx).WithField("id", req.ID).Debug("stats")
-	task, err := s.taskManager.Task(req.ID)
-	if err != nil {
-		return nil, err
-	}
 
-	resp, err := task.Stats(requestCtx, req)
+	resp, err := s.agentClient.Stats(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -1023,14 +960,9 @@ func (s *service) Stats(requestCtx context.Context, req *taskAPI.StatsRequest) (
 // Update a running container
 func (s *service) Update(requestCtx context.Context, req *taskAPI.UpdateTaskRequest) (*ptypes.Empty, error) {
 	defer logPanicAndDie(log.G(requestCtx))
-
 	log.G(requestCtx).WithField("id", req.ID).Debug("update")
-	task, err := s.taskManager.Task(req.ID)
-	if err != nil {
-		return nil, err
-	}
 
-	resp, err := task.Update(requestCtx, req)
+	resp, err := s.agentClient.Update(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -1041,14 +973,9 @@ func (s *service) Update(requestCtx context.Context, req *taskAPI.UpdateTaskRequ
 // Wait for a process to exit
 func (s *service) Wait(requestCtx context.Context, req *taskAPI.WaitRequest) (*taskAPI.WaitResponse, error) {
 	defer logPanicAndDie(log.G(requestCtx))
-
 	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("wait")
-	task, err := s.taskManager.Task(req.ID)
-	if err != nil {
-		return nil, err
-	}
 
-	resp, err := task.Wait(requestCtx, req)
+	resp, err := s.agentClient.Wait(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -1072,46 +999,6 @@ func (s *service) Cleanup(requestCtx context.Context) (*taskAPI.DeleteResponse, 
 		ExitedAt:   time.Now(),
 		ExitStatus: 128 + uint32(unix.SIGKILL),
 	}, nil
-}
-
-func dialVsock(requestCtx context.Context, contextID, port uint32) (net.Conn, error) {
-	// VM should start within 200ms, vsock dial will make retries at 100ms, 200ms, 400ms, 800ms, 1.6s, 3.2s, 6.4s
-	const (
-		retryCount      = 7
-		initialDelay    = 100 * time.Millisecond
-		delayMultiplier = 2
-	)
-
-	var lastErr error
-	var currentDelay = initialDelay
-
-	for i := 1; i <= retryCount; i++ {
-		select {
-		case <-requestCtx.Done():
-			return nil, requestCtx.Err()
-		default:
-			conn, err := vsock.Dial(contextID, port)
-			if err == nil {
-				log.G(requestCtx).WithField("connection", conn).Debug("Dial succeeded")
-				return conn, nil
-			}
-
-			log.G(requestCtx).WithError(err).Warnf("vsock dial failed (attempt %d of %d), will retry in %s", i, retryCount, currentDelay)
-			time.Sleep(currentDelay)
-
-			lastErr = err
-			currentDelay *= delayMultiplier
-		}
-	}
-
-	log.G(requestCtx).WithError(lastErr).WithFields(logrus.Fields{"context_id": contextID, "port": port}).Error("vsock dial failed")
-	return nil, lastErr
-}
-
-func cidDialer(cid uint32) vm.VSockConnector {
-	return func(requestCtx context.Context, port uint32) (net.Conn, error) {
-		return dialVsock(requestCtx, cid, port)
-	}
 }
 
 // findNextAvailableVsockCID finds first available vsock context ID.
@@ -1169,58 +1056,6 @@ func findNextAvailableVsockCID(requestCtx context.Context) (cid uint32, file *os
 	}
 
 	return 0, nil, errors.New("couldn't find any available vsock context id")
-}
-
-func (s *service) monitorTaskExit(exitAfterAllTasksGone bool) {
-	exitEvents, exitEventErrs := s.eventExchange.Subscribe(s.shimCtx, fmt.Sprintf(`topic=="%s"`, runtime.TaskExitEventTopic))
-
-	var err error
-	defer func() {
-		if err != nil && err != context.Canceled {
-			s.logger.WithError(err).Error("error while waiting for task exit events")
-		}
-	}()
-
-	for {
-		select {
-		case envelope := <-exitEvents:
-			unmarshaledEvent, err := typeurl.UnmarshalAny(envelope.Event)
-			if err != nil {
-				s.logger.WithError(err).Error("error unmarshaling event")
-				continue
-			}
-
-			switch event := unmarshaledEvent.(type) {
-			case *eventsAPI.TaskExit:
-				logger := s.logger.WithField("id", event.ContainerID)
-				logger.Debug("received container exit event")
-
-				s.taskManager.Remove(event.ContainerID)
-
-				if exitAfterAllTasksGone {
-					// If we have no more containers, shutdown. If we still have containers left,
-					// this will be a no-op
-					_, err = s.Shutdown(s.shimCtx, &taskAPI.ShutdownRequest{})
-					if err != nil {
-						logger.WithError(err).Fatal("failed to shutdown after container exit")
-					}
-				}
-
-			default:
-				s.logger.Error("unexpected non-exit event type published on exit event channel")
-			}
-
-		case err = <-exitEventErrs:
-			if err != nil {
-				s.logger.WithError(err).Error("event error channel published to")
-			}
-
-		case <-s.shimCtx.Done():
-			err = s.shimCtx.Err()
-			return
-
-		}
-	}
 }
 
 func (s *service) monitorVMExit() {

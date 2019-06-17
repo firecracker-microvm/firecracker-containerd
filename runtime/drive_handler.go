@@ -18,7 +18,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sync/atomic"
+	"sync"
+
+	"github.com/sirupsen/logrus"
 
 	firecracker "github.com/firecracker-microvm/firecracker-go-sdk"
 	models "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
@@ -27,15 +29,14 @@ import (
 )
 
 const (
-	// minFCDriveImageBytes is the minimum size that will be visible to Firecracker.
-	minFCDriveImageBytes = 512
+	// fcSectorSize is the sector size of Firecracker
+	fcSectorSize = 512
 )
 
 var (
-	// ErrStubDrivesExhausted occurs when there are no more stub drives left to
-	// use. This can happen by calling PatchStubDrive greater than the stub drive
-	// list.
-	ErrStubDrivesExhausted = fmt.Errorf("There are no remaining stub drives to use")
+	// ErrDrivesExhausted occurs when there are no more drives left to use. This
+	// can happen by calling PatchStubDrive greater than the number of drives.
+	ErrDrivesExhausted = fmt.Errorf("There are no remaining drives to be used")
 
 	// ErrDriveIDNil should never happen, but we safe guard against nil dereferencing
 	ErrDriveIDNil = fmt.Errorf("DriveID of current drive is nil")
@@ -46,9 +47,11 @@ type stubDriveHandler struct {
 	RootPath       string
 	stubDriveIndex int64
 	drives         []models.Drive
+	logger         *logrus.Entry
+	mutex          sync.Mutex
 }
 
-func newStubDriveHandler(path string) stubDriveHandler {
+func newStubDriveHandler(path string, logger *logrus.Entry) stubDriveHandler {
 	return stubDriveHandler{
 		RootPath: path,
 	}
@@ -56,61 +59,76 @@ func newStubDriveHandler(path string) stubDriveHandler {
 
 // StubDrivePaths will create stub drives and return the paths associated with
 // the stub drives.
-func (h *stubDriveHandler) StubDrivePaths(amount int) ([]string, error) {
+func (h *stubDriveHandler) StubDrivePaths(count int) ([]string, error) {
 	paths := []string{}
-	for i := 0; i < amount; i++ {
+	for i := 0; i < count; i++ {
 		driveID := fmt.Sprintf("stub%d", i)
 		path := filepath.Join(h.RootPath, driveID)
 
-		f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0600)
-		if err != nil {
-			return nil, err
-		}
-
-		stubContent, err := internal.GenerateStubContent(driveID)
-		if err != nil {
-			f.Close()
-			return nil, err
-		}
-
-		// Ensure that we do not exceed 512 bytes as that is the minimum amount of
-		// bytes needed to be visibile in Firecracker.
-		// Format is <Magic Stub Bytes><Byte><ID Bytes> and the size of those bytes
-		// cannot exceed 512 bytes.
-		if stubContentSize := len(stubContent); stubContentSize > minFCDriveImageBytes {
-			return nil, fmt.Errorf(
-				"Length of generated content, %d, exceeds %d bytes and would be truncated",
-				stubContentSize,
-				minFCDriveImageBytes,
-			)
-		}
-
-		if _, err := f.WriteString(stubContent); err != nil {
-			f.Close()
-			return nil, err
-		}
-
-		// Firecracker will not show any drives smaller than 512 bytes. In
-		// addition, the drive is read in chunks of 512 bytes; if the drive size is
-		// not a multiple of 512 bytes, then the remainder will not be visible to
-		// Firecracker.
-		if err := os.Truncate(path, minFCDriveImageBytes); err != nil {
-			f.Close()
+		if err := h.createStubDrive(driveID, path); err != nil {
 			return nil, err
 		}
 
 		paths = append(paths, path)
-		f.Close()
 	}
 
 	return paths, nil
 }
 
-// SetDrives will set the given drives based off the VM id. The index
-// represents where the stub drive index starts.
-func (h *stubDriveHandler) SetDrives(index int64, d []models.Drive) {
+func (h *stubDriveHandler) createStubDrive(driveID, path string) error {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := f.Close(); err != nil {
+			h.logger.WithError(err).Errorf("unexpected error during %v close", f.Name())
+		}
+	}()
+
+	stubContent, err := internal.GenerateStubContent(driveID)
+	if err != nil {
+		return err
+	}
+
+	if _, err := f.WriteString(stubContent); err != nil {
+		return err
+	}
+
+	info, err := f.Stat()
+	if err != nil {
+		return err
+	}
+
+	fileSize := info.Size()
+	sectorCount := fileSize / fcSectorSize
+	driveSize := fcSectorSize * sectorCount
+
+	remainingBytes := fileSize % fcSectorSize
+	if remainingBytes != 0 {
+		// If there are any residual bytes, this means we've need to fill the
+		// appropriate sector size to ensure that the data is visible to
+		// Firecracker.
+		driveSize += fcSectorSize
+	}
+
+	// Firecracker will not show any drives smaller than 512 bytes. In
+	// addition, the drive is read in chunks of 512 bytes; if the drive size is
+	// not a multiple of 512 bytes, then the remainder will not be visible to
+	// Firecracker. So we adjust to the appropriate size based on the residual
+	// bytes remaining.
+	if err := os.Truncate(path, driveSize); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// SetDrives will set the given drives and the offset to which the stub drives
+// start.
+func (h *stubDriveHandler) SetDrives(offset int64, d []models.Drive) {
 	h.drives = d
-	h.stubDriveIndex = index
+	h.stubDriveIndex = offset
 }
 
 // GetDrives returns the associated stub drives
@@ -132,19 +150,15 @@ func (h *stubDriveHandler) InDriveSet(path string) bool {
 
 // PatchStubDrive will replace the next available stub drive with the provided drive
 func (h *stubDriveHandler) PatchStubDrive(ctx context.Context, client firecracker.MachineIface, pathOnHost string) (*string, error) {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
 
-	if v := atomic.LoadInt64(&h.stubDriveIndex) - 1; v >= int64(len(h.drives)) {
-		return nil, ErrStubDrivesExhausted
-	}
-
-	stubDriveIndex := atomic.AddInt64(&h.stubDriveIndex, 1) - 1
 	// Check to see if stubDriveIndex has increased more than the drive amount.
-	// This can occur when operations are racing on the atomic.LoadInt64
-	if stubDriveIndex >= int64(len(h.drives)) {
-		return nil, ErrStubDrivesExhausted
+	if h.stubDriveIndex >= int64(len(h.drives)) {
+		return nil, ErrDrivesExhausted
 	}
 
-	d := h.drives[stubDriveIndex]
+	d := h.drives[h.stubDriveIndex]
 	d.PathOnHost = &pathOnHost
 
 	if d.DriveID == nil {
@@ -153,12 +167,13 @@ func (h *stubDriveHandler) PatchStubDrive(ctx context.Context, client firecracke
 		return nil, ErrDriveIDNil
 	}
 
-	h.drives[stubDriveIndex] = d
+	h.drives[h.stubDriveIndex] = d
 
 	err := client.UpdateGuestDrive(ctx, firecracker.StringValue(d.DriveID), pathOnHost)
 	if err != nil {
 		return nil, err
 	}
 
+	h.stubDriveIndex++
 	return d.DriveID, nil
 }

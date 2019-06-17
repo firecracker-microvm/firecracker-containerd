@@ -38,11 +38,10 @@ type drive struct {
 type driveHandler struct {
 	// drives is a mapping to all the stub drives
 	drives map[string]drive
-	// BlockPath is the path which lists all block devices. In Linux this is
-	// typically /sys/block
+	// BlockPath contains the location of the block subdirectory under the sysfs
+	// mount point.
 	BlockPath string
-	// DrivePath is the directory where the list of drives will be found. In
-	// Linux this is typically /dev
+	// DrivePath should contain the location of the drive block device nodes.
 	DrivePath string
 }
 

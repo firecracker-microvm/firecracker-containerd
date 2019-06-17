@@ -17,8 +17,12 @@ import (
 	"context"
 	"io/ioutil"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
+
+	"github.com/containerd/containerd/log"
 
 	"github.com/firecracker-microvm/firecracker-go-sdk"
 	models "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
@@ -35,7 +39,8 @@ func TestStubDriveHandler(t *testing.T) {
 		os.RemoveAll(tempPath)
 	}()
 
-	handler := newStubDriveHandler(tempPath)
+	logger := log.G(context.Background())
+	handler := newStubDriveHandler(tempPath, logger)
 	paths, err := handler.StubDrivePaths(5)
 	assert.NoError(t, err)
 	assert.Equal(t, 5, len(paths))
@@ -201,4 +206,44 @@ func TestPatchStubDrive_concurrency(t *testing.T) {
 		delete(validPaths, path)
 	}
 
+}
+
+func TestCreateStubDrive(t *testing.T) {
+	cases := []struct {
+		Name          string
+		DriveID       string
+		ExpectedSize  int64
+		ExpectedError bool
+	}{
+		{
+			Name:         "valid case",
+			DriveID:      "foo",
+			ExpectedSize: fcSectorSize,
+		},
+		{
+			Name:         "residual bytes case",
+			DriveID:      strings.Repeat("0", 0xFF),
+			ExpectedSize: fcSectorSize,
+		},
+	}
+
+	tmpDir := os.TempDir()
+	path, err := ioutil.TempDir(tmpDir, "TestCreateStubDrive")
+	assert.NoError(t, err, "failed to create test directory")
+	defer os.RemoveAll(path)
+
+	for _, c := range cases {
+		c := c // see https://github.com/kyoh86/scopelint/issues/4
+		t.Run(c.Name, func(t *testing.T) {
+			logger := log.G(context.Background())
+			handler := newStubDriveHandler(path, logger)
+			stubDrivePath := filepath.Join(path, c.Name)
+			err := handler.createStubDrive(c.DriveID, stubDrivePath)
+			assert.Equal(t, c.ExpectedError, err != nil, "invalid error: %v", err)
+
+			info, err := os.Stat(stubDrivePath)
+			assert.NoError(t, err, "failed to stat %v", stubDrivePath)
+			assert.Equal(t, c.ExpectedSize, info.Size(), "mismatch of sizes")
+		})
+	}
 }

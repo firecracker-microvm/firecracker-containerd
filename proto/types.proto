@@ -11,6 +11,7 @@ message ExtraData {
 	uint32 StdinPort = 3;
 	uint32 StdoutPort = 4;
 	uint32 StderrPort = 5;
+	string DriveID = 6;
 }
 
 // Message to specify network config for a Firecracker VM

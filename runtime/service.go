@@ -187,7 +187,7 @@ func NewService(shimCtx context.Context, id string, remotePublisher shim.Publish
 		vmReady: make(chan struct{}),
 	}
 
-	s.stubDriveHandler = newStubDriveHandler(s.shimDir().RootPath())
+	s.stubDriveHandler = newStubDriveHandler(s.shimDir().RootPath(), logger)
 	s.startEventForwarders(remotePublisher)
 
 	err = s.serveFCControl()
@@ -306,9 +306,8 @@ func (s *service) StartShim(shimCtx context.Context, containerID, containerdBina
 		s.vmID = uuid.String()
 
 		// If the client didn't specify a VMID, the VM should exit after this task is gone
+		// and should expect to run a task
 		exitAfterAllTasksGone = true
-		// If the client didn't specify a VMID, we assume the VM is going to run a
-		// single container
 		containerCount = 1
 	}
 
@@ -322,9 +321,7 @@ func (s *service) StartShim(shimCtx context.Context, containerID, containerdBina
 	_, err = fcControlClient.CreateVM(shimCtx, &proto.CreateVMRequest{
 		VMID:                  s.vmID,
 		ExitAfterAllTasksGone: exitAfterAllTasksGone,
-		// if containerCount is zero, that signifies that the VM ID has been
-		// specified or CreateVM was not called
-		ContainerCount: int32(containerCount),
+		ContainerCount:        int32(containerCount),
 	})
 	if err != nil {
 		errStatus, ok := status.FromError(err)
@@ -625,7 +622,8 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 	containerCount := int(req.ContainerCount)
 	if containerCount < 1 {
 		// containerCount should always be positive so that at least one container
-		// can run inside the VM.
+		// can run inside the VM. This makes the assumption that a task is going
+		// to be run, and to do that at least one container is needed.
 		containerCount = 1
 	}
 

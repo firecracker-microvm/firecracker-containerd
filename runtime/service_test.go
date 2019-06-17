@@ -184,7 +184,7 @@ func TestBuildVMConfiguration(t *testing.T) {
 			assert.NoError(t, err)
 			defer os.RemoveAll(tempDir)
 
-			svc.stubDriveHandler = newStubDriveHandler(tempDir)
+			svc.stubDriveHandler = newStubDriveHandler(tempDir, svc.logger)
 			// For values that remain constant between tests, they are written here
 			tc.expectedCfg.SocketPath = svc.shimDir().FirecrackerSockPath()
 			tc.expectedCfg.VsockDevices = []firecracker.VsockDevice{{Path: "root", CID: svc.machineCID}}

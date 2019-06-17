@@ -15,6 +15,9 @@ package main
 
 import (
 	"context"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 	"syscall"
 	"testing"
 
@@ -56,8 +59,8 @@ func TestFindNextAvailableVsockCID(t *testing.T) {
 func TestBuildVMConfiguration(t *testing.T) {
 	namespace := "TestBuildVMConfiguration"
 	rootfsDrive := models.Drive{
-		DriveID:      firecracker.String("containerRootfs"), // TODO: See https://github.com/firecracker-microvm/firecracker-containerd/pull/154
-		PathOnHost:   firecracker.String("/dev/null"),
+		DriveID:      firecracker.String("stub0"),
+		PathOnHost:   nil, // will be populated in the for loop
 		IsReadOnly:   firecracker.Bool(false),
 		IsRootDevice: firecracker.Bool(false),
 	}
@@ -176,11 +179,18 @@ func TestBuildVMConfiguration(t *testing.T) {
 				logger:    logrus.WithField("test", namespace+"/"+tc.name),
 				config:    tc.config,
 			}
+
+			tempDir, err := ioutil.TempDir(os.TempDir(), namespace)
+			assert.NoError(t, err)
+			defer os.RemoveAll(tempDir)
+
+			svc.stubDriveHandler = newStubDriveHandler(tempDir)
 			// For values that remain constant between tests, they are written here
 			tc.expectedCfg.SocketPath = svc.shimDir().FirecrackerSockPath()
 			tc.expectedCfg.VsockDevices = []firecracker.VsockDevice{{Path: "root", CID: svc.machineCID}}
 			tc.expectedCfg.LogFifo = svc.shimDir().FirecrackerLogFifoPath()
 			tc.expectedCfg.MetricsFifo = svc.shimDir().FirecrackerMetricsFifoPath()
+			tc.expectedCfg.Drives[0].PathOnHost = firecracker.String(filepath.Join(tempDir, "stub0"))
 
 			actualCfg, err := svc.buildVMConfiguration(tc.request)
 			assert.NoError(t, err)

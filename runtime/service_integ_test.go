@@ -41,6 +41,7 @@ import (
 	"github.com/shirou/gopsutil/process"
 	"github.com/stretchr/testify/require"
 
+	_ "github.com/firecracker-microvm/firecracker-containerd/firecracker-control"
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	fccontrol "github.com/firecracker-microvm/firecracker-containerd/proto/service/fccontrol/ttrpc"
@@ -94,6 +95,17 @@ func TestShimExitsUponContainerKill_Isolated(t *testing.T) {
 		),
 	)
 	require.NoError(t, err, "failed to create container %s", containerName)
+
+	_, err = client.NewContainer(testCtx,
+		fmt.Sprintf("should-fail-%s-%d", t.Name(), time.Now().UnixNano()),
+		containerd.WithRuntime(firecrackerRuntime, nil),
+		containerd.WithSnapshotter(naiveSnapshotterName),
+		containerd.WithNewSnapshot(snapshotName, image),
+		containerd.WithNewSpec(
+			oci.WithProcessArgs("sleep", fmt.Sprintf("%d", testTimeout/time.Second)),
+		),
+	)
+	require.Error(t, err, "should not be able to create additional container when no drives are available")
 
 	task, err := container.NewTask(testCtx, cio.NewCreator(cio.WithStdio))
 	require.NoError(t, err, "failed to create task for container %s", containerName)
@@ -237,6 +249,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 						AllowMMDS:   true,
 					},
 				},
+				ContainerCount: containersPerVM,
 			})
 			require.NoError(t, err, "failed to create vm")
 
@@ -319,4 +332,103 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 	}
 
 	vmWg.Wait()
+}
+
+func TestStubBlockDevices_Isolated(t *testing.T) {
+	internal.RequiresIsolation(t)
+	const vmID = 0
+
+	ctx := namespaces.WithNamespace(context.Background(), "default")
+
+	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	defer client.Close()
+
+	image, err := client.Pull(ctx, debianDockerImage, containerd.WithPullUnpack, containerd.WithPullSnapshotter(naiveSnapshotterName))
+	require.NoError(t, err, "failed to pull image %s, is the the %s snapshotter running?", debianDockerImage, naiveSnapshotterName)
+
+	// TODO once Noah's immutable rootfs change is merged, we can use that as our rootfs for all VMs instead of copying
+	// one per-VM
+	rootfsBytes, err := ioutil.ReadFile(defaultVMRootfsPath)
+	require.NoError(t, err, "failed to read rootfs file")
+	rootfsPath := fmt.Sprintf("%s.%d", defaultVMRootfsPath, vmID)
+	err = ioutil.WriteFile(rootfsPath, rootfsBytes, 0600)
+	require.NoError(t, err, "failed to copy vm rootfs to %s", rootfsPath)
+
+	tapName := fmt.Sprintf("tap%d", vmID)
+	err = createTapDevice(ctx, tapName)
+	require.NoError(t, err, "failed to create tap device for vm %d", vmID)
+
+	containerName := fmt.Sprintf("%s-%d", t.Name(), time.Now().UnixNano())
+	snapshotName := fmt.Sprintf("%s-snapshot", containerName)
+
+	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
+	require.NoError(t, err, "failed to create ttrpc client")
+
+	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
+	_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
+		VMID: strconv.Itoa(vmID),
+		RootDrive: &proto.FirecrackerDrive{
+			PathOnHost:   rootfsPath,
+			IsReadOnly:   false,
+			IsRootDevice: true,
+		},
+		NetworkInterfaces: []*proto.FirecrackerNetworkInterface{
+			{
+				HostDevName: tapName,
+				MacAddress:  vmIDtoMacAddr(uint(vmID)),
+				AllowMMDS:   true,
+			},
+		},
+		ContainerCount: 5,
+	})
+	require.NoError(t, err, "failed to create VM")
+
+	newContainer, err := client.NewContainer(ctx,
+		containerName,
+		containerd.WithSnapshotter(naiveSnapshotterName),
+		containerd.WithNewSnapshot(snapshotName, image),
+		containerd.WithNewSpec(
+			oci.WithProcessArgs("lsblk"),
+			firecrackeroci.WithVMID(strconv.Itoa(vmID)),
+		),
+	)
+	require.NoError(t, err, "failed to create container %s", containerName)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	newTask, err := newContainer.NewTask(ctx,
+		cio.NewCreator(cio.WithStreams(nil, bufio.NewWriter(&stdout), bufio.NewWriter(&stderr))))
+	require.NoError(t, err, "failed to create task for container %s", containerName)
+
+	err = newTask.Start(ctx)
+	require.NoError(t, err, "failed to start task for container %s", containerName)
+
+	exitCh, err := newTask.Wait(ctx)
+	require.NoError(t, err, "failed to wait on task for container %s", containerName)
+
+	const containerID = 0
+
+	select {
+	case exitStatus := <-exitCh:
+		// if there was anything on stderr, print it to assist debugging
+		stderrOutput := stderr.String()
+		if len(stderrOutput) != 0 {
+			fmt.Printf("stderr output from vm %d, container %d: %s", vmID, containerID, stderrOutput)
+		}
+
+		const expectedOutput = `NAME MAJ:MIN RM  SIZE RO TYPE MOUNTPOINT
+vda  254:0    0   64M  0 disk 
+vdc  254:32   0  512B  0 disk 
+vdd  254:48   0  512B  0 disk 
+vde  254:64   0  512B  0 disk 
+vdf  254:80   0  512B  0 disk`
+
+		require.Equal(t, uint32(0), exitStatus.ExitCode())
+		require.Equal(t, expectedOutput, strings.TrimSpace(stdout.String()))
+	case <-ctx.Done():
+		require.Fail(t, "context cancelled",
+			"context cancelled while waiting for container %s to exit, err: %v", containerName, ctx.Err())
+	}
 }

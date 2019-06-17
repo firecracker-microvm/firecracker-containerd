@@ -15,9 +15,11 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"path/filepath"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	"github.com/containerd/containerd/cio"
@@ -62,8 +64,9 @@ type TaskService struct {
 	//
 	// This approach is also taken by containerd's current reference runc shim
 	// v2 implementation
-	shimCtx    context.Context
-	shimCancel context.CancelFunc
+	shimCtx      context.Context
+	shimCancel   context.CancelFunc
+	driveHandler *driveHandler
 }
 
 // NewTaskService creates new runc shim wrapper
@@ -77,12 +80,18 @@ func NewTaskService(shimCtx context.Context, shimCancel context.CancelFunc, publ
 		return nil, err
 	}
 
+	dh, err := newDriveHandler(blockPath, drivePath)
+	if err != nil {
+		return nil, err
+	}
+
 	return &TaskService{
 		taskManager: vm.NewTaskManager(log.G(shimCtx), runcService),
 
-		publisher:  publisher,
-		shimCtx:    shimCtx,
-		shimCancel: shimCancel,
+		publisher:    publisher,
+		shimCtx:      shimCtx,
+		shimCancel:   shimCancel,
+		driveHandler: dh,
 	}, nil
 }
 
@@ -126,11 +135,15 @@ func (ts *TaskService) Create(requestCtx context.Context, req *taskAPI.CreateTas
 		return nil, errors.Wrap(err, "failed to write oci config file")
 	}
 
-	// TODO replace with proper drive mounting once that PR is merged. Right now, all containers in
-	// this VM start up with the same rootfs image no matter their configuration
-	err = bundleDir.MountRootfs("/dev/vdb", "ext4", nil)
+	driveID := strings.TrimSpace(extraData.DriveID)
+	drive, ok := ts.driveHandler.GetDrive(driveID)
+	if !ok {
+		return nil, fmt.Errorf("Drive %q could not be found", driveID)
+	}
+
+	err = bundleDir.MountRootfs(drive.Path(), "ext4", nil)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to mount rootfs device")
+		return nil, err
 	}
 
 	// Create a runc shim to manage this task

@@ -16,46 +16,52 @@ package vm
 import (
 	"context"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/mdlayher/vsock"
 	"github.com/sirupsen/logrus"
 )
 
+const (
+	vsockConnectTimeout = 20 * time.Second
+)
+
 // VSockDial attempts to connect to a vsock listener at the provided cid and port with a hardcoded number
 // of retries.
 func VSockDial(reqCtx context.Context, logger *logrus.Entry, contextID, port uint32) (net.Conn, error) {
-	// VM should start within 200ms, vsock dial will make retries at 100ms, 200ms, 400ms, 800ms, 1.6s, 3.2s, 6.4s
-	const (
-		retryCount      = 7
-		initialDelay    = 100 * time.Millisecond
-		delayMultiplier = 2
-	)
+	// Retries occur every 100ms up to vsockConnectTimeout
+	const retryInterval = 100 * time.Millisecond
+	ctx, cancel := context.WithTimeout(reqCtx, vsockConnectTimeout)
+	defer cancel()
 
-	var lastErr error
-	var currentDelay = initialDelay
+	var attemptCount int
+	for range time.NewTicker(retryInterval).C {
+		attemptCount++
+		logger = logger.WithField("attempt", attemptCount)
 
-	for i := 1; i <= retryCount; i++ {
 		select {
-		case <-reqCtx.Done():
-			return nil, reqCtx.Err()
+		case <-ctx.Done():
+			return nil, ctx.Err()
 		default:
 			conn, err := vsock.Dial(contextID, port)
 			if err == nil {
-				logger.WithField("connection", conn).Debug("Dial succeeded")
+				logger.WithField("connection", conn).Debug("vsock dial succeeded")
 				return conn, nil
 			}
 
-			logger.WithError(err).Warnf("vsock dial failed (attempt %d of %d), will retry in %s", i, retryCount, currentDelay)
-			time.Sleep(currentDelay)
+			// ENXIO and ECONNRESET can be returned while the VM+agent are still in the midst of booting
+			if isTemporaryNetErr(err) || isENXIO(err) || isECONNRESET(err) {
+				logger.WithError(err).Debug("temporary vsock dial failure")
+				continue
+			}
 
-			lastErr = err
-			currentDelay *= delayMultiplier
+			logger.WithError(err).Error("non-temporary vsock dial failure")
+			return nil, err
 		}
 	}
 
-	logger.WithError(lastErr).WithFields(logrus.Fields{"context_id": contextID, "port": port}).Error("vsock dial failed")
-	return nil, lastErr
+	panic("unreachable code") // appeases the compiler, which doesn't know the for loop is infinite
 }
 
 // VSockDialConnector provides an IOConnector interface to the VSockDial function.
@@ -77,6 +83,47 @@ func VSockDialConnector(contextID, port uint32) IOConnector {
 	}
 }
 
+func vsockAccept(reqCtx context.Context, logger *logrus.Entry, port uint32) (net.Conn, error) {
+	listener, err := vsock.Listen(port)
+	if err != nil {
+		return nil, err
+	}
+
+	defer listener.Close()
+
+	// Retries occur every 10ms up to vsockConnectTimeout
+	const retryInterval = 10 * time.Millisecond
+	ctx, cancel := context.WithTimeout(reqCtx, vsockConnectTimeout)
+	defer cancel()
+
+	var attemptCount int
+	for range time.NewTicker(retryInterval).C {
+		attemptCount++
+		logger = logger.WithField("attempt", attemptCount)
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+			// accept is non-blocking so try to accept until we get a connection
+			conn, err := listener.Accept()
+			if err == nil {
+				return conn, nil
+			}
+
+			if isTemporaryNetErr(err) {
+				logger.WithError(err).Debug("temporary stdio vsock accept failure")
+				continue
+			}
+
+			logger.WithError(err).Error("non-temporary stdio vsock accept failure")
+			return nil, err
+		}
+	}
+
+	panic("unreachable code") // appeases the compiler, which doesn't know the for loop is infinite
+}
+
 // VSockAcceptConnector provides an IOConnector that establishes the connection by listening on the provided
 // vsock port and accepting the first connection that comes in.
 func VSockAcceptConnector(port uint32) IOConnector {
@@ -86,47 +133,11 @@ func VSockAcceptConnector(port uint32) IOConnector {
 		go func() {
 			defer close(returnCh)
 
-			listener, err := vsock.Listen(port)
-			if err != nil {
-				returnCh <- IOConnectorResult{
-					Err: err,
-				}
-				return
+			conn, err := vsockAccept(procCtx, logger, port)
+			returnCh <- IOConnectorResult{
+				ReadWriteCloser: conn,
+				Err:             err,
 			}
-
-			defer listener.Close()
-
-			for range time.NewTicker(10 * time.Millisecond).C {
-				select {
-				case <-procCtx.Done():
-					returnCh <- IOConnectorResult{
-						Err: procCtx.Err(),
-					}
-					return
-				default:
-					// accept is non-blocking so try to accept until we get a connection
-					conn, err := listener.Accept()
-					if err == nil {
-						returnCh <- IOConnectorResult{
-							ReadWriteCloser: conn,
-						}
-						return
-					}
-
-					if isTemporaryNetErr(err) {
-						logger.WithError(err).Debug("temporary stdio vsock accept failure")
-						continue
-					}
-
-					logger.WithError(err).Error("non-temporary stdio vsock accept failure")
-					returnCh <- IOConnectorResult{
-						Err: err,
-					}
-					return
-				}
-			}
-
-			panic("unreachable code") // appeases the compiler, which doesn't know the for loop is infinite
 		}()
 
 		return returnCh
@@ -139,4 +150,17 @@ func isTemporaryNetErr(err error) bool {
 	})
 
 	return err != nil && ok && terr.Temporary()
+}
+
+// Unfortunately, as "documented" on various online forums, there's no ideal way to
+// test for actual Linux error codes returned by the net library or wrappers
+// around that library. The common approach is to fall back on string matching,
+// which is done for the functions below
+
+func isENXIO(err error) bool {
+	return strings.HasSuffix(err.Error(), "no such device")
+}
+
+func isECONNRESET(err error) bool {
+	return strings.HasSuffix(err.Error(), "connection reset by peer")
 }

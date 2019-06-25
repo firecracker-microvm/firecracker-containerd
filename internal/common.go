@@ -13,6 +13,12 @@
 
 package internal
 
+import (
+	"bytes"
+	"fmt"
+	"io"
+)
+
 const (
 	// StdinPort represents vsock port to be used for stdin
 	StdinPort = 11000
@@ -56,3 +62,63 @@ const (
 	// ShimBinaryName is the name of the runtime shim binary
 	ShimBinaryName = "containerd-shim-aws-firecracker"
 )
+
+// MagicStubBytes used to determine whether or not a drive is a stub drive
+var MagicStubBytes = []byte{214, 244, 216, 245, 215, 177, 177, 177}
+
+// IsStubDrive will check to see if the io.Reader follows our stub drive
+// format. In the event of an error, this will return false. This will only
+// return true when the first n bytes read matches that of the magic stub
+// bytes and where n is the length of magic bytes.
+func IsStubDrive(r io.Reader) bool {
+	buf := make([]byte, len(MagicStubBytes))
+	lr := io.LimitReader(r, int64(len(MagicStubBytes)))
+	n, err := lr.Read(buf)
+	if err != nil {
+		return false
+	}
+
+	if n != len(MagicStubBytes) {
+		return false
+	}
+
+	return bytes.Equal(buf[:n], MagicStubBytes)
+}
+
+// ParseStubContent will parse the contents of an io.Reader and return the
+// given id that was encoded
+func ParseStubContent(r io.Reader) (string, error) {
+	magicBytesReader := io.LimitReader(r, int64(len(MagicStubBytes)))
+	magicBytes := make([]byte, len(MagicStubBytes))
+	_, err := magicBytesReader.Read(magicBytes)
+	if err != nil {
+		return "", err
+	}
+
+	sizeReader := io.LimitReader(r, 1)
+	sizeByte := make([]byte, 1)
+	_, err = sizeReader.Read(sizeByte)
+	if err != nil {
+		return "", err
+	}
+
+	idReader := io.LimitReader(r, int64(sizeByte[0]))
+	idBytes := make([]byte, sizeByte[0])
+	_, err = idReader.Read(idBytes)
+	if err != nil {
+		return "", err
+	}
+
+	return string(idBytes), nil
+}
+
+// GenerateStubContent will generate stub content using the magic stub bytes
+// and a length encoded string
+func GenerateStubContent(id string) (string, error) {
+	length := len(id)
+	if length > 0xFF {
+		return "", fmt.Errorf("Length of drive id, %d, is too long and is limited to %d bytes", length, 0xFF)
+	}
+
+	return fmt.Sprintf("%s%c%s", MagicStubBytes, byte(length), id), nil
+}

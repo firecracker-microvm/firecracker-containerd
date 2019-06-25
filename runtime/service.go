@@ -122,9 +122,9 @@ type service struct {
 	// vmReady is closed once CreateVM has been successfully called
 	vmReady           chan struct{}
 	vmStartOnce       sync.Once
-	rootfsOnce        sync.Once // TODO remove once stub drives are merged
 	agentClient       taskAPI.TaskService
 	eventBridgeClient eventbridge.Getter
+	stubDriveHandler  stubDriveHandler
 
 	// taskManager is only instantiated after CreateVM has run successfully.
 	// Any use of it must be guarded by service.waitVMReady()
@@ -187,6 +187,7 @@ func NewService(shimCtx context.Context, id string, remotePublisher shim.Publish
 		vmReady: make(chan struct{}),
 	}
 
+	s.stubDriveHandler = newStubDriveHandler(s.shimDir().RootPath(), logger)
 	s.startEventForwarders(remotePublisher)
 
 	err = s.serveFCControl()
@@ -284,6 +285,7 @@ func (s *service) StartShim(shimCtx context.Context, containerID, containerdBina
 	bundleDir := bundle.Dir(cwd)
 
 	var exitAfterAllTasksGone bool
+	containerCount := 0
 
 	// Since we're running a shim start routine, we need to determine the vmID for the incoming
 	// container. Start by looking at the container's OCI annotations
@@ -304,7 +306,9 @@ func (s *service) StartShim(shimCtx context.Context, containerID, containerdBina
 		s.vmID = uuid.String()
 
 		// If the client didn't specify a VMID, the VM should exit after this task is gone
+		// and should expect to run a task
 		exitAfterAllTasksGone = true
+		containerCount = 1
 	}
 
 	client, err := ttrpcutil.NewClient(containerdAddress + ".ttrpc")
@@ -317,6 +321,7 @@ func (s *service) StartShim(shimCtx context.Context, containerID, containerdBina
 	_, err = fcControlClient.CreateVM(shimCtx, &proto.CreateVMRequest{
 		VMID:                  s.vmID,
 		ExitAfterAllTasksGone: exitAfterAllTasksGone,
+		ContainerCount:        int32(containerCount),
 	})
 	if err != nil {
 		errStatus, ok := status.FromError(err)
@@ -335,7 +340,7 @@ func logPanicAndDie(logger *logrus.Entry) {
 	}
 }
 
-func (s *service) generateExtraData(bundleDir bundle.Dir, options *ptypes.Any) (*proto.ExtraData, error) {
+func (s *service) generateExtraData(driveID string, bundleDir bundle.Dir, options *ptypes.Any) (*proto.ExtraData, error) {
 	// Add the bundle/config.json to the request so it can be recreated
 	// inside the vm:
 	// Read bundle json
@@ -361,6 +366,7 @@ func (s *service) generateExtraData(bundleDir bundle.Dir, options *ptypes.Any) (
 		StdinPort:   s.nextVSockPort(),
 		StdoutPort:  s.nextVSockPort(),
 		StderrPort:  s.nextVSockPort(),
+		DriveID:     driveID,
 	}, nil
 }
 
@@ -612,12 +618,29 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 		driveBuilder = firecracker.NewDrivesBuilder(s.config.RootDrive)
 	}
 
-	// TODO: Reserve fake drives here (https://github.com/firecracker-microvm/firecracker-containerd/pull/154)
-	// Right now, just a single hardcoded stub drive is allocated
-	driveBuilder = driveBuilder.AddDrive("/dev/null", false, func(drive *models.Drive) {
-		drive.IsRootDevice = firecracker.Bool(false)
-		drive.DriveID = firecracker.String("containerRootfs")
-	})
+	stubDriveIndex := int64(len(driveBuilder.Build()) - 1)
+	containerCount := int(req.ContainerCount)
+	if containerCount < 1 {
+		// containerCount should always be positive so that at least one container
+		// can run inside the VM. This makes the assumption that a task is going
+		// to be run, and to do that at least one container is needed.
+		containerCount = 1
+	}
+
+	paths, err := s.stubDriveHandler.StubDrivePaths(containerCount)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to retrieve stub drive paths")
+	}
+
+	for i, path := range paths {
+		driveID := fmt.Sprintf("stub%d", i)
+		driveBuilder = driveBuilder.AddDrive(path, false, func(drive *models.Drive) {
+			drive.DriveID = firecracker.String(driveID)
+		})
+	}
+
+	cfg.Drives = driveBuilder.Build()
+	s.stubDriveHandler.SetDrives(stubDriveIndex, cfg.Drives)
 
 	for _, drive := range req.AdditionalDrives {
 		driveBuilder = addDriveFromProto(driveBuilder, drive)
@@ -668,19 +691,16 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 		return nil, err
 	}
 
-	// TODO replace with proper drive mounting after that PR is merged
-	s.rootfsOnce.Do(func() {
-		defer logPanicAndDie(logger)
-
-		err := s.machine.UpdateGuestDrive(requestCtx, "containerRootfs", request.Rootfs[0].Source)
+	var driveID *string
+	for _, mnt := range request.Rootfs {
+		driveID, err = s.stubDriveHandler.PatchStubDrive(requestCtx, s.machine, mnt.Source)
 		if err != nil {
-			panic(err)
+			return nil, errors.Wrapf(err, "failed to patch stub drive")
 		}
-	})
 
-	logger.Info("creating task")
+	}
 
-	extraData, err := s.generateExtraData(bundleDir, request.Options)
+	extraData, err := s.generateExtraData(firecracker.StringValue(driveID), bundleDir, request.Options)
 	if err != nil {
 		err = errors.Wrap(err, "failed to generate extra data")
 		logger.WithError(err).Error()

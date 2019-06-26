@@ -295,6 +295,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 							fmt.Printf("stderr output from vm %d, container %d: %s", vmID, containerID, stderrOutput)
 						}
 
+						require.NoError(t, exitStatus.Error(), "failed to retrieve exitStatus")
 						require.Equal(t, uint32(0), exitStatus.ExitCode())
 						require.Equal(t, vmIDtoMacAddr(uint(vmID)), strings.TrimSpace(stdout.String()))
 					case <-ctx.Done():
@@ -425,6 +426,7 @@ vdd  254:48   0  512B  0 disk
 vde  254:64   0  512B  0 disk 
 vdf  254:80   0  512B  0 disk`
 
+		require.NoError(t, exitStatus.Error(), "failed to retrieve exitStatus")
 		require.Equal(t, uint32(0), exitStatus.ExitCode())
 		require.Equal(t, expectedOutput, strings.TrimSpace(stdout.String()))
 	case <-ctx.Done():

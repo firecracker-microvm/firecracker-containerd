@@ -403,11 +403,11 @@ func TestStubBlockDevices_Isolated(t *testing.T) {
 		cio.NewCreator(cio.WithStreams(nil, bufio.NewWriter(&stdout), bufio.NewWriter(&stderr))))
 	require.NoError(t, err, "failed to create task for container %s", containerName)
 
-	err = newTask.Start(ctx)
-	require.NoError(t, err, "failed to start task for container %s", containerName)
-
 	exitCh, err := newTask.Wait(ctx)
 	require.NoError(t, err, "failed to wait on task for container %s", containerName)
+
+	err = newTask.Start(ctx)
+	require.NoError(t, err, "failed to start task for container %s", containerName)
 
 	const containerID = 0
 

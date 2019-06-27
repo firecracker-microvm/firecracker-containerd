@@ -162,41 +162,48 @@ func (ts *TaskService) Create(requestCtx context.Context, req *taskAPI.CreateTas
 	req.Bundle = bundleDir.RootPath()
 	req.Rootfs = nil
 
-	// Override the incoming stdio FIFOs, which have paths from the host that we can't use
-	fifoSet, err := cio.NewFIFOSetInDir(bundleDir.RootPath(), req.ID, req.Terminal)
-	if err != nil {
-		logger.WithError(err).Error("failed opening stdio FIFOs")
-		return nil, errors.Wrap(err, "failed to open stdio FIFOs")
-	}
+	var ioConnectorSet vm.IOProxy
 
-	var stdinConnectorPair *vm.IOConnectorPair
-	if req.Stdin != "" {
-		req.Stdin = fifoSet.Stdin
-		stdinConnectorPair = &vm.IOConnectorPair{
-			ReadConnector:  vm.VSockAcceptConnector(extraData.StdinPort),
-			WriteConnector: vm.FIFOConnector(fifoSet.Stdin),
+	if vm.IsAgentOnlyIO(req.Stdout, logger) {
+		ioConnectorSet = vm.NewNullIOProxy()
+	} else {
+		// Override the incoming stdio FIFOs, which have paths from the host that we can't use
+		fifoSet, err := cio.NewFIFOSetInDir(bundleDir.RootPath(), req.ID, req.Terminal)
+		if err != nil {
+			logger.WithError(err).Error("failed opening stdio FIFOs")
+			return nil, errors.Wrap(err, "failed to open stdio FIFOs")
 		}
-	}
 
-	var stdoutConnectorPair *vm.IOConnectorPair
-	if req.Stdout != "" {
-		req.Stdout = fifoSet.Stdout
-		stdoutConnectorPair = &vm.IOConnectorPair{
-			ReadConnector:  vm.FIFOConnector(fifoSet.Stdout),
-			WriteConnector: vm.VSockAcceptConnector(extraData.StdoutPort),
+		var stdinConnectorPair *vm.IOConnectorPair
+		if req.Stdin != "" {
+			req.Stdin = fifoSet.Stdin
+			stdinConnectorPair = &vm.IOConnectorPair{
+				ReadConnector:  vm.VSockAcceptConnector(extraData.StdinPort),
+				WriteConnector: vm.FIFOConnector(fifoSet.Stdin),
+			}
 		}
-	}
 
-	var stderrConnectorPair *vm.IOConnectorPair
-	if req.Stderr != "" {
-		req.Stderr = fifoSet.Stderr
-		stderrConnectorPair = &vm.IOConnectorPair{
-			ReadConnector:  vm.FIFOConnector(fifoSet.Stderr),
-			WriteConnector: vm.VSockAcceptConnector(extraData.StderrPort),
+		var stdoutConnectorPair *vm.IOConnectorPair
+		if req.Stdout != "" {
+			req.Stdout = fifoSet.Stdout
+			stdoutConnectorPair = &vm.IOConnectorPair{
+				ReadConnector:  vm.FIFOConnector(fifoSet.Stdout),
+				WriteConnector: vm.VSockAcceptConnector(extraData.StdoutPort),
+			}
 		}
+
+		var stderrConnectorPair *vm.IOConnectorPair
+		if req.Stderr != "" {
+			req.Stderr = fifoSet.Stderr
+			stderrConnectorPair = &vm.IOConnectorPair{
+				ReadConnector:  vm.FIFOConnector(fifoSet.Stderr),
+				WriteConnector: vm.VSockAcceptConnector(extraData.StderrPort),
+			}
+		}
+
+		ioConnectorSet = vm.NewIOConnectorProxy(stdinConnectorPair, stdoutConnectorPair, stderrConnectorPair)
 	}
 
-	ioConnectorSet := vm.NewIOConnectorProxy(stdinConnectorPair, stdoutConnectorPair, stderrConnectorPair)
 	resp, err := ts.taskManager.CreateTask(requestCtx, req, ts.runcService, ioConnectorSet)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create runc shim for task")
@@ -349,41 +356,48 @@ func (ts *TaskService) Exec(requestCtx context.Context, req *taskAPI.ExecProcess
 
 	bundleDir := bundle.Dir(filepath.Join(containerRootDir, req.ID))
 
-	// Override the incoming stdio FIFOs, which have paths from the host that we can't use
-	fifoSet, err := cio.NewFIFOSetInDir(bundleDir.RootPath(), req.ExecID, req.Terminal)
-	if err != nil {
-		logger.WithError(err).Error("failed opening stdio FIFOs")
-		return nil, errors.Wrap(err, "failed to open stdio FIFOs")
-	}
+	var ioConnectorSet vm.IOProxy
 
-	var stdinConnectorPair *vm.IOConnectorPair
-	if req.Stdin != "" {
-		req.Stdin = fifoSet.Stdin
-		stdinConnectorPair = &vm.IOConnectorPair{
-			ReadConnector:  vm.VSockAcceptConnector(extraData.StdinPort),
-			WriteConnector: vm.FIFOConnector(fifoSet.Stdin),
+	if vm.IsAgentOnlyIO(req.Stdout, logger) {
+		ioConnectorSet = vm.NewNullIOProxy()
+	} else {
+		// Override the incoming stdio FIFOs, which have paths from the host that we can't use
+		fifoSet, err := cio.NewFIFOSetInDir(bundleDir.RootPath(), req.ExecID, req.Terminal)
+		if err != nil {
+			logger.WithError(err).Error("failed opening stdio FIFOs")
+			return nil, errors.Wrap(err, "failed to open stdio FIFOs")
 		}
-	}
 
-	var stdoutConnectorPair *vm.IOConnectorPair
-	if req.Stdout != "" {
-		req.Stdout = fifoSet.Stdout
-		stdoutConnectorPair = &vm.IOConnectorPair{
-			ReadConnector:  vm.FIFOConnector(fifoSet.Stdout),
-			WriteConnector: vm.VSockAcceptConnector(extraData.StdoutPort),
+		var stdinConnectorPair *vm.IOConnectorPair
+		if req.Stdin != "" {
+			req.Stdin = fifoSet.Stdin
+			stdinConnectorPair = &vm.IOConnectorPair{
+				ReadConnector:  vm.VSockAcceptConnector(extraData.StdinPort),
+				WriteConnector: vm.FIFOConnector(fifoSet.Stdin),
+			}
 		}
-	}
 
-	var stderrConnectorPair *vm.IOConnectorPair
-	if req.Stderr != "" {
-		req.Stderr = fifoSet.Stderr
-		stderrConnectorPair = &vm.IOConnectorPair{
-			ReadConnector:  vm.FIFOConnector(fifoSet.Stderr),
-			WriteConnector: vm.VSockAcceptConnector(extraData.StderrPort),
+		var stdoutConnectorPair *vm.IOConnectorPair
+		if req.Stdout != "" {
+			req.Stdout = fifoSet.Stdout
+			stdoutConnectorPair = &vm.IOConnectorPair{
+				ReadConnector:  vm.FIFOConnector(fifoSet.Stdout),
+				WriteConnector: vm.VSockAcceptConnector(extraData.StdoutPort),
+			}
 		}
+
+		var stderrConnectorPair *vm.IOConnectorPair
+		if req.Stderr != "" {
+			req.Stderr = fifoSet.Stderr
+			stderrConnectorPair = &vm.IOConnectorPair{
+				ReadConnector:  vm.FIFOConnector(fifoSet.Stderr),
+				WriteConnector: vm.VSockAcceptConnector(extraData.StderrPort),
+			}
+		}
+
+		ioConnectorSet = vm.NewIOConnectorProxy(stdinConnectorPair, stdoutConnectorPair, stderrConnectorPair)
 	}
 
-	ioConnectorSet := vm.NewIOConnectorProxy(stdinConnectorPair, stdoutConnectorPair, stderrConnectorPair)
 	resp, err := ts.taskManager.ExecProcess(requestCtx, req, ts.runcService, ioConnectorSet)
 	if err != nil {
 		logger.WithError(err).Error("exec failed")

@@ -6,11 +6,11 @@ require (
 	github.com/StackExchange/wmi v0.0.0-20181212234831-e0a55b97c705 // indirect
 	github.com/containerd/cgroups v0.0.0-20181105182409-82cb49fc1779 // indirect
 	github.com/containerd/console v0.0.0-20181022165439-0650fd9eeb50 // indirect
-	github.com/containerd/containerd v1.2.1-0.20190604174651-04e7747e2952
+	github.com/containerd/containerd v1.2.1-0.20190626153021-bb9616ba206c
 	github.com/containerd/continuity v0.0.0-20181027224239-bea7585dbfac
 	github.com/containerd/fifo v0.0.0-20180307165137-3d5202aec260
 	github.com/containerd/go-runc v0.0.0-20190226155025-7d11b49dc076 // indirect
-	github.com/containerd/ttrpc v0.0.0-20190529185706-a5bd8ce9e40b
+	github.com/containerd/ttrpc v0.0.0-20190613183316-1fb3814edf44
 	github.com/containerd/typeurl v0.0.0-20181015155603-461401dc8f19
 	github.com/coreos/go-systemd v0.0.0-20181031085051-9002847aa142 // indirect
 	github.com/docker/distribution v2.7.1+incompatible // indirect

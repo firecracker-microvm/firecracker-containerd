@@ -116,8 +116,14 @@ func (s *local) CreateVM(requestCtx context.Context, req *proto.CreateVMRequest)
 	// If we're here, there is no pre-existing shim for this VMID, so we spawn a new one
 	defer shimSocket.Close()
 
-	shimDir := vm.ShimDir(ns, id)
-	err = shimDir.Create()
+	shimDir, err := vm.ShimDir(ns, id)
+	if err != nil {
+		err = errors.Wrapf(err, "failed to build shim path")
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	err = shimDir.Mkdir()
 	if err != nil {
 		err = errors.Wrapf(err, "failed to create VM dir %q", shimDir.RootPath())
 		s.logger.WithError(err).Error()
@@ -266,7 +272,14 @@ func (s *local) newShim(ns, vmID, containerdAddress string, shimSocket *net.Unix
 
 	cmd := exec.Command(internal.ShimBinaryName, args...)
 
-	cmd.Dir = vm.ShimDir(ns, vmID).RootPath()
+	shimDir, err := vm.ShimDir(ns, vmID)
+	if err != nil {
+		err = errors.Wrap(err, "failed to create shim dir")
+		logger.WithError(err).Error()
+		return nil, err
+	}
+
+	cmd.Dir = shimDir.RootPath()
 
 	shimSocketFile, err := shimSocket.File()
 	if err != nil {

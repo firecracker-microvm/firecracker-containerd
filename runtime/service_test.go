@@ -186,10 +186,10 @@ func TestBuildVMConfiguration(t *testing.T) {
 
 			svc.stubDriveHandler = newStubDriveHandler(tempDir, svc.logger)
 			// For values that remain constant between tests, they are written here
-			tc.expectedCfg.SocketPath = svc.shimDir().FirecrackerSockPath()
+			tc.expectedCfg.SocketPath = svc.shimDir.FirecrackerSockPath()
 			tc.expectedCfg.VsockDevices = []firecracker.VsockDevice{{Path: "root", CID: svc.machineCID}}
-			tc.expectedCfg.LogFifo = svc.shimDir().FirecrackerLogFifoPath()
-			tc.expectedCfg.MetricsFifo = svc.shimDir().FirecrackerMetricsFifoPath()
+			tc.expectedCfg.LogFifo = svc.shimDir.FirecrackerLogFifoPath()
+			tc.expectedCfg.MetricsFifo = svc.shimDir.FirecrackerMetricsFifoPath()
 			tc.expectedCfg.Drives[0].PathOnHost = firecracker.String(filepath.Join(tempDir, "stub0"))
 
 			actualCfg, err := svc.buildVMConfiguration(tc.request)

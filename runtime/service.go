@@ -113,7 +113,9 @@ type service struct {
 	shimCtx    context.Context
 	shimCancel func()
 
-	vmID   string
+	vmID    string
+	shimDir vm.Dir
+
 	config *Config
 
 	// vmReady is closed once CreateVM has been successfully called
@@ -161,10 +163,16 @@ func NewService(shimCtx context.Context, id string, remotePublisher shim.Publish
 		namespace = namespaces.Default
 	}
 
+	var shimDir vm.Dir
 	vmID := os.Getenv(internal.VMIDEnvVarKey)
 	logger := log.G(shimCtx)
 	if vmID != "" {
 		logger = logger.WithField("vmID", vmID)
+
+		shimDir, err = vm.ShimDir(namespace, vmID)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	s := &service{
@@ -176,13 +184,15 @@ func NewService(shimCtx context.Context, id string, remotePublisher shim.Publish
 		shimCtx:    shimCtx,
 		shimCancel: shimCancel,
 
-		vmID:   vmID,
+		vmID:    vmID,
+		shimDir: shimDir,
+
 		config: config,
 
 		vmReady: make(chan struct{}),
 	}
 
-	s.stubDriveHandler = newStubDriveHandler(s.shimDir().RootPath(), logger)
+	s.stubDriveHandler = newStubDriveHandler(s.shimDir.RootPath(), logger)
 	s.startEventForwarders(remotePublisher)
 
 	err = s.serveFCControl()
@@ -453,7 +463,7 @@ func (s *service) createVM(requestCtx context.Context, request *proto.CreateVMRe
 
 	cmd := firecracker.VMCommandBuilder{}.
 		WithBin(s.config.FirecrackerBinaryPath).
-		WithSocketPath(s.shimDir().FirecrackerSockPath()).
+		WithSocketPath(s.shimDir.FirecrackerSockPath()).
 		Build(s.shimCtx) // shimCtx so the VM process is only killed when the shim shuts down
 
 	// use shimCtx so the VM is killed when the shim shuts down
@@ -563,18 +573,14 @@ func (s *service) SetVMMetadata(requestCtx context.Context, request *proto.SetVM
 	return &empty.Empty{}, nil
 }
 
-func (s *service) shimDir() vm.Dir {
-	return vm.ShimDir(s.namespace, s.vmID)
-}
-
 func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker.Config, error) {
 	logger := s.logger.WithField("cid", s.machineCID)
 
 	cfg := firecracker.Config{
-		SocketPath:   s.shimDir().FirecrackerSockPath(),
+		SocketPath:   s.shimDir.FirecrackerSockPath(),
 		VsockDevices: []firecracker.VsockDevice{{Path: "root", CID: s.machineCID}},
-		LogFifo:      s.shimDir().FirecrackerLogFifoPath(),
-		MetricsFifo:  s.shimDir().FirecrackerMetricsFifoPath(),
+		LogFifo:      s.shimDir.FirecrackerLogFifoPath(),
+		MetricsFifo:  s.shimDir.FirecrackerMetricsFifoPath(),
 		MachineCfg:   machineConfigurationFromProto(s.config, req.MachineCfg),
 	}
 
@@ -662,14 +668,14 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 	}).Debug("creating task")
 
 	bundleDir := bundle.Dir(request.Bundle)
-	err = s.shimDir().CreateBundleLink(request.ID, bundleDir)
+	err = s.shimDir.CreateBundleLink(request.ID, bundleDir)
 	if err != nil {
 		err = errors.Wrap(err, "failed to create VM dir bundle link")
 		logger.WithError(err).Error()
 		return nil, err
 	}
 
-	err = s.shimDir().CreateAddressLink(request.ID)
+	err = s.shimDir.CreateAddressLink(request.ID)
 	if err != nil {
 		err = errors.Wrap(err, "failed to create shim address symlink")
 		logger.WithError(err).Error()
@@ -983,9 +989,9 @@ func (s *service) Shutdown(requestCtx context.Context, req *taskAPI.ShutdownRequ
 		shutdownErr = multierror.Append(shutdownErr, errors.Wrap(err, "failed to gracefully stop VM"))
 	}
 
-	err = os.RemoveAll(s.shimDir().RootPath())
+	err = os.RemoveAll(s.shimDir.RootPath())
 	if err != nil {
-		shutdownErr = multierror.Append(shutdownErr, errors.Wrapf(err, "failed to remove VM dir %q during shutdown", s.shimDir().RootPath()))
+		shutdownErr = multierror.Append(shutdownErr, errors.Wrapf(err, "failed to remove VM dir %q during shutdown", s.shimDir.RootPath()))
 	}
 
 	if shutdownErr != nil {

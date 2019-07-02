@@ -86,7 +86,7 @@ RUN --mount=type=cache,from=build-base,source=/home/builder/cargo/registry,targe
 	source ${CARGO_HOME}/env \
 	&& git clone https://github.com/firecracker-microvm/firecracker.git \
 	&& cd firecracker \
-	&& git checkout v0.15.2 \
+	&& git checkout v0.17.0 \
 	&& cargo build --release --features vsock --target x86_64-unknown-linux-musl \
 	&& cp target/x86_64-unknown-linux-musl/release/firecracker /output \
 	&& cp target/x86_64-unknown-linux-musl/release/jailer /output
@@ -137,8 +137,6 @@ RUN --mount=type=cache,from=build-base,source=/home/builder/go/pkg/mod,target=/h
 # VM IMAGES
 #
 #########################################
-
-
 
 # Build a rootfs for the microVM, including runc and firecracker-containerd's agent
 FROM alpine:3.8 as firecracker-vm-root

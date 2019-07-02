@@ -25,8 +25,9 @@ import (
 func machineConfigurationFromProto(cfg *Config, req *proto.FirecrackerMachineConfiguration) models.MachineConfiguration {
 	config := models.MachineConfiguration{
 		CPUTemplate: models.CPUTemplate(cfg.CPUTemplate),
-		VcpuCount:   int64(cfg.CPUCount),
-		MemSizeMib:  defaultMemSizeMb,
+		VcpuCount:   firecracker.Int64(int64(cfg.CPUCount)),
+		MemSizeMib:  firecracker.Int64(defaultMemSizeMb),
+		HtEnabled:   firecracker.Bool(cfg.HtEnabled),
 	}
 
 	if req == nil {
@@ -38,14 +39,14 @@ func machineConfigurationFromProto(cfg *Config, req *proto.FirecrackerMachineCon
 	}
 
 	if count := req.VcpuCount; count > 0 {
-		config.VcpuCount = int64(count)
+		config.VcpuCount = firecracker.Int64(int64(count))
 	}
 
 	if size := req.MemSizeMib; size > 0 {
-		config.MemSizeMib = int64(size)
+		config.MemSizeMib = firecracker.Int64(int64(size))
 	}
 
-	config.HtEnabled = req.HtEnabled
+	config.HtEnabled = firecracker.Bool(req.HtEnabled)
 
 	return config
 }

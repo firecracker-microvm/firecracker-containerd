@@ -156,7 +156,7 @@ func (ts *TaskService) Create(requestCtx context.Context, req *taskAPI.CreateTas
 
 	err = bundleDir.MountRootfs(drive.Path(), "ext4", nil)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to mount rootfs")
+		return nil, errors.Wrapf(err, "failed to mount rootfs %q", drive.Path())
 	}
 
 	req.Bundle = bundleDir.RootPath()

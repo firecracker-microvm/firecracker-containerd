@@ -171,7 +171,7 @@ func NewService(shimCtx context.Context, id string, remotePublisher shim.Publish
 
 		shimDir, err = vm.ShimDir(namespace, vmID)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "invalid shim directory")
 		}
 	}
 

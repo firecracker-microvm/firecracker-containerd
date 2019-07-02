@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/containerd/containerd/identifiers"
 	"github.com/containerd/containerd/runtime/v2/shim"
 	"github.com/containerd/fifo"
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
@@ -33,8 +34,16 @@ const (
 
 // ShimDir holds files, sockets and FIFOs scoped to a single shim managing the
 // VM with the given VMID. It is unique per-VM and containerd namespace.
-func ShimDir(namespace, vmID string) Dir {
-	return Dir(filepath.Join(varRunDir, namespace, vmID))
+func ShimDir(namespace, vmID string) (Dir, error) {
+	if err := identifiers.Validate(namespace); err != nil {
+		return "", errors.Wrap(err, "invalid namespace")
+	}
+
+	if err := identifiers.Validate(vmID); err != nil {
+		return "", errors.Wrap(err, "invalid vm id")
+	}
+
+	return Dir(filepath.Join(varRunDir, namespace, vmID)), nil
 }
 
 // Dir represents the root of a firecracker-containerd VM directory, which
@@ -46,9 +55,9 @@ func (d Dir) RootPath() string {
 	return string(d)
 }
 
-// Create will mkdir the RootPath with correct permissions, or no-op if it
+// Mkdir will mkdir the RootPath with correct permissions, or no-op if it
 // already exists
-func (d Dir) Create() error {
+func (d Dir) Mkdir() error {
 	return os.MkdirAll(d.RootPath(), 0700)
 }
 
@@ -88,26 +97,45 @@ func (d Dir) FirecrackerMetricsFifoPath() string {
 
 // BundleLink returns the path to the symlink to the bundle dir for a given container running
 // inside the VM of this vm dir.
-func (d Dir) BundleLink(containerID string) bundle.Dir {
-	return bundle.Dir(filepath.Join(d.RootPath(), containerID))
+func (d Dir) BundleLink(containerID string) (bundle.Dir, error) {
+	if err := identifiers.Validate(containerID); err != nil {
+		return "", errors.Wrapf(err, "invalid container id %q", containerID)
+	}
+
+	return bundle.Dir(filepath.Join(d.RootPath(), containerID)), nil
 }
 
 // CreateBundleLink creates the BundleLink by symlinking to the provided bundle dir
 func (d Dir) CreateBundleLink(containerID string, bundleDir bundle.Dir) error {
-	return createSymlink(bundleDir.RootPath(), d.BundleLink(containerID).RootPath(), "bundle")
+	path, err := d.BundleLink(containerID)
+	if err != nil {
+		return err
+	}
+
+	return createSymlink(bundleDir.RootPath(), path.RootPath(), "bundle")
 }
 
 // CreateAddressLink creates a symlink from the VM dir to the bundle dir for the shim address file.
 // This symlink is read by containerd.
 // CreateAddressLink assumes that CreateBundleLink has been called.
 func (d Dir) CreateAddressLink(containerID string) error {
-	return createSymlink(d.AddrFilePath(), d.BundleLink(containerID).AddrFilePath(), "shim address file")
+	path, err := d.BundleLink(containerID)
+	if err != nil {
+		return err
+	}
+
+	return createSymlink(d.AddrFilePath(), path.AddrFilePath(), "shim address file")
 }
 
 // CreateShimLogFifoLink creates a symlink from the bundleDir of the provided container.
 // CreateAddressLink assumes that CreateBundleLink has been called.
 func (d Dir) CreateShimLogFifoLink(containerID string) error {
-	return createSymlink(d.BundleLink(containerID).LogFifoPath(), d.LogFifoPath(), "shim log fifo")
+	path, err := d.BundleLink(containerID)
+	if err != nil {
+		return err
+	}
+
+	return createSymlink(path.LogFifoPath(), d.LogFifoPath(), "shim log fifo")
 }
 
 // WriteAddress will write the actual address file in the VM dir.

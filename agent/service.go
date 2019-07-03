@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"runtime/debug"
 	"strings"
+	"time"
 
 	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/log"
@@ -154,7 +155,25 @@ func (ts *TaskService) Create(requestCtx context.Context, req *taskAPI.CreateTas
 		return nil, fmt.Errorf("Drive %q could not be found", driveID)
 	}
 
-	err = bundleDir.MountRootfs(drive.Path(), "ext4", nil)
+	const (
+		maxRetries = 100
+		retryDelay = 10 * time.Millisecond
+	)
+
+	// We retry here due to guest kernel needing some time to populate the guest
+	// drive.
+	// https://github.com/firecracker-microvm/firecracker/issues/1159
+	for i := 0; i < maxRetries; i++ {
+		if err = bundleDir.MountRootfs(drive.Path(), "ext4", nil); isRetryableMountError(err) {
+			logger.WithError(err).Warnf("retrying to mount rootfs %q", drive.Path())
+
+			time.Sleep(retryDelay)
+			continue
+		}
+
+		break
+	}
+
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to mount rootfs %q", drive.Path())
 	}

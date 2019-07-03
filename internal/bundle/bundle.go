@@ -60,9 +60,10 @@ func (d Dir) RootfsPath() string {
 	return filepath.Join(d.RootPath(), internal.BundleRootfsName)
 }
 
-// MountRootfs creates the RootfsPath and mounts the provided sourcePath there.
+// MountRootfs creates the RootfsPath if it does not exist and mounts the
+// provided sourcePath there.
 func (d Dir) MountRootfs(sourcePath string, mountType string, mountOpts []string) error {
-	err := os.Mkdir(d.RootfsPath(), 0700)
+	err := os.MkdirAll(d.RootfsPath(), 0700)
 	if err != nil {
 		return err
 	}

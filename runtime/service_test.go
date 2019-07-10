@@ -15,6 +15,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -196,5 +197,67 @@ func TestBuildVMConfiguration(t *testing.T) {
 			assert.NoError(t, err)
 			require.Equal(t, tc.expectedCfg, actualCfg)
 		})
+	}
+}
+
+func TestDebugConfig(t *testing.T) {
+	cases := []struct {
+		name    string
+		service *service
+	}{
+		{
+			name: "empty",
+			service: &service{
+				logger: logrus.NewEntry(logrus.New()),
+				config: &Config{},
+			},
+		},
+		{
+			name: "LogLevel set",
+			service: &service{
+				logger: logrus.NewEntry(logrus.New()),
+				config: &Config{
+					LogLevel: "foo",
+				},
+			},
+		},
+		{
+			name: "Debug set",
+			service: &service{
+				logger: logrus.NewEntry(logrus.New()),
+				config: &Config{
+					Debug: true,
+				},
+			},
+		},
+		{
+			name: "Both set",
+			service: &service{
+				logger: logrus.NewEntry(logrus.New()),
+				config: &Config{
+					LogLevel: "foo",
+					Debug:    true,
+				},
+			},
+		},
+	}
+
+	path, err := ioutil.TempDir("./", "TestDebugConfig")
+	assert.NoError(t, err, "failed to create temp directory")
+
+	defer os.RemoveAll(path)
+
+	for i, c := range cases {
+		c := c
+		stubDrivePath := filepath.Join(path, fmt.Sprintf("%d", i))
+		err := os.MkdirAll(stubDrivePath, os.ModePerm)
+		assert.NoError(t, err, "failed to create stub drive path")
+		c.service.stubDriveHandler = newStubDriveHandler(stubDrivePath, c.service.logger)
+		req := proto.CreateVMRequest{}
+
+		cfg, err := c.service.buildVMConfiguration(&req)
+		assert.NoError(t, err, "failed to build firecracker configuration")
+		assert.Equal(t, c.service.config.LogLevel, cfg.LogLevel)
+		assert.Equal(t, c.service.config.Debug, cfg.Debug)
 	}
 }

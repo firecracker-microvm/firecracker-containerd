@@ -175,6 +175,11 @@ func NewService(shimCtx context.Context, id string, remotePublisher shim.Publish
 		}
 	}
 
+	if config.Debug {
+		logrus.SetLevel(logrus.DebugLevel)
+		logger.Logger.SetLevel(logrus.DebugLevel)
+	}
+
 	s := &service{
 		taskManager:   vm.NewTaskManager(shimCtx, logger),
 		eventExchange: exchange.NewExchange(),
@@ -582,6 +587,8 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 		LogFifo:      s.shimDir.FirecrackerLogFifoPath(),
 		MetricsFifo:  s.shimDir.FirecrackerMetricsFifoPath(),
 		MachineCfg:   machineConfigurationFromProto(s.config, req.MachineCfg),
+		LogLevel:     s.config.LogLevel,
+		Debug:        s.config.Debug,
 	}
 
 	logger.Debugf("using socket path: %s", cfg.SocketPath)

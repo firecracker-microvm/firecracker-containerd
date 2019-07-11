@@ -6,7 +6,7 @@ require (
 	github.com/StackExchange/wmi v0.0.0-20181212234831-e0a55b97c705 // indirect
 	github.com/containerd/cgroups v0.0.0-20181105182409-82cb49fc1779 // indirect
 	github.com/containerd/console v0.0.0-20181022165439-0650fd9eeb50 // indirect
-	github.com/containerd/containerd v1.2.1-0.20190626153021-bb9616ba206c
+	github.com/containerd/containerd v1.2.1-0.20190711201753-f2b6c31d0fa7
 	github.com/containerd/continuity v0.0.0-20181027224239-bea7585dbfac
 	github.com/containerd/fifo v0.0.0-20180307165137-3d5202aec260
 	github.com/containerd/go-runc v0.0.0-20190226155025-7d11b49dc076 // indirect

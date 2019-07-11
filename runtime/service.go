@@ -488,7 +488,7 @@ func (s *service) createVM(requestCtx context.Context, request *proto.CreateVMRe
 		return errors.Wrapf(err, "failed to close vsock")
 	}
 
-	if err = s.machine.Start(requestCtx); err != nil {
+	if err = s.machine.Start(s.shimCtx); err != nil {
 		return errors.Wrapf(err, "failed to start the VM")
 	}
 

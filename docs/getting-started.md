@@ -236,3 +236,20 @@ $ sudo ctr --address /run/firecracker-containerd/containerd.sock \
   run --snapshotter firecracker-naive --runtime aws.firecracker --tty \
   docker.io/library/busybox:latest busybox-test
 ```
+
+Alternatively you can specify `--runtime` and `--snapshotter` just once when creating a new namespace using containerd's default labels:
+
+```bash
+$ sudo ctr --address /run/firecracker-containerd/containerd.sock \
+  namespaces create fc
+
+$ sudo ctr --address /run/firecracker-containerd/containerd.sock \
+  namespaces label fc \
+  containerd.io/defaults/runtime=aws.firecracker \
+  containerd.io/defaults/snapshotter=firecracker-naive
+
+$ sudo ctr --address /run/firecracker-containerd/containerd.sock \
+  -n fc \
+  run --tty \
+  docker.io/library/busybox:latest busybox-test
+```

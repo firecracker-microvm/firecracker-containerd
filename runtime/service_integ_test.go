@@ -267,7 +267,6 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 				go func(containerID int) {
 					defer containerWg.Done()
 					containerName := fmt.Sprintf("container-%d-%d", vmID, containerID)
-					execName := fmt.Sprintf("exec-%d-%d", vmID, containerID)
 					snapshotName := fmt.Sprintf("snapshot-%d-%d", vmID, containerID)
 
 					// spawn a container that just prints the VM's eth0 mac address (which we have set uniquely per VM)
@@ -297,47 +296,82 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 					taskExitCh, err := newTask.Wait(ctx)
 					require.NoError(t, err, "failed to wait on task for container %s", containerName)
 
-					var execStdout bytes.Buffer
-					var execStderr bytes.Buffer
-
-					newExec, err := newTask.Exec(ctx, execName, &specs.Process{
-						Args: []string{"/bin/readlink", "/proc/self/ns/mnt"},
-						Cwd:  "/",
-					}, cio.NewCreator(cio.WithStreams(nil, &execStdout, &execStderr)))
-					require.NoError(t, err, "failed to exec %s", execName)
-
-					execExitCh, err := newExec.Wait(ctx)
-					require.NoError(t, err, "failed to wait on exec %s", execName)
-
 					err = newTask.Start(ctx)
 					require.NoError(t, err, "failed to start task for container %s", containerName)
 
-					err = newExec.Start(ctx)
-					require.NoError(t, err, "failed to start exec %s", execName)
+					// Create a few execs for the task, including one with the same ID as the taskID (to provide
+					// regression coverage for a bug related to using the same task and exec ID).
+					//
+					// Save each of their stdout buffers, which will later be compared to ensure they each have
+					// the same output.
+					//
+					// The output of the exec is the mount namespace in which it found itself executing. This
+					// will be compared with the mount namespace the task is executing to ensure they are the same.
+					// This is a rudimentary way of asserting that each exec was created in the expected task.
+					execIDs := []string{fmt.Sprintf("exec-%d-%d", vmID, containerID), containerName}
+					execStdouts := make(chan string, len(execIDs))
+					var execWg sync.WaitGroup
+					for _, execID := range execIDs {
+						execWg.Add(1)
+						go func(execID string) {
+							defer execWg.Done()
+							var execStdout bytes.Buffer
+							var execStderr bytes.Buffer
 
-					// First wait for the exec to exit, getting what it saw as its mnt namespace from the stdout
-					// so that we can make sure its the same namespace as the task
-					select {
-					case exitStatus := <-execExitCh:
-						_, err = client.TaskService().DeleteProcess(ctx, &tasks.DeleteProcessRequest{
-							ContainerID: containerName,
-							ExecID:      execName,
-						})
-						require.NoError(t, err, "failed to delete exec %q", execName)
+							newExec, err := newTask.Exec(ctx, execID, &specs.Process{
+								Args: []string{"/bin/readlink", "/proc/self/ns/mnt"},
+								Cwd:  "/",
+							}, cio.NewCreator(cio.WithStreams(nil, &execStdout, &execStderr)))
+							require.NoError(t, err, "failed to exec %s", execID)
 
-						// if there was anything on stderr, print it to assist debugging
-						stderrOutput := execStderr.String()
-						if len(stderrOutput) != 0 {
-							fmt.Printf("stderr output from exec %q: %q", execName, stderrOutput)
+							execExitCh, err := newExec.Wait(ctx)
+							require.NoError(t, err, "failed to wait on exec %s", execID)
+
+							err = newExec.Start(ctx)
+							require.NoError(t, err, "failed to start exec %s", execID)
+
+							select {
+							case exitStatus := <-execExitCh:
+								_, err = client.TaskService().DeleteProcess(ctx, &tasks.DeleteProcessRequest{
+									ContainerID: containerName,
+									ExecID:      execID,
+								})
+								require.NoError(t, err, "failed to delete exec %q", execID)
+
+								// if there was anything on stderr, print it to assist debugging
+								stderrOutput := execStderr.String()
+								if len(stderrOutput) != 0 {
+									fmt.Printf("stderr output from exec %q: %q", execID, stderrOutput)
+								}
+
+								mntNS := strings.TrimSpace(execStdout.String())
+								require.NotEmptyf(t, mntNS, "no stdout output for task %q exec %q", containerName, execID)
+								execStdouts <- mntNS
+
+								require.Equal(t, uint32(0), exitStatus.ExitCode())
+							case <-ctx.Done():
+								require.Fail(t, "context cancelled",
+									"context cancelled while waiting for exec %s to exit, err: %v", execID, ctx.Err())
+							}
+						}(execID)
+					}
+					execWg.Wait()
+					close(execStdouts)
+
+					// Verify each exec had the same stdout and use that value as the mount namespace that will be compared
+					// against that of the task below.
+					var execMntNS string
+					for execStdout := range execStdouts {
+						if execMntNS == "" {
+							// This is the first iteration of loop; we do a check that execStdout is not "" via require.NotEmptyf
+							// in the execID loop above.
+							execMntNS = execStdout
 						}
 
-						require.Equal(t, uint32(0), exitStatus.ExitCode())
-					case <-ctx.Done():
-						require.Fail(t, "context cancelled",
-							"context cancelled while waiting for exec %s to exit, err: %v", execName, ctx.Err())
+						require.Equal(t, execMntNS, execStdout, "execs in same task unexpectedly have different outputs")
 					}
 
-					// Now kill the task and verify it was in the right VM and has the same mnt namespace as its exec
+					// Now kill the task and verify it was in the right VM and has the same mnt namespace as its execs
 					err = newTask.Kill(ctx, syscall.SIGKILL)
 					require.NoError(t, err, "failed to kill task %q", containerName)
 
@@ -361,7 +395,6 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 						require.Equal(t, vmIDtoMacAddr(uint(vmID)), printedVMID, "unexpected VMID output from container %q", containerName)
 
 						taskMntNS := strings.TrimSpace(stdoutLines[1])
-						execMntNS := strings.TrimSpace(execStdout.String())
 						require.Equal(t, execMntNS, taskMntNS, "unexpected mnt NS output from container %q", containerName)
 
 					case <-ctx.Done():

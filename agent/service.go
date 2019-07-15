@@ -113,11 +113,17 @@ func unmarshalExtraData(marshalled *types.Any) (*proto.ExtraData, error) {
 	return extraData, nil
 }
 
+func fifoName(taskID, execID string) string {
+	return fmt.Sprintf("exec-%s-task-%s", execID, taskID)
+}
+
 // Create creates a new initial process and container using runc
 func (ts *TaskService) Create(requestCtx context.Context, req *taskAPI.CreateTaskRequest) (*taskAPI.CreateTaskResponse, error) {
 	defer logPanicAndDie(log.G(requestCtx))
+	taskID := req.ID
+	execID := "" // the exec ID of the initial process in a task is an empty string by containerd convention
 
-	logger := log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "bundle": req.Bundle})
+	logger := log.G(requestCtx).WithField("TaskID", taskID).WithField("ExecID", execID)
 	logger.Info("create")
 
 	extraData, err := unmarshalExtraData(req.Options)
@@ -129,7 +135,7 @@ func (ts *TaskService) Create(requestCtx context.Context, req *taskAPI.CreateTas
 	req.Options = extraData.RuncOptions
 
 	// Override the bundle dir and rootfs paths, which were set on the Host and thus not valid here in the Guest
-	bundleDir := bundle.Dir(filepath.Join(containerRootDir, req.ID))
+	bundleDir := bundle.Dir(filepath.Join(containerRootDir, taskID))
 	err = bundleDir.Create()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create bundle dir")
@@ -187,7 +193,7 @@ func (ts *TaskService) Create(requestCtx context.Context, req *taskAPI.CreateTas
 		ioConnectorSet = vm.NewNullIOProxy()
 	} else {
 		// Override the incoming stdio FIFOs, which have paths from the host that we can't use
-		fifoSet, err := cio.NewFIFOSetInDir(bundleDir.RootPath(), req.ID, req.Terminal)
+		fifoSet, err := cio.NewFIFOSetInDir(bundleDir.RootPath(), fifoName(taskID, execID), req.Terminal)
 		if err != nil {
 			logger.WithError(err).Error("failed opening stdio FIFOs")
 			return nil, errors.Wrap(err, "failed to open stdio FIFOs")
@@ -362,7 +368,11 @@ func (ts *TaskService) Kill(requestCtx context.Context, req *taskAPI.KillRequest
 // Exec runs an additional process inside the container
 func (ts *TaskService) Exec(requestCtx context.Context, req *taskAPI.ExecProcessRequest) (*types.Empty, error) {
 	defer logPanicAndDie(log.G(requestCtx))
-	logger := log.G(requestCtx).WithField("TaskID", req.ID).WithField("ExecID", req.ExecID)
+
+	taskID := req.ID
+	execID := req.ExecID
+
+	logger := log.G(requestCtx).WithField("TaskID", taskID).WithField("ExecID", execID)
 	logger.Debug("exec")
 
 	extraData, err := unmarshalExtraData(req.Spec)
@@ -373,7 +383,7 @@ func (ts *TaskService) Exec(requestCtx context.Context, req *taskAPI.ExecProcess
 	// Just provide runc the options it knows about, not our wrapper
 	req.Spec = extraData.RuncOptions
 
-	bundleDir := bundle.Dir(filepath.Join(containerRootDir, req.ID))
+	bundleDir := bundle.Dir(filepath.Join(containerRootDir, taskID))
 
 	var ioConnectorSet vm.IOProxy
 
@@ -381,7 +391,7 @@ func (ts *TaskService) Exec(requestCtx context.Context, req *taskAPI.ExecProcess
 		ioConnectorSet = vm.NewNullIOProxy()
 	} else {
 		// Override the incoming stdio FIFOs, which have paths from the host that we can't use
-		fifoSet, err := cio.NewFIFOSetInDir(bundleDir.RootPath(), req.ExecID, req.Terminal)
+		fifoSet, err := cio.NewFIFOSetInDir(bundleDir.RootPath(), fifoName(taskID, execID), req.Terminal)
 		if err != nil {
 			logger.WithError(err).Error("failed opening stdio FIFOs")
 			return nil, errors.Wrap(err, "failed to open stdio FIFOs")

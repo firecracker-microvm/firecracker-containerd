@@ -17,7 +17,7 @@
 # COMMON IMAGES
 #
 #########################################
-FROM debian:stretch as base
+FROM golang:1.12-stretch as base
 # Set up a non-root user for running builds and some tests in later stages
 # Buildkit caches don't support anything like a "--chown" flag yet, so we need to ensure builder will have access to them
 RUN useradd --create-home --uid 1001 builder \
@@ -40,15 +40,10 @@ RUN useradd --create-home --uid 1001 builder \
 # Common tools needed for the build stages ahead. The final test images do not inherit directly from here, so this bloat
 # is dropped in those final end-use images.
 FROM base as build-base
-ENV PATH="/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin:/usr/local/sbin:/usr/lib/go/bin" \
+ENV PATH="/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin:/usr/local/sbin:/usr/local/go/bin" \
 	DEBIAN_FRONTEND="noninteractive" \
 	GO111MODULE="on"
-RUN mkdir -p /etc/apt/sources.list.d \
-	&& echo "deb http://ftp.debian.org/debian stretch-backports main" > /etc/apt/sources.list.d/stretch-backports.list \
-	&& apt-get update \
-	&& apt-get --target-release stretch-backports install --yes --no-install-recommends \
-		golang-go \
-	&& apt-get install --yes --no-install-recommends \
+RUN apt-get update && apt-get install --yes --no-install-recommends \
 		build-essential \
 		ca-certificates \
 		curl \
@@ -62,6 +57,7 @@ RUN mkdir -p /etc/apt/sources.list.d \
 # Run as non-root now that the apt installs are out of the way
 USER builder
 WORKDIR /home/builder
+ENV GOPATH="/home/builder/go"
 SHELL ["/bin/bash", "-c"]
 
 
@@ -94,13 +90,6 @@ RUN --mount=type=cache,from=build-base,source=/home/builder/cargo/registry,targe
 
 
 
-# All the build steps for Go code must first lock the go mod cache when downloading modules as Go 1.11 does not support
-# concurrent access.
-# TODO After upgrading to Go 1.12, we can safely concurrently access the cache and combine the download and build steps.
-
-
-
-
 # Build firecracker-containerd
 FROM build-base as firecracker-containerd-build
 ENV STATIC_AGENT='true'
@@ -108,11 +97,7 @@ ENV STATIC_AGENT='true'
 # permission denied here because "ADD --chown" does not set owner recursively (so when "go build" tries to create
 # binaries, it doesn't have write permission on all directories). Instead, we bind mount the firecracker-containerd src
 # directory to a tmp location and copy to one we will actually use (giving ourselves permission to it in the process).
-RUN --mount=type=cache,from=build-base,source=/home/builder/go/pkg/mod,target=/home/builder/go/pkg/mod,sharing=locked \
-	--mount=type=bind,target=_firecracker-containerd \
-	cp -R _firecracker-containerd firecracker-containerd \
-	&& cd firecracker-containerd \
-	&& go mod verify || go mod download
+RUN --mount=type=bind,target=_firecracker-containerd cp -R _firecracker-containerd firecracker-containerd
 RUN --mount=type=cache,from=build-base,source=/home/builder/go/pkg/mod,target=/home/builder/go/pkg/mod \
 	cd firecracker-containerd \
 	&& make \
@@ -174,7 +159,7 @@ RUN mkdir -p /output \
 # Derived images should include containerd/config.toml, other configuration needed to start a full
 # firecracker-containerd stack and an entrypoint that starts containerd plus one of our snapshotters.
 FROM base as firecracker-containerd-unittest
-ENV PATH="/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin:/usr/local/sbin:/usr/lib/go/bin" \
+ENV PATH="/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin:/usr/local/sbin:/usr/local/go/bin" \
 	DEBIAN_FRONTEND="noninteractive" \
 	FICD_LOG_DIR="/var/log/firecracker-containerd-test"
 ENV FICD_SNAPSHOTTER_OUTFILE="${FICD_LOG_DIR}/snapshotter.out" \
@@ -205,10 +190,10 @@ RUN curl --silent --show-error --retry 3 --max-time 30 --output default-vmlinux.
 	&& mv default-vmlinux.bin /var/lib/firecracker-containerd/runtime/default-vmlinux.bin
 
 RUN --mount=type=cache,from=build-base,source=/home/builder/go/pkg/mod,target=/tmp/go/pkg/mod,readonly \
-	mkdir -p /root/go/pkg/mod \
-	&& cp -R /tmp/go/pkg/mod/* /root/go/pkg/mod \
-	&& cp -R /tmp/go/pkg/mod/* /home/builder/go/pkg/mod \
-	&& chown -R builder /home/builder/go/pkg/mod
+  mkdir -p ${GOPATH}/pkg/mod \
+  && cp -R /tmp/go/pkg/mod/* ${GOPATH}/pkg/mod \
+  && cp -R /tmp/go/pkg/mod/* /home/builder/go/pkg/mod \
+  && chown -R builder /home/builder/go/pkg/mod
 
 RUN mkdir -p /var/run/firecracker-containerd \
 	&& mkdir -p ${FICD_LOG_DIR}
@@ -222,6 +207,7 @@ ENTRYPOINT ["/bin/bash", "-c"]
 FROM firecracker-containerd-unittest as firecracker-containerd-unittest-nonroot
 USER builder
 WORKDIR /home/builder
+ENV GOPATH="/home/builder/go"
 SHELL ["/bin/bash", "-c"]
 
 

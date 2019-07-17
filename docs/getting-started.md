@@ -66,7 +66,7 @@ optional `vsock` feature using the `--features vsock` flag.
 > seccomp, you must adjust your seccomp profile for these changes.
 
 ```bash
-git checkout v0.16.0 # latest released tag
+git checkout v0.17.0 # latest released tag
 cargo build --release --features vsock # --target x86_64-unknown-linux-gnu
 ```
 

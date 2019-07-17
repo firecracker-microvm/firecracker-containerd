@@ -61,6 +61,5 @@ configuration file has the following fields:
 * `debug` (optional) - Enable debug-level logging from the runtime.
 
 ## Usage
-
-Can invoke by downloading an image and doing 
-`ctr run --runtime aws.firecracker <image-name> <id>`
+See our [Getting Started Guide](../docs/getting-started.md) for details on how to use 
+the aws.firecracker runtime.

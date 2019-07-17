@@ -156,11 +156,11 @@ sudo firecracker-containerd --config /etc/firecracker-containerd/config.toml
 6. Open a new terminal, pull an image, and run a container!
 
 ```bash
-sudo ctr --address /run/firecracker-containerd/containerd.sock \
+sudo firecracker-ctr --address /run/firecracker-containerd/containerd.sock \
      image pull \
      --snapshotter firecracker-naive \
      docker.io/library/debian:latest
-sudo ctr --address /run/firecracker-containerd/containerd.sock \
+sudo firecracker-ctr --address /run/firecracker-containerd/containerd.sock \
      run \
      --snapshotter firecracker-naive \
      --runtime aws.firecracker \

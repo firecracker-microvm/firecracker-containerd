@@ -110,9 +110,8 @@ RUN --mount=type=cache,from=build-base,source=/home/builder/go/pkg/mod,target=/h
 RUN --mount=type=cache,from=build-base,source=/home/builder/go/pkg/mod,target=/home/builder/go/pkg/mod \
   cd firecracker-containerd/firecracker-control/cmd/containerd/ \
   && make \
-  && cp \
-  firecracker-containerd \
-  /output/containerd
+  && cp firecracker-containerd /output/containerd \
+  && cp firecracker-ctr /output/ctr
 
 
 

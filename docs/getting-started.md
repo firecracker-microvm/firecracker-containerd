@@ -105,6 +105,7 @@ Once you have built the runtime, be sure to place the following binaries on your
 * `snapshotter/cmd/devmapper/devmapper_snapshotter`
 * `snapshotter/cmd/naive/naive_snapshotter`
 * `firecracker-control/cmd/containerd/firecracker-containerd`
+* `firecracker-control/cmd/containerd/firecracker-ctr`
 
 You can use the `make install` target to install the files to `/usr/local/bin`,
 or specify a different `INSTALLROOT` if you prefer another location.
@@ -151,6 +152,12 @@ state = "/run/firecracker-containerd"
 [debug]
   level = "debug"
 ```
+
+Also note the `firecracker-ctr` binary installed alongside the `firecracker-containerd`
+binary. `ctr` is containerd's standard cli client; `firecracker-ctr` is a build of `ctr`
+from the same version of containerd as `firecracker-containerd`, which ensures the two
+binaries are in sync with one another. While other builds of `ctr` may work with
+`firecracker-containerd`, use of `firecracker-ctr` will ensure compatibility.
 
 ### Configure containerd runtime plugin
 
@@ -224,7 +231,7 @@ $ sudo PATH=$PATH /usr/local/bin/firecracker-containerd \
 Pull an image
 
 ```bash
-$ sudo ctr --address /run/firecracker-containerd/containerd.sock images \
+$ sudo firecracker-ctr --address /run/firecracker-containerd/containerd.sock images \
   pull --snapshotter firecracker-naive \
   docker.io/library/busybox:latest
 ```
@@ -232,7 +239,7 @@ $ sudo ctr --address /run/firecracker-containerd/containerd.sock images \
 And start a container!
 
 ```bash
-$ sudo ctr --address /run/firecracker-containerd/containerd.sock \
+$ sudo firecracker-ctr --address /run/firecracker-containerd/containerd.sock \
   run --snapshotter firecracker-naive --runtime aws.firecracker --tty \
   docker.io/library/busybox:latest busybox-test
 ```
@@ -240,15 +247,15 @@ $ sudo ctr --address /run/firecracker-containerd/containerd.sock \
 Alternatively you can specify `--runtime` and `--snapshotter` just once when creating a new namespace using containerd's default labels:
 
 ```bash
-$ sudo ctr --address /run/firecracker-containerd/containerd.sock \
+$ sudo firecracker-ctr --address /run/firecracker-containerd/containerd.sock \
   namespaces create fc
 
-$ sudo ctr --address /run/firecracker-containerd/containerd.sock \
+$ sudo firecracker-ctr --address /run/firecracker-containerd/containerd.sock \
   namespaces label fc \
   containerd.io/defaults/runtime=aws.firecracker \
   containerd.io/defaults/snapshotter=firecracker-naive
 
-$ sudo ctr --address /run/firecracker-containerd/containerd.sock \
+$ sudo firecracker-ctr --address /run/firecracker-containerd/containerd.sock \
   -n fc \
   run --tty \
   docker.io/library/busybox:latest busybox-test

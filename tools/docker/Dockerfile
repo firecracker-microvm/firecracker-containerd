@@ -110,9 +110,8 @@ RUN --mount=type=cache,from=build-base,source=/home/builder/go/pkg/mod,target=/h
 RUN --mount=type=cache,from=build-base,source=/home/builder/go/pkg/mod,target=/home/builder/go/pkg/mod \
   cd firecracker-containerd/firecracker-control/cmd/containerd/ \
   && make \
-  && cp \
-  firecracker-containerd \
-  /output/containerd
+  && cp firecracker-containerd /output/containerd \
+  && cp firecracker-ctr /output/ctr
 
 
 
@@ -164,12 +163,7 @@ ENV PATH="/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin:/usr/local/sbin:/usr/loca
 	FICD_LOG_DIR="/var/log/firecracker-containerd-test"
 ENV FICD_SNAPSHOTTER_OUTFILE="${FICD_LOG_DIR}/snapshotter.out" \
 	FICD_CONTAINERD_OUTFILE="${FICD_LOG_DIR}/containerd.out"
-RUN mkdir -p /etc/apt/sources.list.d \
-	&& echo "deb http://ftp.debian.org/debian stretch-backports main" > /etc/apt/sources.list.d/stretch-backports.list \
-	&& apt-get update \
-	&& apt-get --target-release stretch-backports install --yes --no-install-recommends \
-		golang-go \
-	&& apt-get install --yes --no-install-recommends \
+RUN apt-get update && apt-get install --yes --no-install-recommends \
 		build-essential \
 		ca-certificates \
 		curl \

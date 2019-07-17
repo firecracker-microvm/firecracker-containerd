@@ -20,17 +20,24 @@ GOSUM := $(GOMOD:.mod=.sum)
 
 all: build
 
-build: firecracker-containerd
+build: firecracker-containerd firecracker-ctr
+
 firecracker-containerd: $(SRC) $(GOMOD) $(GOSUM)
 	go build -v -o firecracker-containerd
 
-install: firecracker-containerd
+firecracker-ctr: $(GOMOD) $(GOSUM)
+	GOBIN=$(CURDIR) go install -tags=no_cri github.com/containerd/containerd/cmd/ctr
+	mv ctr firecracker-ctr
+
+install: firecracker-containerd firecracker-ctr
 	install -D -o root -g root -m755 -t $(INSTALLROOT)/bin firecracker-containerd
+	install -D -o root -g root -m755 -t $(INSTALLROOT)/bin firecracker-ctr
 
 test: $(SOURCES)
 	go test ./... $(EXTRAGOARGS)
 
 clean:
 	- rm -f firecracker-containerd
+	- rm -f firecracker-ctr
 
 .PHONY: all build install test clean

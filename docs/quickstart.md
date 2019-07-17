@@ -46,10 +46,10 @@ curl https://sh.rustup.rs -sSf | sh -s -- --verbose -y --default-toolchain 1.32.
 source $HOME/.cargo/env
 rustup target add x86_64-unknown-linux-musl
 
-# Check out Firecracker and build it from the v0.15.2 tag
+# Check out Firecracker and build it from the v0.17.0 tag
 git clone https://github.com/firecracker-microvm/firecracker.git
 cd firecracker
-git checkout v0.15.2
+git checkout v0.17.0
 cargo build --release --features vsock --target x86_64-unknown-linux-musl
 sudo cp target/x86_64-unknown-linux-musl/release/{firecracker,jailer} /usr/local/bin
 
@@ -156,11 +156,11 @@ sudo firecracker-containerd --config /etc/firecracker-containerd/config.toml
 6. Open a new terminal, pull an image, and run a container!
 
 ```bash
-sudo ctr --address /run/firecracker-containerd/containerd.sock \
+sudo firecracker-ctr --address /run/firecracker-containerd/containerd.sock \
      image pull \
      --snapshotter firecracker-naive \
      docker.io/library/debian:latest
-sudo ctr --address /run/firecracker-containerd/containerd.sock \
+sudo firecracker-ctr --address /run/firecracker-containerd/containerd.sock \
      run \
      --snapshotter firecracker-naive \
      --runtime aws.firecracker \

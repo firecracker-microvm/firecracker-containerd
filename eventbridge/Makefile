@@ -20,18 +20,14 @@ DOCKER_IMAGE_TAG?=latest
 
 all:
 
-test: $(SOURCES) $(GOMOD) $(GOSUM)
+test:
 	go test ./... $(EXTRAGOARGS)
 
-test-docker-unit: $(SOURCES) $(GOMOD) $(GOSUM)
-	docker run --rm \
-		--env EXTRAGOARGS="${EXTRAGOARGS}" \
-		--workdir="/firecracker-containerd/eventbridge" \
-		localhost/firecracker-containerd-unittest-nonroot:${DOCKER_IMAGE_TAG} \
-		"make test"
+# integ tests involving the eventbridge are currently only in runtime package
+integ-test:
 
 clean:
 
 install:
 
-.PHONY: clean all install test
+.PHONY: clean all install test integ-test

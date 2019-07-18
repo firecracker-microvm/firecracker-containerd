@@ -10,6 +10,7 @@
 # on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
+
 EXTRAGOARGS?=
 
 GOMOD := $(shell go env GOMOD)
@@ -26,15 +27,11 @@ else
 	go build -o agent
 endif
 
-test: $(SOURCES) $(GOMOD) $(GOSUM)
+test:
 	go test ./... $(EXTRAGOARGS)
 
-test-docker-unit: $(SOURCES) $(GOMOD) $(GOSUM)
-	docker run --rm \
-		--env EXTRAGOARGS="${EXTRAGOARGS}" \
-		--workdir="/firecracker-containerd/agent" \
-		localhost/firecracker-containerd-unittest-nonroot:${DOCKER_IMAGE_TAG} \
-		"make test"
+# integ tests involving agent are currently only in runtime package
+integ-test:
 
 clean:
 	- rm -f agent
@@ -42,4 +39,4 @@ clean:
 # Install is a noop here, for now.
 install:
 
-.PHONY: clean all install
+.PHONY: clean all install test integ-test

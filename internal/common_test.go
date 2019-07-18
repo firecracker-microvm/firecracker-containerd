@@ -72,7 +72,7 @@ func TestGenerateStubContent(t *testing.T) {
 
 	expected := append(MagicStubBytes, byte(len(driveID)))
 	expected = append(expected, []byte(driveID)...)
-	assert.Equal(t, expected, stubContent)
+	assert.Equal(t, string(expected), stubContent)
 }
 
 func TestGenerateStubContent_LongID(t *testing.T) {

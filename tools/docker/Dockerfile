@@ -158,7 +158,7 @@ RUN mkdir -p /output \
 # snapshotters.
 # Derived images should include containerd/config.toml, other configuration needed to start a full
 # firecracker-containerd stack and an entrypoint that starts containerd plus one of our snapshotters.
-FROM base as firecracker-containerd-unittest
+FROM base as firecracker-containerd-test
 ENV PATH="/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin:/usr/local/sbin:/usr/local/go/bin" \
 	DEBIAN_FRONTEND="noninteractive" \
 	FICD_LOG_DIR="/var/log/firecracker-containerd-test"
@@ -203,19 +203,11 @@ ENTRYPOINT ["/bin/bash", "-c"]
 
 
 
-# Test image for running unittests as a non-root user
-FROM firecracker-containerd-unittest as firecracker-containerd-unittest-nonroot
-USER builder
-WORKDIR /home/builder
-ENV GOPATH="/home/builder/go"
-SHELL ["/bin/bash", "-c"]
-
-
 
 
 # Test image that starts up containerd and the naive snapshotter. The default CMD will drop to a bash shell. Overrides
 # to CMD will be provided appended to /bin/bash -c
-FROM firecracker-containerd-unittest as firecracker-containerd-e2etest-naive
+FROM firecracker-containerd-test as firecracker-containerd-naive-integ-test
 # Install tini init to handle zombies created by our double-forked shims.
 # Unfortunately, we need to do this rather than only use docker's "--init" flag because docker
 # currently puts its default init binary at /dev/init, but we need to bind-mount /dev from
@@ -244,7 +236,7 @@ CMD ["exec /bin/bash"]
 
 # Debugging image that starts up containerd and the naive snapshotter and includes some additional basic debugging tools.
 # TODO add firectl here
-FROM firecracker-containerd-e2etest-naive as firecracker-containerd-dev
+FROM firecracker-containerd-naive-integ-test as firecracker-containerd-dev
 RUN apt-get update \
 	&& apt-get install -y \
 		strace \

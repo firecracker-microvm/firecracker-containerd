@@ -22,6 +22,7 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	"github.com/firecracker-microvm/firecracker-go-sdk"
 	models "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
@@ -35,7 +36,9 @@ const (
 	hostDevName = "tap0"
 )
 
-func TestFindNextAvailableVsockCID(t *testing.T) {
+func TestFindNextAvailableVsockCID_Isolated(t *testing.T) {
+	internal.RequiresIsolation(t)
+
 	sysCall = func(trap, a1, a2, a3 uintptr) (r1, r2 uintptr, err syscall.Errno) {
 		return 0, 0, 0
 	}

@@ -17,9 +17,8 @@ steps:
     agents:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
     env:
-      DOCKER_BUILDKIT: "1"
       DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
-    command: make docker-images
+    command: make test-images
 
   - wait
 
@@ -41,13 +40,12 @@ steps:
   - label: 'git log validation'
     command: './.buildkite/logcheck.sh'
 
-  - label: ":hammer: snapshotter tests"
+  - label: ":gear: unit tests"
     agents:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
     env:
-      DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
       EXTRAGOARGS: "-v -count=1"
-    command: 'cd snapshotter && make test-docker-unit'
+    command: 'make test-in-docker'
 
   - label: ":rotating_light: :hammer: snapshotter *root* tests"
     agents:
@@ -55,17 +53,9 @@ steps:
     env:
       DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
       EXTRAGOARGS: "-v -count=1"
-    command: 'cd snapshotter && make test-docker-all'
+    command: 'make -C snapshotter integ-test'
     concurrency: 1
     concurrency_group: 'loop-device test'
-
-  - label: ":running_shirt_with_sash: runtime unit tests"
-    agents:
-      queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
-    env:
-      DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
-      EXTRAGOARGS: "-v -count=1"
-    command: 'cd runtime && make test-docker-unit'
 
   - label: ":rotating_light: :running_shirt_with_sash: runtime isolated tests"
     agents:
@@ -75,30 +65,18 @@ steps:
       EXTRAGOARGS: "-v -count=1"
     artifact_paths:
       - "runtime/logs/*"
-    command: 'cd runtime && make test-docker-isolated'
+    command: 'make -C runtime integ-test'
     concurrency: 1
     concurrency_group: 'loop-device test'
 
-  - label: ":fencer: agent unit tests"
+  - label: ":rotating_light: :exclamation: example tests"
     agents:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
     env:
       DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
       EXTRAGOARGS: "-v -count=1"
-    command: 'cd agent && make test-docker-unit'
-
-  - label: ":gear: vm task unit tests"
-    agents:
-      queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
-    env:
-      DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
-      EXTRAGOARGS: "-v -count=1"
-    command: 'cd internal/vm && make test-docker-unit'
-
-  - label: ":exclamation: event tests"
-    agents:
-      queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
-    env:
-      DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
-      EXTRAGOARGS: "-v -count=1"
-    command: 'cd eventbridge && make test-docker-unit'
+    artifact_paths:
+      - "examples/logs/*"
+    command: 'make -C examples integ-test'
+    concurrency: 1
+    concurrency_group: 'loop-device test'

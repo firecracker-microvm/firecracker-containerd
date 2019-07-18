@@ -19,6 +19,13 @@ GOMOD := $(shell go env GOMOD)
 GOSUM := $(GOMOD:.mod=.sum)
 DOCKER_IMAGE_TAG?=latest
 
+INTEG_TEST_SUFFIX := _Isolated
+INTEG_TESTNAMES=$(shell docker run --rm \
+		--workdir="/firecracker-containerd/runtime" \
+		localhost/firecracker-containerd-test:$(DOCKER_IMAGE_TAG) \
+		"go test -list . | sed '$$d' | grep $(INTEG_TEST_SUFFIX)")
+
+
 all: runtime
 
 runtime: containerd-shim-aws-firecracker
@@ -29,33 +36,27 @@ containerd-shim-aws-firecracker: $(SOURCES) $(GOMOD) $(GOSUM)
 install: containerd-shim-aws-firecracker
 	install -D -o root -g root -m755 -t $(INSTALLROOT)/bin containerd-shim-aws-firecracker
 
-test: $(SOURCES)
+test:
 	go test ./... $(EXTRAGOARGS)
 
-test-docker-unit: $(SOURCES) $(GOMOD) $(GOSUM)
-	docker run --rm \
-		--privileged \
-		--device=/dev/vhost-vsock \
-		--env EXTRAGOARGS="${EXTRAGOARGS}" \
-		--workdir="/firecracker-containerd/runtime" \
-		localhost/firecracker-containerd-unittest:${DOCKER_IMAGE_TAG} \
-		"make test"
+integ-test:
+	mkdir -p $(CURDIR)/logs
 
-test-docker-isolated: $(SOURCES) $(GOMOD) $(GOSUM)
-	mkdir -p $(PWD)/logs
-	FCCD_PACKAGE_DIR=runtime \
-	FCCD_TESTNAME_REGEX=_Isolated \
-	FCCD_DOCKER_IMAGE=localhost/firecracker-containerd-e2etest-naive:${DOCKER_IMAGE_TAG} \
-	FCCD_DOCKER_RUN_ARGS="--privileged \
-		--ipc=host \
-		--volume /dev:/dev \
-		--volume /sys:/sys \
-		--volume /run/udev/control:/run/udev/control \
-		--volume $(PWD)/logs:/var/log/firecracker-containerd-test \
-		--env ENABLE_ISOLATED_TESTS=1 \
-	" ../tools/run-tests-by-name-regex.sh
+	$(foreach TESTNAME,$(INTEG_TESTNAMES),\
+		docker run --rm -it \
+			--privileged \
+			--ipc=host \
+			--volume /dev:/dev \
+			--volume /sys:/sys \
+			--volume /run/udev/control:/run/udev/control \
+			--volume $(CURDIR)/logs:/var/log/firecracker-containerd-test \
+			--env ENABLE_ISOLATED_TESTS=1 \
+			--workdir="/firecracker-containerd/runtime" \
+			localhost/firecracker-containerd-naive-integ-test:$(DOCKER_IMAGE_TAG) \
+			"go test $(EXTRAGOARGS) -run \"^$(TESTNAME)$$\""; \
+	)
 
 clean:
 	- rm -f containerd-shim-aws-firecracker
 
-.PHONY: all runtime clean install
+.PHONY: all runtime clean install test integ-test

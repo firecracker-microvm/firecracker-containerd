@@ -11,11 +11,14 @@
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
-SUBDIRS:=agent runtime snapshotter examples firecracker-control/cmd/containerd
+SUBDIRS:=agent runtime snapshotter internal examples firecracker-control/cmd/containerd
+TEST_SUBDIRS:=$(addprefix test-,$(SUBDIRS))
+INTEG_TEST_SUBDIRS:=$(addprefix integ-test-,$(SUBDIRS))
+
 export INSTALLROOT?=/usr/local
 export STATIC_AGENT
 
-DOCKER_IMAGE_TAG?=latest
+export DOCKER_IMAGE_TAG?=latest
 
 GOPATH:=$(shell go env GOPATH)
 BINPATH:=$(abspath ./bin)
@@ -23,6 +26,9 @@ SUBMODULES=_submodules
 RUNC_DIR=$(SUBMODULES)/runc
 RUNC_BIN=$(RUNC_DIR)/runc
 UID:=$(shell id -u)
+
+# Set this to pass additional commandline flags to the go compiler, e.g. "make test EXTRAGOARGS=-v"
+export EXTRAGOARGS?=
 
 all: $(SUBDIRS)
 
@@ -56,6 +62,23 @@ deps:
 	GOBIN=$(BINPATH) GO111MODULE=off go get -u github.com/containerd/ttrpc/cmd/protoc-gen-gogottrpc
 	GOBIN=$(BINPATH) GO111MODULE=off go get -u github.com/gogo/protobuf/protoc-gen-gogo
 
+test: $(TEST_SUBDIRS)
+
+test-in-docker: firecracker-containerd-test-image
+	docker run --rm -it \
+		--env EXTRAGOARGS="$(EXTRAGOARGS)" \
+		--workdir /firecracker-containerd \
+		localhost/firecracker-containerd-test:$(DOCKER_IMAGE_TAG) \
+		"make test"
+
+$(TEST_SUBDIRS):
+	$(MAKE) -C $(patsubst test-%,%,$@) test
+
+integ-test: $(INTEG_TEST_SUBDIRS)
+
+$(INTEG_TEST_SUBDIRS): docker-images
+	$(MAKE) -C $(patsubst integ-test-%,%,$@) integ-test
+
 runc-builder: runc-builder-stamp
 
 runc-builder-stamp: tools/docker/Dockerfile.runc-builder
@@ -87,27 +110,20 @@ image: $(RUNC_BIN) agent
 install:
 	for d in $(SUBDIRS); do $(MAKE) -C $$d install; done
 
-docker-image-unittest: $(RUNC_BIN)
+test-images: | firecracker-containerd-naive-integ-test-image firecracker-containerd-test-image
+
+firecracker-containerd-test-image: $(RUNC_BIN)
 	DOCKER_BUILDKIT=1 docker build \
 		--progress=plain \
 		--file tools/docker/Dockerfile \
-		--target firecracker-containerd-unittest \
-		--tag localhost/firecracker-containerd-unittest:${DOCKER_IMAGE_TAG} .
+		--target firecracker-containerd-test \
+		--tag localhost/firecracker-containerd-test:${DOCKER_IMAGE_TAG} .
 
-docker-image-unittest-nonroot: $(RUNC_BIN)
+firecracker-containerd-naive-integ-test-image: $(RUNC_BIN)
 	DOCKER_BUILDKIT=1 docker build \
 		--progress=plain \
 		--file tools/docker/Dockerfile \
-		--target firecracker-containerd-unittest-nonroot \
-		--tag localhost/firecracker-containerd-unittest-nonroot:${DOCKER_IMAGE_TAG} .
+		--target firecracker-containerd-naive-integ-test \
+		--tag localhost/firecracker-containerd-naive-integ-test:${DOCKER_IMAGE_TAG} .
 
-docker-image-e2etest-naive: $(RUNC_BIN)
-	DOCKER_BUILDKIT=1 docker build \
-		--progress=plain \
-		--file tools/docker/Dockerfile \
-		--target firecracker-containerd-e2etest-naive \
-		--tag localhost/firecracker-containerd-e2etest-naive:${DOCKER_IMAGE_TAG} .
-
-docker-images: | docker-image-e2etest-naive docker-image-unittest-nonroot docker-image-unittest
-
-.PHONY: all $(SUBDIRS) clean proto deps lint install docker-images docker-image-e2etest-naive docker-image-unittest-nonroot docker-image-unittest runc-builder runc
+.PHONY: all $(SUBDIRS) clean proto deps lint install test-images firecracker-container-test-image firecracker-containerd-naive-integ-test-image runc-builder runc test test-in-docker $(TEST_SUBDIRS) integ-test $(INTEG_TEST_SUBDIRS)

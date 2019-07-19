@@ -65,7 +65,9 @@ deps:
 test: $(TEST_SUBDIRS)
 
 test-in-docker: firecracker-containerd-test-image
-	docker run --rm -it \
+	docker run --rm -it --user builder \
+		--env HOME=/home/builder \
+		--env GOPATH=/home/builder/go \
 		--env EXTRAGOARGS="$(EXTRAGOARGS)" \
 		--workdir /firecracker-containerd \
 		localhost/firecracker-containerd-test:$(DOCKER_IMAGE_TAG) \

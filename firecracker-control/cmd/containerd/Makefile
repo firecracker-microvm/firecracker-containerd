@@ -33,11 +33,14 @@ install: firecracker-containerd firecracker-ctr
 	install -D -o root -g root -m755 -t $(INSTALLROOT)/bin firecracker-containerd
 	install -D -o root -g root -m755 -t $(INSTALLROOT)/bin firecracker-ctr
 
-test: $(SOURCES)
+test:
 	go test ./... $(EXTRAGOARGS)
+
+# integ tests involving containerd are currently only in runtime package
+integ-test:
 
 clean:
 	- rm -f firecracker-containerd
 	- rm -f firecracker-ctr
 
-.PHONY: all build install test clean
+.PHONY: all build install test integ-test clean

@@ -26,17 +26,21 @@ examples: taskworkflow
 taskworkflow: taskworkflow.go $(GOMOD) $(GOSUM)
 	go build -o taskworkflow taskworkflow.go
 
-test-docker: $(SOURCES) $(GOMOD) $(GOSUM)
-	docker run --rm \
+test:
+	go test ./... $(EXTRAGOARGS)
+
+integ-test:
+	mkdir -p $(CURDIR)/logs
+	docker run --rm -it \
 		--privileged \
 		--ipc=host \
 		--volume /dev:/dev \
 		--volume /sys:/sys \
 		--volume /run/udev/control:/run/udev/control \
-		--volume $(shell pwd)/logs:/var/log/firecracker-containerd-test \
-		--workdir="/firecracker-containerd/examples" \
+		--volume $(CURDIR)/logs:/var/log/firecracker-containerd-test \
 		--env EXTRAGOARGS="${EXTRAGOARGS}" \
-		localhost/firecracker-containerd-e2etest-naive:${DOCKER_IMAGE_TAG} \
+		--workdir="/firecracker-containerd/examples" \
+		localhost/firecracker-containerd-naive-integ-test:${DOCKER_IMAGE_TAG} \
 		"make examples && ./taskworkflow"
 
 clean:
@@ -44,4 +48,4 @@ clean:
 
 install:
 
-.PHONY: all examples clean install
+.PHONY: all examples clean install test integ-test

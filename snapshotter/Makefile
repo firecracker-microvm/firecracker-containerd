@@ -14,6 +14,7 @@
 # Set this to pass additional commandline flags to the go compiler, e.g. "make test EXTRAGOARGS=-v"
 EXTRAGOARGS?=
 
+
 SUBDIRS:=cmd/devmapper cmd/naive
 SOURCES:=$(shell find . -name '*.go')
 GOMOD := $(shell go env GOMOD)
@@ -28,31 +29,21 @@ $(SUBDIRS):
 install: $(SUBDIRS)
 	for d in $(SUBDIRS); do $(MAKE) -C $$d install; done
 
-test: $(SOURCES) $(GOMOD) $(GOSUM)
-	go test ./... $(EXTRAGOARGS)
+test:
+	DISABLE_ROOT_TESTS=true go test ./... $(EXTRAGOARGS)
 
-test-docker-all: $(SOURCES) $(GOMOD) $(GOSUM)
-	docker run --rm \
+integ-test:
+	docker run --rm -it \
 		--privileged \
+		--ipc=host \
 		--volume /dev:/dev \
 		--volume /sys:/sys \
 		--volume /run/udev/control:/run/udev/control \
-		--ipc=host \
-		--env EXTRAGOARGS="${EXTRAGOARGS}" \
 		--workdir="/firecracker-containerd/snapshotter" \
-		localhost/firecracker-containerd-unittest:${DOCKER_IMAGE_TAG} \
-		"make test"
-
-test-docker-unit: $(SOURCES) $(GOMOD) $(GOSUM)
-	docker run --rm \
-		--env EXTRAGOARGS="${EXTRAGOARGS}" \
-		--env DISABLE_ROOT_TESTS="true" \
-		--workdir="/firecracker-containerd/snapshotter" \
-		localhost/firecracker-containerd-unittest-nonroot:${DOCKER_IMAGE_TAG} \
-		"make test"
-
+		localhost/firecracker-containerd-test:${DOCKER_IMAGE_TAG} \
+		"go test ./... $(EXTRAGOARGS)"
 
 clean:
 	for d in $(SUBDIRS); do $(MAKE) -C $$d clean; done
 
-.PHONY: all $(SUBDIRS) clean install test
+.PHONY: all $(SUBDIRS) clean install test integ-test

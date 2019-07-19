@@ -11,7 +11,7 @@
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
-EXTRAGOARGS:=
+EXTRAGOARGS?=
 
 GOMOD := $(shell go env GOMOD)
 GOSUM := $(GOMOD:.mod=.sum)
@@ -20,18 +20,14 @@ DOCKER_IMAGE_TAG?=latest
 
 all:
 
-test: $(SOURCES) $(GOMOD) $(GOSUM)
+test:
 	go test ./... $(EXTRAGOARGS)
 
-test-docker-unit: $(SOURCES) $(GOMOD) $(GOSUM)
-	docker run --rm \
-		--env EXTRAGOARGS="${EXTRAGOARGS}" \
-		--workdir="/firecracker-containerd/internal/vm" \
-		localhost/firecracker-containerd-unittest-nonroot:${DOCKER_IMAGE_TAG} \
-		"make test"
+# integ tests involving the all internal packages are currently only in runtime package
+integ-test:
 
 clean:
 
 install:
 
-.PHONY: clean all install test
+.PHONY: clean all install test integ-test

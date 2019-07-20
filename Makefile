@@ -78,7 +78,7 @@ $(TEST_SUBDIRS):
 
 integ-test: $(INTEG_TEST_SUBDIRS)
 
-$(INTEG_TEST_SUBDIRS): docker-images
+$(INTEG_TEST_SUBDIRS): test-images
 	$(MAKE) -C $(patsubst integ-test-%,%,$@) integ-test
 
 runc-builder: runc-builder-stamp

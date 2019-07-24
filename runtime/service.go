@@ -124,7 +124,7 @@ type service struct {
 	agentClient              taskAPI.TaskService
 	eventBridgeClient        eventbridge.Getter
 	stubDriveHandler         stubDriveHandler
-	exitAfterAllTasksDeleted bool
+	exitAfterAllTasksDeleted bool // exit the VM and shim when all tasks are deleted
 
 	machine          *firecracker.Machine
 	machineConfig    *firecracker.Config
@@ -284,7 +284,8 @@ func (s *service) StartShim(shimCtx context.Context, containerID, containerdBina
 
 	logrus.SetOutput(logFifo)
 
-	log.G(shimCtx).WithField("id", containerID).Debug("StartShim")
+	log := log.G(shimCtx).WithField("id", containerID)
+	log.Debug("StartShim")
 
 	// If we are running a shim start routine, we can safely assume our current working
 	// directory is the bundle directory
@@ -319,6 +320,10 @@ func (s *service) StartShim(shimCtx context.Context, containerID, containerdBina
 		// task is deleted
 		containerCount = 1
 		exitAfterAllTasksDeleted = true
+
+		log.Infof("will start a single-task VM %s since no VMID has been provided", s.vmID)
+	} else {
+		log.Infof("will start a persistent VM %s", s.vmID)
 	}
 
 	client, err := ttrpcutil.NewClient(containerdAddress + ".ttrpc")
@@ -773,11 +778,34 @@ func (s *service) Start(requestCtx context.Context, req *taskAPI.StartRequest) (
 
 func (s *service) Delete(requestCtx context.Context, req *taskAPI.DeleteRequest) (*taskAPI.DeleteResponse, error) {
 	defer logPanicAndDie(log.G(requestCtx))
-	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("delete")
+	logger := log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID})
+
+	logger.Debug("delete")
 
 	resp, err := s.taskManager.DeleteProcess(requestCtx, req, s.agentClient)
 	if err != nil {
 		return nil, err
+	}
+
+	// Only delete a process as like runc when there is ExecID
+	// https://github.com/containerd/containerd/blob/f3e148b1ccf268450c87427b5dbb6187db3d22f1/runtime/v2/runc/container.go#L320
+	if req.ExecID != "" {
+		return resp, nil
+	}
+
+	// Otherwise, delete the container
+	dir, err := s.shimDir.BundleLink(req.ID)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to find the bundle directory of the container: %s", req.ID)
+	}
+
+	_, err = os.Stat(dir.RootPath())
+	if os.IsNotExist(err) {
+		return nil, errors.Wrapf(err, "failed to find the bundle directory of the container: %s", dir.RootPath())
+	}
+
+	if err = os.Remove(dir.RootPath()); err != nil {
+		return nil, errors.Wrapf(err, "failed to remove the bundle directory of the container: %s", dir.RootPath())
 	}
 
 	return resp, nil

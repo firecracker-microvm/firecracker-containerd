@@ -54,6 +54,7 @@ type stubDriveHandler struct {
 func newStubDriveHandler(path string, logger *logrus.Entry) stubDriveHandler {
 	return stubDriveHandler{
 		RootPath: path,
+		logger:   logger,
 	}
 }
 

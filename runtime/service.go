@@ -315,6 +315,7 @@ func (s *service) StartShim(shimCtx context.Context, containerID, containerdBina
 		}
 
 		s.vmID = uuid.String()
+		s.logger = s.logger.WithField("vmID", s.vmID)
 
 		// If the client didn't specify a VMID, this is a single-task VM and should thus exit after this
 		// task is deleted
@@ -661,7 +662,7 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 }
 
 func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTaskRequest) (*taskAPI.CreateTaskResponse, error) {
-	logger := s.logger.WithField("containerID", request.ID)
+	logger := s.logger.WithField("id", request.ID)
 	defer logPanicAndDie(logger)
 
 	err := s.waitVMReady()
@@ -814,7 +815,7 @@ func (s *service) Delete(requestCtx context.Context, req *taskAPI.DeleteRequest)
 // Exec an additional process inside the container
 func (s *service) Exec(requestCtx context.Context, req *taskAPI.ExecProcessRequest) (*ptypes.Empty, error) {
 	defer logPanicAndDie(log.G(requestCtx))
-	logger := s.logger.WithField("TaskID", req.ID).WithField("ExecID", req.ExecID)
+	logger := s.logger.WithField("id", req.ID).WithField("exec_id", req.ExecID)
 	logger.Debug("exec")
 
 	// no OCI config bytes or DriveID to provide for Exec, just leave those fields empty

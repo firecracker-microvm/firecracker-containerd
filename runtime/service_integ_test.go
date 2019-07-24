@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -532,4 +533,124 @@ vdf  254:80   0  512B  0 disk`
 		require.Fail(t, "context cancelled",
 			"context cancelled while waiting for container %s to exit, err: %v", containerName, ctx.Err())
 	}
+}
+
+func startAndWaitTask(ctx context.Context, t *testing.T, c containerd.Container) string {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	task, err := c.NewTask(ctx, cio.NewCreator(cio.WithStreams(nil, &stdout, &stderr)))
+	require.NoError(t, err, "failed to create task for container %s", c.ID())
+
+	exitCh, err := task.Wait(ctx)
+	require.NoError(t, err, "failed to wait on task for container %s", c.ID())
+
+	err = task.Start(ctx)
+	require.NoError(t, err, "failed to start task for container %s", c.ID())
+	defer func() {
+		status, err := task.Delete(ctx)
+		require.NoError(t, status.Error())
+		require.NoError(t, err, "failed to delete task for container %s", c.ID())
+	}()
+
+	select {
+	case exitStatus := <-exitCh:
+		require.NoError(t, exitStatus.Error(), "failed to retrieve exitStatus")
+		require.Equal(t, uint32(0), exitStatus.ExitCode())
+		require.Equal(t, "", stderr.String())
+	case <-ctx.Done():
+		require.Fail(t, "context cancelled",
+			"context cancelled while waiting for container %s to exit, err: %v", c.ID(), ctx.Err())
+	}
+
+	return stdout.String()
+}
+
+func testCreateContainerWithSameName(t *testing.T, vmID string) {
+	ctx := namespaces.WithNamespace(context.Background(), "default")
+
+	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
+	require.NoError(t, err, "failed to create ttrpc client")
+
+	// Explicitly specify Container Count = 2 to workaround #230
+	if len(vmID) != 0 {
+		fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
+		_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
+			VMID: vmID,
+			RootDrive: &proto.FirecrackerDrive{
+				PathOnHost:   defaultRootfsPath,
+				IsReadOnly:   true,
+				IsRootDevice: true,
+			},
+			ContainerCount: 2,
+		})
+		require.NoError(t, err)
+	}
+
+	withNewSpec := containerd.WithNewSpec(oci.WithProcessArgs("echo", "hello"), firecrackeroci.WithVMID(vmID))
+
+	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	defer client.Close()
+
+	image, err := client.Pull(ctx, debianDockerImage, containerd.WithPullUnpack, containerd.WithPullSnapshotter(naiveSnapshotterName))
+	require.NoError(t, err, "failed to pull image %s, is the the %s snapshotter running?", debianDockerImage, naiveSnapshotterName)
+
+	containerName := fmt.Sprintf("%s-%d", t.Name(), time.Now().UnixNano())
+	snapshotName := fmt.Sprintf("%s-snapshot", containerName)
+
+	containerPath := fmt.Sprintf("/run/containerd/io.containerd.runtime.v2.task/default/%s", containerName)
+
+	c1, err := client.NewContainer(ctx,
+		containerName,
+		containerd.WithSnapshotter(naiveSnapshotterName),
+		containerd.WithNewSnapshot(snapshotName, image),
+		withNewSpec,
+	)
+	require.NoError(t, err, "failed to create container %s", containerName)
+	require.Equal(t, "hello\n", startAndWaitTask(ctx, t, c1))
+
+	// All resources regarding the container will be deleted
+	err = c1.Delete(ctx, containerd.WithSnapshotCleanup)
+	require.NoError(t, err, "failed to delete container %s", containerName)
+
+	_, err = os.Stat(containerPath)
+	require.True(t, os.IsNotExist(err))
+
+	if len(vmID) != 0 {
+		shimPath := fmt.Sprintf("%s/default/%s/%s", varRunDir, vmID, containerName)
+		_, err = os.Stat(shimPath)
+		require.True(t, os.IsNotExist(err))
+	}
+
+	// So, we can launch a new container with the same name
+	c2, err := client.NewContainer(ctx,
+		containerName,
+		containerd.WithSnapshotter(naiveSnapshotterName),
+		containerd.WithNewSnapshot(snapshotName, image),
+		withNewSpec,
+	)
+	require.NoError(t, err, "failed to create container %s", containerName)
+	require.Equal(t, "hello\n", startAndWaitTask(ctx, t, c2))
+
+	err = c2.Delete(ctx, containerd.WithSnapshotCleanup)
+	require.NoError(t, err, "failed to delete container %s", containerName)
+
+	_, err = os.Stat(containerPath)
+	require.True(t, os.IsNotExist(err))
+
+	if len(vmID) != 0 {
+		shimPath := fmt.Sprintf("%s/default/%s/%s", varRunDir, vmID, containerName)
+		_, err = os.Stat(shimPath)
+		require.True(t, os.IsNotExist(err))
+	}
+}
+
+func TestCreateContainerWithSameName_Isolated(t *testing.T) {
+	internal.RequiresIsolation(t)
+
+	testCreateContainerWithSameName(t, "")
+
+	vmID := fmt.Sprintf("same-vm-%d", time.Now().UnixNano())
+	testCreateContainerWithSameName(t, vmID)
 }

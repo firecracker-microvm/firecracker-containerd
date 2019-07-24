@@ -315,16 +315,19 @@ func (s *service) StartShim(shimCtx context.Context, containerID, containerdBina
 		}
 
 		s.vmID = uuid.String()
-		s.logger = s.logger.WithField("vmID", s.vmID)
+
+		// This request is handled by a short-lived shim process to find its control socket.
+		// A long-running shim process won't have the request. So, setting s.logger doesn't affect others.
+		log = log.WithField("vmID", s.vmID)
 
 		// If the client didn't specify a VMID, this is a single-task VM and should thus exit after this
 		// task is deleted
 		containerCount = 1
 		exitAfterAllTasksDeleted = true
 
-		log.Infof("will start a single-task VM %s since no VMID has been provided", s.vmID)
+		log.Info("will start a single-task VM since no VMID has been provided")
 	} else {
-		log.Infof("will start a persistent VM %s", s.vmID)
+		log.Info("will start a persistent VM")
 	}
 
 	client, err := ttrpcutil.NewClient(containerdAddress + ".ttrpc")

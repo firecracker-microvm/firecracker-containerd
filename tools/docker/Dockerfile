@@ -173,17 +173,18 @@ RUN apt-get update && apt-get install --yes --no-install-recommends \
 		libdevmapper-dev \
 		libseccomp-dev
 
+RUN mkdir -p /var/lib/firecracker-containerd/runtime \
+        && curl --silent --show-error --retry 3 --max-time 30 --output default-vmlinux.bin \
+	"https://s3.amazonaws.com/spec.ccfc.min/img/hello/kernel/hello-vmlinux.bin" \
+	&& echo "882fa465c43ab7d92e31bd4167da3ad6a82cb9230f9b0016176df597c6014cef default-vmlinux.bin" | sha256sum -c - \
+	&& mv default-vmlinux.bin /var/lib/firecracker-containerd/runtime/default-vmlinux.bin
+
 COPY --from=firecracker-containerd-build /home/builder/firecracker-containerd /firecracker-containerd
 COPY --from=firecracker-build /output/* /usr/local/bin/
 COPY --from=firecracker-vm-root-builder /output/vm.ext4 /var/lib/firecracker-containerd/runtime/default-rootfs.img
 COPY --from=firecracker-containerd-build /output/* /usr/local/bin/
 COPY _submodules/runc/runc /usr/local/bin
 COPY tools/docker/firecracker-runtime.json /etc/containerd/firecracker-runtime.json
-
-RUN curl --silent --show-error --retry 3 --max-time 30 --output default-vmlinux.bin \
-	"https://s3.amazonaws.com/spec.ccfc.min/img/hello/kernel/hello-vmlinux.bin" \
-	&& echo "882fa465c43ab7d92e31bd4167da3ad6a82cb9230f9b0016176df597c6014cef default-vmlinux.bin" | sha256sum -c - \
-	&& mv default-vmlinux.bin /var/lib/firecracker-containerd/runtime/default-vmlinux.bin
 
 RUN --mount=type=cache,from=build-base,source=/home/builder/go/pkg/mod,target=/tmp/go/pkg/mod,readonly \
   mkdir -p ${GOPATH}/pkg/mod \

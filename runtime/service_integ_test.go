@@ -434,7 +434,6 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 
 	vmWg.Wait()
 }
-
 func TestStubBlockDevices_Isolated(t *testing.T) {
 	internal.RequiresIsolation(t)
 	const vmID = 0
@@ -490,8 +489,29 @@ func TestStubBlockDevices_Isolated(t *testing.T) {
 		containerd.WithSnapshotter(naiveSnapshotterName),
 		containerd.WithNewSnapshot(snapshotName, image),
 		containerd.WithNewSpec(
-			oci.WithProcessArgs("lsblk"),
 			firecrackeroci.WithVMID(strconv.Itoa(vmID)),
+			oci.WithProcessArgs("/bin/sh", "/var/firecracker-containerd-test/scripts/lsblk.sh"),
+
+			oci.WithMounts([]specs.Mount{
+				// Exposes the host kernel's /dev as /dev.
+				// By default, runc creates own /dev with a minimal set of pseudo devices such as /dev/null.
+				{
+					Type:        "bind",
+					Options:     []string{"bind"},
+					Destination: "/dev",
+					Source:      "/dev",
+				},
+
+				// Exposes test scripts from the host kernel
+				{
+					Type:        "bind",
+					Options:     []string{"bind"},
+					Destination: "/var/firecracker-containerd-test/scripts",
+					Source:      "/var/firecracker-containerd-test/scripts",
+				},
+			}),
+			// Make the host kernel's /dev readable
+			oci.WithParentCgroupDevices,
 		),
 	)
 	require.NoError(t, err, "failed to create container %s", containerName)
@@ -519,16 +539,18 @@ func TestStubBlockDevices_Isolated(t *testing.T) {
 			fmt.Printf("stderr output from vm %d, container %d: %s", vmID, containerID, stderrOutput)
 		}
 
-		const expectedOutput = `NAME MAJ:MIN RM  SIZE RO TYPE MOUNTPOINT
-vda  254:0    0   64M  0 disk 
-vdc  254:32   0  512B  0 disk 
-vdd  254:48   0  512B  0 disk 
-vde  254:64   0  512B  0 disk 
-vdf  254:80   0  512B  0 disk`
+		const expectedOutput = `
+NAME MAJ:MIN RM      SIZE RO | MAGIC
+vda  254:0    0 67108864B  0 |    0   0   0   0   0   0   0   0
+vdb  254:16   0        0B  0 | 
+vdc  254:32   0      512B  0 |  214 244 216 245 215 177 177 177
+vdd  254:48   0      512B  0 |  214 244 216 245 215 177 177 177
+vde  254:64   0      512B  0 |  214 244 216 245 215 177 177 177
+vdf  254:80   0      512B  0 |  214 244 216 245 215 177 177 177`
 
+		require.Equal(t, strings.TrimSpace(expectedOutput), strings.TrimSpace(stdout.String()))
 		require.NoError(t, exitStatus.Error(), "failed to retrieve exitStatus")
 		require.Equal(t, uint32(0), exitStatus.ExitCode())
-		require.Equal(t, expectedOutput, strings.TrimSpace(stdout.String()))
 	case <-ctx.Done():
 		require.Fail(t, "context cancelled",
 			"context cancelled while waiting for container %s to exit, err: %v", containerName, ctx.Err())

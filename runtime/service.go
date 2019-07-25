@@ -284,7 +284,7 @@ func (s *service) StartShim(shimCtx context.Context, containerID, containerdBina
 
 	logrus.SetOutput(logFifo)
 
-	log := log.G(shimCtx).WithField("id", containerID)
+	log := log.G(shimCtx).WithField("task_id", containerID)
 	log.Debug("StartShim")
 
 	// If we are running a shim start routine, we can safely assume our current working
@@ -316,14 +316,18 @@ func (s *service) StartShim(shimCtx context.Context, containerID, containerdBina
 
 		s.vmID = uuid.String()
 
+		// This request is handled by a short-lived shim process to find its control socket.
+		// A long-running shim process won't have the request. So, setting s.logger doesn't affect others.
+		log = log.WithField("vmID", s.vmID)
+
 		// If the client didn't specify a VMID, this is a single-task VM and should thus exit after this
 		// task is deleted
 		containerCount = 1
 		exitAfterAllTasksDeleted = true
 
-		log.Infof("will start a single-task VM %s since no VMID has been provided", s.vmID)
+		log.Info("will start a single-task VM since no VMID has been provided")
 	} else {
-		log.Infof("will start a persistent VM %s", s.vmID)
+		log.Info("will start a persistent VM")
 	}
 
 	client, err := ttrpcutil.NewClient(containerdAddress + ".ttrpc")
@@ -661,7 +665,7 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 }
 
 func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTaskRequest) (*taskAPI.CreateTaskResponse, error) {
-	logger := s.logger.WithField("containerID", request.ID)
+	logger := s.logger.WithField("task_id", request.ID)
 	defer logPanicAndDie(logger)
 
 	err := s.waitVMReady()
@@ -767,7 +771,7 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 func (s *service) Start(requestCtx context.Context, req *taskAPI.StartRequest) (*taskAPI.StartResponse, error) {
 	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("start")
+	log.G(requestCtx).WithFields(logrus.Fields{"task_id": req.ID, "exec_id": req.ExecID}).Debug("start")
 	resp, err := s.agentClient.Start(requestCtx, req)
 	if err != nil {
 		return nil, err
@@ -778,7 +782,7 @@ func (s *service) Start(requestCtx context.Context, req *taskAPI.StartRequest) (
 
 func (s *service) Delete(requestCtx context.Context, req *taskAPI.DeleteRequest) (*taskAPI.DeleteResponse, error) {
 	defer logPanicAndDie(log.G(requestCtx))
-	logger := log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID})
+	logger := log.G(requestCtx).WithFields(logrus.Fields{"task_id": req.ID, "exec_id": req.ExecID})
 
 	logger.Debug("delete")
 
@@ -814,7 +818,7 @@ func (s *service) Delete(requestCtx context.Context, req *taskAPI.DeleteRequest)
 // Exec an additional process inside the container
 func (s *service) Exec(requestCtx context.Context, req *taskAPI.ExecProcessRequest) (*ptypes.Empty, error) {
 	defer logPanicAndDie(log.G(requestCtx))
-	logger := s.logger.WithField("TaskID", req.ID).WithField("ExecID", req.ExecID)
+	logger := s.logger.WithField("task_id", req.ID).WithField("exec_id", req.ExecID)
 	logger.Debug("exec")
 
 	// no OCI config bytes or DriveID to provide for Exec, just leave those fields empty
@@ -876,7 +880,7 @@ func (s *service) Exec(requestCtx context.Context, req *taskAPI.ExecProcessReque
 func (s *service) ResizePty(requestCtx context.Context, req *taskAPI.ResizePtyRequest) (*ptypes.Empty, error) {
 	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("resize_pty")
+	log.G(requestCtx).WithFields(logrus.Fields{"task_id": req.ID, "exec_id": req.ExecID}).Debug("resize_pty")
 	resp, err := s.agentClient.ResizePty(requestCtx, req)
 	if err != nil {
 		return nil, err
@@ -889,7 +893,7 @@ func (s *service) ResizePty(requestCtx context.Context, req *taskAPI.ResizePtyRe
 func (s *service) State(requestCtx context.Context, req *taskAPI.StateRequest) (*taskAPI.StateResponse, error) {
 	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("state")
+	log.G(requestCtx).WithFields(logrus.Fields{"task_id": req.ID, "exec_id": req.ExecID}).Debug("state")
 	resp, err := s.agentClient.State(requestCtx, req)
 	if err != nil {
 		return nil, err
@@ -902,7 +906,7 @@ func (s *service) State(requestCtx context.Context, req *taskAPI.StateRequest) (
 func (s *service) Pause(requestCtx context.Context, req *taskAPI.PauseRequest) (*ptypes.Empty, error) {
 	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(requestCtx).WithField("id", req.ID).Debug("pause")
+	log.G(requestCtx).WithField("task_id", req.ID).Debug("pause")
 	resp, err := s.agentClient.Pause(requestCtx, req)
 	if err != nil {
 		return nil, err
@@ -915,7 +919,7 @@ func (s *service) Pause(requestCtx context.Context, req *taskAPI.PauseRequest) (
 func (s *service) Resume(requestCtx context.Context, req *taskAPI.ResumeRequest) (*ptypes.Empty, error) {
 	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(requestCtx).WithField("id", req.ID).Debug("resume")
+	log.G(requestCtx).WithField("task_id", req.ID).Debug("resume")
 	resp, err := s.agentClient.Resume(requestCtx, req)
 	if err != nil {
 		return nil, err
@@ -928,7 +932,7 @@ func (s *service) Resume(requestCtx context.Context, req *taskAPI.ResumeRequest)
 func (s *service) Kill(requestCtx context.Context, req *taskAPI.KillRequest) (*ptypes.Empty, error) {
 	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("kill")
+	log.G(requestCtx).WithFields(logrus.Fields{"task_id": req.ID, "exec_id": req.ExecID}).Debug("kill")
 	resp, err := s.agentClient.Kill(requestCtx, req)
 	if err != nil {
 		return nil, err
@@ -940,7 +944,7 @@ func (s *service) Kill(requestCtx context.Context, req *taskAPI.KillRequest) (*p
 func (s *service) Pids(requestCtx context.Context, req *taskAPI.PidsRequest) (*taskAPI.PidsResponse, error) {
 	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(requestCtx).WithField("id", req.ID).Debug("pids")
+	log.G(requestCtx).WithField("task_id", req.ID).Debug("pids")
 	resp, err := s.agentClient.Pids(requestCtx, req)
 	if err != nil {
 		return nil, err
@@ -953,7 +957,7 @@ func (s *service) Pids(requestCtx context.Context, req *taskAPI.PidsRequest) (*t
 func (s *service) CloseIO(requestCtx context.Context, req *taskAPI.CloseIORequest) (*ptypes.Empty, error) {
 	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("close_io")
+	log.G(requestCtx).WithFields(logrus.Fields{"task_id": req.ID, "exec_id": req.ExecID}).Debug("close_io")
 	resp, err := s.agentClient.CloseIO(requestCtx, req)
 	if err != nil {
 		return nil, err
@@ -966,7 +970,7 @@ func (s *service) CloseIO(requestCtx context.Context, req *taskAPI.CloseIOReques
 func (s *service) Checkpoint(requestCtx context.Context, req *taskAPI.CheckpointTaskRequest) (*ptypes.Empty, error) {
 	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "path": req.Path}).Info("checkpoint")
+	log.G(requestCtx).WithFields(logrus.Fields{"task_id": req.ID, "path": req.Path}).Info("checkpoint")
 	resp, err := s.agentClient.Checkpoint(requestCtx, req)
 	if err != nil {
 		return nil, err
@@ -979,7 +983,7 @@ func (s *service) Checkpoint(requestCtx context.Context, req *taskAPI.Checkpoint
 func (s *service) Connect(requestCtx context.Context, req *taskAPI.ConnectRequest) (*taskAPI.ConnectResponse, error) {
 	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(requestCtx).WithField("id", req.ID).Debug("connect")
+	log.G(requestCtx).WithField("task_id", req.ID).Debug("connect")
 	resp, err := s.agentClient.Connect(requestCtx, req)
 	if err != nil {
 		return nil, err
@@ -999,7 +1003,7 @@ func (s *service) Connect(requestCtx context.Context, req *taskAPI.ConnectReques
 // Shutdown is not directly exposed to containerd clients.
 func (s *service) Shutdown(requestCtx context.Context, req *taskAPI.ShutdownRequest) (*ptypes.Empty, error) {
 	defer logPanicAndDie(log.G(requestCtx))
-	s.logger.WithFields(logrus.Fields{"id": req.ID, "now": req.Now}).Debug("shutdown")
+	s.logger.WithFields(logrus.Fields{"task_id": req.ID, "now": req.Now}).Debug("shutdown")
 
 	shouldShutdown := req.Now || s.exitAfterAllTasksDeleted && s.taskManager.ShutdownIfEmpty()
 	if !shouldShutdown {
@@ -1040,7 +1044,7 @@ func (s *service) Shutdown(requestCtx context.Context, req *taskAPI.ShutdownRequ
 
 func (s *service) Stats(requestCtx context.Context, req *taskAPI.StatsRequest) (*taskAPI.StatsResponse, error) {
 	defer logPanicAndDie(log.G(requestCtx))
-	log.G(requestCtx).WithField("id", req.ID).Debug("stats")
+	log.G(requestCtx).WithField("task_id", req.ID).Debug("stats")
 
 	resp, err := s.agentClient.Stats(requestCtx, req)
 	if err != nil {
@@ -1053,7 +1057,7 @@ func (s *service) Stats(requestCtx context.Context, req *taskAPI.StatsRequest) (
 // Update a running container
 func (s *service) Update(requestCtx context.Context, req *taskAPI.UpdateTaskRequest) (*ptypes.Empty, error) {
 	defer logPanicAndDie(log.G(requestCtx))
-	log.G(requestCtx).WithField("id", req.ID).Debug("update")
+	log.G(requestCtx).WithField("task_id", req.ID).Debug("update")
 
 	resp, err := s.agentClient.Update(requestCtx, req)
 	if err != nil {
@@ -1066,7 +1070,7 @@ func (s *service) Update(requestCtx context.Context, req *taskAPI.UpdateTaskRequ
 // Wait for a process to exit
 func (s *service) Wait(requestCtx context.Context, req *taskAPI.WaitRequest) (*taskAPI.WaitResponse, error) {
 	defer logPanicAndDie(log.G(requestCtx))
-	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("wait")
+	log.G(requestCtx).WithFields(logrus.Fields{"task_id": req.ID, "exec_id": req.ExecID}).Debug("wait")
 
 	resp, err := s.agentClient.Wait(requestCtx, req)
 	if err != nil {

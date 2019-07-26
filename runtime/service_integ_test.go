@@ -53,7 +53,7 @@ const (
 	defaultNamespace = namespaces.Default
 
 	containerdSockPath = "/run/containerd/containerd.sock"
-	guestDockerImage   = "docker.io/library/alpine:latest"
+	guestDockerImage   = "docker.io/library/alpine:3.10.1"
 
 	firecrackerRuntime   = "aws.firecracker"
 	naiveSnapshotterName = "firecracker-naive"

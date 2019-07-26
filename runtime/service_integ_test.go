@@ -53,7 +53,7 @@ const (
 	defaultNamespace = namespaces.Default
 
 	containerdSockPath = "/run/containerd/containerd.sock"
-	debianDockerImage  = "docker.io/library/debian:latest"
+	guestDockerImage   = "docker.io/library/alpine:3.10.1"
 
 	firecrackerRuntime   = "aws.firecracker"
 	naiveSnapshotterName = "firecracker-naive"
@@ -77,8 +77,8 @@ func TestShimExitsUponContainerDelete_Isolated(t *testing.T) {
 	pullCtx, pullCancel := context.WithTimeout(ctx, pullTimeout)
 	defer pullCancel()
 
-	image, err := client.Pull(pullCtx, debianDockerImage, containerd.WithPullUnpack, containerd.WithPullSnapshotter(naiveSnapshotterName))
-	require.NoError(t, err, "failed to pull image %s, is the the %s snapshotter running?", debianDockerImage, naiveSnapshotterName)
+	image, err := client.Pull(pullCtx, guestDockerImage, containerd.WithPullUnpack, containerd.WithPullSnapshotter(naiveSnapshotterName))
+	require.NoError(t, err, "failed to pull image %s, is the the %s snapshotter running?", guestDockerImage, naiveSnapshotterName)
 
 	testTimeout := 60 * time.Second
 	testCtx, testCancel := context.WithTimeout(ctx, testTimeout)
@@ -212,8 +212,8 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
 	defer client.Close()
 
-	image, err := client.Pull(ctx, debianDockerImage, containerd.WithPullUnpack, containerd.WithPullSnapshotter(naiveSnapshotterName))
-	require.NoError(t, err, "failed to pull image %s, is the the %s snapshotter running?", debianDockerImage, naiveSnapshotterName)
+	image, err := client.Pull(ctx, guestDockerImage, containerd.WithPullUnpack, containerd.WithPullSnapshotter(naiveSnapshotterName))
+	require.NoError(t, err, "failed to pull image %s, is the the %s snapshotter running?", guestDockerImage, naiveSnapshotterName)
 
 	rootfsBytes, err := ioutil.ReadFile(defaultVMRootfsPath)
 	require.NoError(t, err, "failed to read rootfs file")
@@ -278,7 +278,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 						containerd.WithNewSpec(
 							oci.WithProcessArgs("/bin/sh", "-c", strings.Join([]string{
 								fmt.Sprintf("/bin/cat /sys/class/net/%s/address", defaultVMNetDevName),
-								"/bin/readlink /proc/self/ns/mnt",
+								"/usr/bin/readlink /proc/self/ns/mnt",
 								fmt.Sprintf("/bin/sleep %d", testTimeout/time.Second),
 							}, " && ")),
 							oci.WithHostNamespace(specs.NetworkNamespace),
@@ -320,7 +320,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 							var execStderr bytes.Buffer
 
 							newExec, err := newTask.Exec(ctx, execID, &specs.Process{
-								Args: []string{"/bin/readlink", "/proc/self/ns/mnt"},
+								Args: []string{"/usr/bin/readlink", "/proc/self/ns/mnt"},
 								Cwd:  "/",
 							}, cio.NewCreator(cio.WithStreams(nil, &execStdout, &execStderr)))
 							require.NoError(t, err, "failed to exec %s", execID)
@@ -444,8 +444,8 @@ func TestStubBlockDevices_Isolated(t *testing.T) {
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
 	defer client.Close()
 
-	image, err := client.Pull(ctx, debianDockerImage, containerd.WithPullUnpack, containerd.WithPullSnapshotter(naiveSnapshotterName))
-	require.NoError(t, err, "failed to pull image %s, is the the %s snapshotter running?", debianDockerImage, naiveSnapshotterName)
+	image, err := client.Pull(ctx, guestDockerImage, containerd.WithPullUnpack, containerd.WithPullSnapshotter(naiveSnapshotterName))
+	require.NoError(t, err, "failed to pull image %s, is the the %s snapshotter running?", guestDockerImage, naiveSnapshotterName)
 
 	// TODO once Noah's immutable rootfs change is merged, we can use that as our rootfs for all VMs instead of copying
 	// one per-VM
@@ -615,8 +615,8 @@ func testCreateContainerWithSameName(t *testing.T, vmID string) {
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
 	defer client.Close()
 
-	image, err := client.Pull(ctx, debianDockerImage, containerd.WithPullUnpack, containerd.WithPullSnapshotter(naiveSnapshotterName))
-	require.NoError(t, err, "failed to pull image %s, is the the %s snapshotter running?", debianDockerImage, naiveSnapshotterName)
+	image, err := client.Pull(ctx, guestDockerImage, containerd.WithPullUnpack, containerd.WithPullSnapshotter(naiveSnapshotterName))
+	require.NoError(t, err, "failed to pull image %s, is the the %s snapshotter running?", guestDockerImage, naiveSnapshotterName)
 
 	containerName := fmt.Sprintf("%s-%d", t.Name(), time.Now().UnixNano())
 	snapshotName := fmt.Sprintf("%s-snapshot", containerName)

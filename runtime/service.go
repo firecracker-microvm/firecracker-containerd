@@ -32,6 +32,7 @@ import (
 	// secure randomness
 	"math/rand" // #nosec
 
+	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/events"
 	"github.com/containerd/containerd/events/exchange"
 	"github.com/containerd/containerd/log"
@@ -983,13 +984,12 @@ func (s *service) Checkpoint(requestCtx context.Context, req *taskAPI.Checkpoint
 func (s *service) Connect(requestCtx context.Context, req *taskAPI.ConnectRequest) (*taskAPI.ConnectResponse, error) {
 	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(requestCtx).WithField("task_id", req.ID).Debug("connect")
-	resp, err := s.agentClient.Connect(requestCtx, req)
-	if err != nil {
-		return nil, err
-	}
+	// Since task_pid inside the micro VM wouldn't make sense for clients,
+	// we intentionally return ErrNotImplemented instead of forwarding that to the guest-side shim.
+	// https://github.com/firecracker-microvm/firecracker-containerd/issues/210
+	log.G(requestCtx).WithField("task_id", req.ID).Error(`"connect" is not implemented by the shim`)
 
-	return resp, nil
+	return nil, errdefs.ErrNotImplemented
 }
 
 // Shutdown will attempt a graceful shutdown of the shim+VM. The shutdown procedure will only actually take

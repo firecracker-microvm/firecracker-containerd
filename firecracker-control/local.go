@@ -28,6 +28,7 @@ import (
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/plugin"
 	"github.com/containerd/containerd/runtime/v2/shim"
+	"github.com/containerd/containerd/sys"
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -325,9 +326,8 @@ func (s *local) newShim(ns, vmID, containerdAddress string, shimSocket *net.Unix
 		logger.WithError(waitErr).Debug("completed waiting on shim process")
 	}()
 
-	err = shim.SetScore(cmd.Process.Pid)
+	err = setShimOOMScore(cmd.Process.Pid)
 	if err != nil {
-		err = errors.Wrap(err, "failed to set OOM Score on shim")
 		logger.WithError(err).Error()
 		return nil, err
 	}
@@ -337,4 +337,16 @@ func (s *local) newShim(ns, vmID, containerdAddress string, shimSocket *net.Unix
 
 func isEADDRINUSE(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "address already in use")
+}
+
+func setShimOOMScore(pid int) error {
+	score, err := sys.GetOOMScoreAdj(pid)
+	if err != nil {
+		return errors.Wrap(err, "failed to get OOM score for containerd")
+	}
+	shimScore := score + 1
+	if err := sys.SetOOMScore(pid, shimScore); err != nil {
+		return errors.Wrap(err, "failed to set OOM score on shim")
+	}
+	return nil
 }

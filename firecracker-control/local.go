@@ -326,7 +326,7 @@ func (s *local) newShim(ns, vmID, containerdAddress string, shimSocket *net.Unix
 		logger.WithError(waitErr).Debug("completed waiting on shim process")
 	}()
 
-	err = setShimOOMScore()
+	err = setShimOOMScore(cmd.Process.Pid)
 	if err != nil {
 		logger.WithError(err).Error()
 		return nil, err
@@ -339,16 +339,16 @@ func isEADDRINUSE(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "address already in use")
 }
 
-func setShimOOMScore() error {
-	pid := os.Getpid()
+func setShimOOMScore(shimPid int) error {
+	containerdPid := os.Getpid()
 
-	score, err := sys.GetOOMScoreAdj(pid)
+	score, err := sys.GetOOMScoreAdj(containerdPid)
 	if err != nil {
 		return errors.Wrap(err, "failed to get OOM score for containerd")
 	}
 
 	shimScore := score + 1
-	if err := sys.SetOOMScore(pid, shimScore); err != nil {
+	if err := sys.SetOOMScore(shimPid, shimScore); err != nil {
 		return errors.Wrap(err, "failed to set OOM score on shim")
 	}
 

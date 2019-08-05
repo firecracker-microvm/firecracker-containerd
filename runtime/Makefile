@@ -58,5 +58,6 @@ integ-test:
 
 clean:
 	- rm -f containerd-shim-aws-firecracker
+	- rm -rf logs
 
 .PHONY: all runtime clean install test integ-test

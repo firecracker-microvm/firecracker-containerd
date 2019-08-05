@@ -588,6 +588,25 @@ func (s *service) SetVMMetadata(requestCtx context.Context, request *proto.SetVM
 	return &empty.Empty{}, nil
 }
 
+func (s *service) createStubDrives(stubDriveCount int) ([]models.Drive, error) {
+	paths, err := s.stubDriveHandler.StubDrivePaths(stubDriveCount)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to retrieve stub drive paths")
+	}
+
+	stubDrives := make([]models.Drive, 0)
+	for i, path := range paths {
+		stubDrives = append(stubDrives, models.Drive{
+			DriveID:      firecracker.String(fmt.Sprintf("stub%d", i)),
+			IsReadOnly:   firecracker.Bool(false),
+			PathOnHost:   firecracker.String(path),
+			IsRootDevice: firecracker.Bool(false),
+		})
+	}
+
+	return stubDrives, nil
+}
+
 func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker.Config, error) {
 	logger := s.logger.WithField("cid", s.machineCID)
 
@@ -618,15 +637,6 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 	}
 
 	// Drives configuration
-
-	var driveBuilder firecracker.DrivesBuilder
-	if root := req.RootDrive; root != nil {
-		driveBuilder = firecracker.NewDrivesBuilder(root.PathOnHost)
-	} else {
-		driveBuilder = firecracker.NewDrivesBuilder(s.config.RootDrive)
-	}
-
-	stubDriveIndex := int64(len(driveBuilder.Build()) - 1)
 	containerCount := int(req.ContainerCount)
 	if containerCount < 1 {
 		// containerCount should always be positive so that at least one container
@@ -635,26 +645,27 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 		containerCount = 1
 	}
 
-	paths, err := s.stubDriveHandler.StubDrivePaths(containerCount)
+	// Create stub drives first and let stub driver handler manage the drives
+	stubDrives, err := s.createStubDrives(containerCount)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to retrieve stub drive paths")
+		return nil, errors.Wrap(err, "failed to create stub drives")
 	}
+	s.stubDriveHandler.SetDrives(0, stubDrives)
 
-	for i, path := range paths {
-		driveID := fmt.Sprintf("stub%d", i)
-		driveBuilder = driveBuilder.AddDrive(path, false, func(drive *models.Drive) {
-			drive.DriveID = firecracker.String(driveID)
-		})
+	var driveBuilder firecracker.DrivesBuilder
+	// Create non-stub drives
+	if root := req.RootDrive; root != nil {
+		driveBuilder = firecracker.NewDrivesBuilder(root.PathOnHost)
+	} else {
+		driveBuilder = firecracker.NewDrivesBuilder(s.config.RootDrive)
 	}
-
-	cfg.Drives = driveBuilder.Build()
-	s.stubDriveHandler.SetDrives(stubDriveIndex, cfg.Drives)
 
 	for _, drive := range req.AdditionalDrives {
 		driveBuilder = addDriveFromProto(driveBuilder, drive)
 	}
 
-	cfg.Drives = driveBuilder.Build()
+	// a micro VM must know all drives
+	cfg.Drives = append(stubDrives, driveBuilder.Build()...)
 
 	// Setup network interfaces
 

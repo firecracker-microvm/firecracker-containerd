@@ -62,17 +62,12 @@ func TestFindNextAvailableVsockCID_Isolated(t *testing.T) {
 
 func TestBuildVMConfiguration(t *testing.T) {
 	namespace := "TestBuildVMConfiguration"
-	rootfsDrive := models.Drive{
-		DriveID:      firecracker.String("stub0"),
-		PathOnHost:   nil, // will be populated in the for loop
-		IsReadOnly:   firecracker.Bool(false),
-		IsRootDevice: firecracker.Bool(false),
-	}
 	testcases := []struct {
-		name        string
-		request     *proto.CreateVMRequest
-		config      *Config
-		expectedCfg *firecracker.Config
+		name                   string
+		request                *proto.CreateVMRequest
+		config                 *Config
+		expectedCfg            *firecracker.Config
+		expectedStubDriveCount int
 	}{
 		{
 			name:    "ConfigFile",
@@ -88,7 +83,6 @@ func TestBuildVMConfiguration(t *testing.T) {
 				KernelArgs:      "KERNEL ARGS",
 				KernelImagePath: "KERNEL IMAGE",
 				Drives: []models.Drive{
-					rootfsDrive,
 					{
 						DriveID:      firecracker.String("root_drive"),
 						PathOnHost:   firecracker.String("ROOT DRIVE"),
@@ -103,6 +97,7 @@ func TestBuildVMConfiguration(t *testing.T) {
 					HtEnabled:   firecracker.Bool(false),
 				},
 			},
+			expectedStubDriveCount: 1,
 		},
 		{
 			name: "Input",
@@ -122,7 +117,6 @@ func TestBuildVMConfiguration(t *testing.T) {
 				KernelArgs:      "REQUEST KERNEL ARGS",
 				KernelImagePath: "REQUEST KERNEL IMAGE",
 				Drives: []models.Drive{
-					rootfsDrive,
 					{
 						DriveID:      firecracker.String("root_drive"),
 						PathOnHost:   firecracker.String("REQUEST ROOT DRIVE"),
@@ -137,6 +131,7 @@ func TestBuildVMConfiguration(t *testing.T) {
 					HtEnabled:   firecracker.Bool(false),
 				},
 			},
+			expectedStubDriveCount: 1,
 		},
 		{
 			name: "Priority",
@@ -160,7 +155,6 @@ func TestBuildVMConfiguration(t *testing.T) {
 				KernelArgs:      "REQUEST KERNEL ARGS",
 				KernelImagePath: "KERNEL IMAGE",
 				Drives: []models.Drive{
-					rootfsDrive,
 					{
 						DriveID:      firecracker.String("root_drive"),
 						PathOnHost:   firecracker.String("REQUEST ROOT DRIVE"),
@@ -175,6 +169,37 @@ func TestBuildVMConfiguration(t *testing.T) {
 					HtEnabled:   firecracker.Bool(false),
 				},
 			},
+			expectedStubDriveCount: 1,
+		},
+		{
+			name:    "Container Count",
+			request: &proto.CreateVMRequest{ContainerCount: 2},
+			config: &Config{
+				KernelArgs:      "KERNEL ARGS",
+				KernelImagePath: "KERNEL IMAGE",
+				RootDrive:       "ROOT DRIVE",
+				CPUTemplate:     "C3",
+				CPUCount:        2,
+			},
+			expectedCfg: &firecracker.Config{
+				KernelArgs:      "KERNEL ARGS",
+				KernelImagePath: "KERNEL IMAGE",
+				Drives: []models.Drive{
+					{
+						DriveID:      firecracker.String("root_drive"),
+						PathOnHost:   firecracker.String("ROOT DRIVE"),
+						IsReadOnly:   firecracker.Bool(false),
+						IsRootDevice: firecracker.Bool(true),
+					},
+				},
+				MachineCfg: models.MachineConfiguration{
+					CPUTemplate: models.CPUTemplateC3,
+					VcpuCount:   firecracker.Int64(2),
+					MemSizeMib:  firecracker.Int64(defaultMemSizeMb),
+					HtEnabled:   firecracker.Bool(false),
+				},
+			},
+			expectedStubDriveCount: 2,
 		},
 	}
 
@@ -197,11 +222,21 @@ func TestBuildVMConfiguration(t *testing.T) {
 			tc.expectedCfg.VsockDevices = []firecracker.VsockDevice{{Path: "root", CID: svc.machineCID}}
 			tc.expectedCfg.LogFifo = svc.shimDir.FirecrackerLogFifoPath()
 			tc.expectedCfg.MetricsFifo = svc.shimDir.FirecrackerMetricsFifoPath()
-			tc.expectedCfg.Drives[0].PathOnHost = firecracker.String(filepath.Join(tempDir, "stub0"))
+
+			drives := make([]models.Drive, tc.expectedStubDriveCount)
+			for i := 0; i < tc.expectedStubDriveCount; i++ {
+				drives[i].PathOnHost = firecracker.String(filepath.Join(tempDir, fmt.Sprintf("stub%d", i)))
+				drives[i].DriveID = firecracker.String(fmt.Sprintf("stub%d", i))
+				drives[i].IsReadOnly = firecracker.Bool(false)
+				drives[i].IsRootDevice = firecracker.Bool(false)
+			}
+			tc.expectedCfg.Drives = append(drives, tc.expectedCfg.Drives...)
 
 			actualCfg, err := svc.buildVMConfiguration(tc.request)
 			assert.NoError(t, err)
 			require.Equal(t, tc.expectedCfg, actualCfg)
+
+			require.Equal(t, tc.expectedStubDriveCount, len(svc.stubDriveHandler.drives), "The stub driver only knows stub drives")
 		})
 	}
 }

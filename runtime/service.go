@@ -665,6 +665,7 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 	}
 
 	// a micro VM must know all drives
+	// nolint: gocritic
 	cfg.Drives = append(stubDrives, driveBuilder.Build()...)
 
 	// Setup network interfaces

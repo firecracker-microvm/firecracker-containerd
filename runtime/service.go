@@ -594,7 +594,7 @@ func (s *service) createStubDrives(stubDriveCount int) ([]models.Drive, error) {
 		return nil, errors.Wrap(err, "failed to retrieve stub drive paths")
 	}
 
-	stubDrives := make([]models.Drive, 0)
+	stubDrives := make([]models.Drive, 0, stubDriveCount)
 	for i, path := range paths {
 		stubDrives = append(stubDrives, models.Drive{
 			DriveID:      firecracker.String(fmt.Sprintf("stub%d", i)),

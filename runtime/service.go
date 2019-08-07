@@ -650,7 +650,7 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create stub drives")
 	}
-	s.stubDriveHandler.SetDrives(0, stubDrives)
+	s.stubDriveHandler.SetDrives(stubDrives)
 
 	var driveBuilder firecracker.DrivesBuilder
 	// Create non-stub drives

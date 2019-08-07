@@ -127,9 +127,9 @@ func (h *stubDriveHandler) createStubDrive(driveID, path string) error {
 
 // SetDrives will set the given drives and the offset to which the stub drives
 // start.
-func (h *stubDriveHandler) SetDrives(offset int64, d []models.Drive) {
+func (h *stubDriveHandler) SetDrives(d []models.Drive) {
 	h.drives = d
-	h.stubDriveIndex = offset
+	h.stubDriveIndex = 0
 }
 
 // GetDrives returns the associated stub drives

@@ -40,6 +40,7 @@ import (
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/shirou/gopsutil/process"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	_ "github.com/firecracker-microvm/firecracker-containerd/firecracker-control"
@@ -675,4 +676,55 @@ func TestCreateContainerWithSameName_Isolated(t *testing.T) {
 
 	vmID := fmt.Sprintf("same-vm-%d", time.Now().UnixNano())
 	testCreateContainerWithSameName(t, vmID)
+}
+
+func TestCreateTooManyContainers_Isolated(t *testing.T) {
+	internal.RequiresIsolation(t)
+	assert := assert.New(t)
+
+	ctx := namespaces.WithNamespace(context.Background(), "default")
+
+	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	defer client.Close()
+
+	image, err := client.Pull(ctx, guestDockerImage, containerd.WithPullUnpack, containerd.WithPullSnapshotter(naiveSnapshotterName))
+	require.NoError(t, err, "failed to pull image %s, is the the %s snapshotter running?", guestDockerImage, naiveSnapshotterName)
+
+	runEchoHello := containerd.WithNewSpec(oci.WithProcessArgs("echo", "-n", "hello"), firecrackeroci.WithVMID("reuse-same-vm"))
+
+	c1, err := client.NewContainer(ctx,
+		"c1",
+		containerd.WithSnapshotter(naiveSnapshotterName),
+		containerd.WithNewSnapshot("c1", image),
+		runEchoHello,
+	)
+	assert.Equal("hello", startAndWaitTask(ctx, t, c1))
+	require.NoError(t, err, "failed to create a container")
+
+	defer func() {
+		err = c1.Delete(ctx, containerd.WithSnapshotCleanup)
+		require.NoError(t, err, "failed to delete a container")
+	}()
+
+	c2, err := client.NewContainer(ctx,
+		"c2",
+		containerd.WithSnapshotter(naiveSnapshotterName),
+		containerd.WithNewSnapshot("c2", image),
+		runEchoHello,
+	)
+	require.NoError(t, err, "failed to create a container")
+
+	defer func() {
+		err := c2.Delete(ctx, containerd.WithSnapshotCleanup)
+		require.NoError(t, err, "failed to delete a container")
+	}()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	// When we reuse a VM explicitly, we cannot start multiple containers unless we pre-allocate stub drives.
+	_, err = c2.NewTask(ctx, cio.NewCreator(cio.WithStreams(nil, &stdout, &stderr)))
+	assert.Equal("no remaining stub drives to be used: unavailable: unknown", err.Error())
+	require.Error(t, err)
 }

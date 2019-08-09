@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
+	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	"github.com/firecracker-microvm/firecracker-go-sdk"
 	models "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
@@ -216,7 +217,7 @@ func TestBuildVMConfiguration(t *testing.T) {
 			assert.NoError(t, err)
 			defer os.RemoveAll(tempDir)
 
-			svc.stubDriveHandler = newStubDriveHandler(tempDir, svc.logger)
+			svc.shimDir = vm.Dir(tempDir)
 			// For values that remain constant between tests, they are written here
 			tc.expectedCfg.SocketPath = svc.shimDir.FirecrackerSockPath()
 			tc.expectedCfg.VsockDevices = []firecracker.VsockDevice{{Path: "root", CID: svc.machineCID}}
@@ -293,7 +294,7 @@ func TestDebugConfig(t *testing.T) {
 		stubDrivePath := filepath.Join(path, fmt.Sprintf("%d", i))
 		err := os.MkdirAll(stubDrivePath, os.ModePerm)
 		assert.NoError(t, err, "failed to create stub drive path")
-		c.service.stubDriveHandler = newStubDriveHandler(stubDrivePath, c.service.logger)
+		c.service.shimDir = vm.Dir(stubDrivePath)
 		req := proto.CreateVMRequest{}
 
 		cfg, err := c.service.buildVMConfiguration(&req)

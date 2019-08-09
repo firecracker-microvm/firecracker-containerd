@@ -725,6 +725,6 @@ func TestCreateTooManyContainers_Isolated(t *testing.T) {
 
 	// When we reuse a VM explicitly, we cannot start multiple containers unless we pre-allocate stub drives.
 	_, err = c2.NewTask(ctx, cio.NewCreator(cio.WithStreams(nil, &stdout, &stderr)))
-	assert.Equal("failed to patch stub drive: There are no remaining drives to be used: unknown", err.Error())
+	assert.Equal("no remaining stub drives to be used: unavailable: unknown", err.Error())
 	require.Error(t, err)
 }

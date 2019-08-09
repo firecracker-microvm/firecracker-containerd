@@ -715,9 +715,11 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 	for _, mnt := range request.Rootfs {
 		driveID, err = s.stubDriveHandler.PatchStubDrive(requestCtx, s.machine, mnt.Source)
 		if err != nil {
+			if err == ErrDrivesExhausted {
+				return nil, errors.Wrapf(errdefs.ErrUnavailable, "no remaining stub drives to be used")
+			}
 			return nil, errors.Wrapf(err, "failed to patch stub drive")
 		}
-
 	}
 
 	ociConfigBytes, err := bundleDir.OCIConfig().Bytes()

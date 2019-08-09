@@ -40,10 +40,9 @@ func TestStubDriveHandler(t *testing.T) {
 	}()
 
 	logger := log.G(context.Background())
-	handler := newStubDriveHandler(tempPath, logger)
-	paths, err := handler.StubDrivePaths(5)
+	handler, err := newStubDriveHandler(tempPath, logger, 5)
 	assert.NoError(t, err)
-	assert.Equal(t, 5, len(paths))
+	assert.Equal(t, 5, len(handler.GetDrives()))
 
 	infos, err := ioutil.ReadDir(tempPath)
 	assert.NoError(t, err)
@@ -236,9 +235,11 @@ func TestCreateStubDrive(t *testing.T) {
 		c := c // see https://github.com/kyoh86/scopelint/issues/4
 		t.Run(c.Name, func(t *testing.T) {
 			logger := log.G(context.Background())
-			handler := newStubDriveHandler(path, logger)
+			handler, err := newStubDriveHandler(path, logger, 0)
+			assert.NoError(t, err)
+
 			stubDrivePath := filepath.Join(path, c.Name)
-			err := handler.createStubDrive(c.DriveID, stubDrivePath)
+			err = handler.createStubDrive(c.DriveID, stubDrivePath)
 			assert.Equal(t, c.ExpectedError, err != nil, "invalid error: %v", err)
 
 			info, err := os.Stat(stubDrivePath)

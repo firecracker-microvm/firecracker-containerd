@@ -15,7 +15,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"net"
 	"os"
@@ -43,7 +42,6 @@ import (
 	"github.com/containerd/fifo"
 	"github.com/containerd/ttrpc"
 	"github.com/firecracker-microvm/firecracker-go-sdk"
-	models "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 	"github.com/gofrs/uuid"
 	ptypes "github.com/gogo/protobuf/types"
 	"github.com/golang/protobuf/ptypes/empty"
@@ -124,7 +122,7 @@ type service struct {
 	vmStartOnce              sync.Once
 	agentClient              taskAPI.TaskService
 	eventBridgeClient        eventbridge.Getter
-	stubDriveHandler         stubDriveHandler
+	stubDriveHandler         *stubDriveHandler
 	exitAfterAllTasksDeleted bool // exit the VM and shim when all tasks are deleted
 
 	machine          *firecracker.Machine
@@ -198,7 +196,6 @@ func NewService(shimCtx context.Context, id string, remotePublisher shim.Publish
 		vmReady: make(chan struct{}),
 	}
 
-	s.stubDriveHandler = newStubDriveHandler(s.shimDir.RootPath(), logger)
 	s.startEventForwarders(remotePublisher)
 
 	err = s.serveFCControl()
@@ -588,25 +585,6 @@ func (s *service) SetVMMetadata(requestCtx context.Context, request *proto.SetVM
 	return &empty.Empty{}, nil
 }
 
-func (s *service) createStubDrives(stubDriveCount int) ([]models.Drive, error) {
-	paths, err := s.stubDriveHandler.StubDrivePaths(stubDriveCount)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to retrieve stub drive paths")
-	}
-
-	stubDrives := make([]models.Drive, 0, stubDriveCount)
-	for i, path := range paths {
-		stubDrives = append(stubDrives, models.Drive{
-			DriveID:      firecracker.String(fmt.Sprintf("stub%d", i)),
-			IsReadOnly:   firecracker.Bool(false),
-			PathOnHost:   firecracker.String(path),
-			IsRootDevice: firecracker.Bool(false),
-		})
-	}
-
-	return stubDrives, nil
-}
-
 func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker.Config, error) {
 	logger := s.logger.WithField("cid", s.machineCID)
 
@@ -646,11 +624,11 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 	}
 
 	// Create stub drives first and let stub driver handler manage the drives
-	stubDrives, err := s.createStubDrives(containerCount)
+	handler, err := newStubDriveHandler(s.shimDir.RootPath(), logger, containerCount)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create stub drives")
 	}
-	s.stubDriveHandler.SetDrives(stubDrives)
+	s.stubDriveHandler = handler
 
 	var driveBuilder firecracker.DrivesBuilder
 	// Create non-stub drives
@@ -665,8 +643,7 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 	}
 
 	// a micro VM must know all drives
-	// nolint: gocritic
-	cfg.Drives = append(stubDrives, driveBuilder.Build()...)
+	cfg.Drives = append(handler.GetDrives(), driveBuilder.Build()...)
 
 	// Setup network interfaces
 

@@ -51,16 +51,41 @@ type stubDriveHandler struct {
 	mutex          sync.Mutex
 }
 
-func newStubDriveHandler(path string, logger *logrus.Entry) stubDriveHandler {
-	return stubDriveHandler{
+func newStubDriveHandler(path string, logger *logrus.Entry, count int) (*stubDriveHandler, error) {
+	h := stubDriveHandler{
 		RootPath: path,
 		logger:   logger,
 	}
+	drives, err := h.createStubDrives(count)
+	if err != nil {
+		return nil, err
+	}
+	h.drives = drives
+	return &h, nil
 }
 
-// StubDrivePaths will create stub drives and return the paths associated with
+func (h *stubDriveHandler) createStubDrives(stubDriveCount int) ([]models.Drive, error) {
+	paths, err := h.stubDrivePaths(stubDriveCount)
+	if err != nil {
+		return nil, err
+	}
+
+	stubDrives := make([]models.Drive, 0, stubDriveCount)
+	for i, path := range paths {
+		stubDrives = append(stubDrives, models.Drive{
+			DriveID:      firecracker.String(fmt.Sprintf("stub%d", i)),
+			IsReadOnly:   firecracker.Bool(false),
+			PathOnHost:   firecracker.String(path),
+			IsRootDevice: firecracker.Bool(false),
+		})
+	}
+
+	return stubDrives, nil
+}
+
+// stubDrivePaths will create stub drives and return the paths associated with
 // the stub drives.
-func (h *stubDriveHandler) StubDrivePaths(count int) ([]string, error) {
+func (h *stubDriveHandler) stubDrivePaths(count int) ([]string, error) {
 	paths := []string{}
 	for i := 0; i < count; i++ {
 		driveID := fmt.Sprintf("stub%d", i)
@@ -123,13 +148,6 @@ func (h *stubDriveHandler) createStubDrive(driveID, path string) error {
 	}
 
 	return nil
-}
-
-// SetDrives will set the given drives and the offset to which the stub drives
-// start.
-func (h *stubDriveHandler) SetDrives(d []models.Drive) {
-	h.drives = d
-	h.stubDriveIndex = 0
 }
 
 // GetDrives returns the associated stub drives

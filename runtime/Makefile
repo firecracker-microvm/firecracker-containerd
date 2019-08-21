@@ -52,6 +52,7 @@ integ-test:
 			--volume $(CURDIR)/logs:/var/log/firecracker-containerd-test \
 			--env ENABLE_ISOLATED_TESTS=1 \
 			--workdir="/firecracker-containerd/runtime" \
+			--init \
 			localhost/firecracker-containerd-naive-integ-test:$(DOCKER_IMAGE_TAG) \
 			"go test $(EXTRAGOARGS) -run \"^$(TESTNAME)$$\"" || exit 1; \
 	)

@@ -205,22 +205,11 @@ ENTRYPOINT ["/bin/bash", "-c"]
 # Test image that starts up containerd and the naive snapshotter. The default CMD will drop to a bash shell. Overrides
 # to CMD will be provided appended to /bin/bash -c
 FROM firecracker-containerd-test as firecracker-containerd-naive-integ-test
-# Install tini init to handle zombies created by our double-forked shims.
-# Unfortunately, we need to do this rather than only use docker's "--init" flag because docker
-# currently puts its default init binary at /dev/init, but we need to bind-mount /dev from
-# the host in order for the snapshotter to work.
-# This should no longer be an issue after github.com/moby/moby #37665 is released.
-RUN curl --silent --show-error --retry 3 --max-time 30 --location --output tini \
-  "https://github.com/krallin/tini/releases/download/v0.18.0/tini" \
-  && echo "12d20136605531b09a2c2dac02ccee85e1b874eb322ef6baf7561cd93f93c855 tini" | sha256sum -c - \
-  && mv tini /sbin/tini \
-  && chmod +x /sbin/tini
-
 COPY tools/docker/naive-snapshotter/config.toml /etc/containerd/config.toml
 COPY tools/docker/naive-snapshotter/entrypoint.sh /entrypoint
 RUN mkdir -p /var/lib/firecracker-containerd/naive
 
-ENTRYPOINT ["/sbin/tini", "--", "/entrypoint"]
+ENTRYPOINT ["/entrypoint"]
 CMD ["exec /bin/bash"]
 
 

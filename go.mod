@@ -6,9 +6,9 @@ require (
 	github.com/StackExchange/wmi v0.0.0-20181212234831-e0a55b97c705 // indirect
 	github.com/containerd/cgroups v0.0.0-20181105182409-82cb49fc1779 // indirect
 	github.com/containerd/console v0.0.0-20181022165439-0650fd9eeb50 // indirect
-	github.com/containerd/containerd v1.2.1-0.20190711201753-f2b6c31d0fa7
+	github.com/containerd/containerd v1.3.0-beta.2
 	github.com/containerd/continuity v0.0.0-20181027224239-bea7585dbfac
-	github.com/containerd/fifo v0.0.0-20180307165137-3d5202aec260
+	github.com/containerd/fifo v0.0.0-20190816180239-bda0ff6ed73c
 	github.com/containerd/go-runc v0.0.0-20190226155025-7d11b49dc076 // indirect
 	github.com/containerd/ttrpc v0.0.0-20190613183316-1fb3814edf44
 	github.com/containerd/typeurl v0.0.0-20181015155603-461401dc8f19
@@ -29,7 +29,7 @@ require (
 	github.com/mdlayher/vsock v0.0.0-20190329173812-a92c53d5dcab
 	github.com/opencontainers/go-digest v1.0.0-rc1 // indirect
 	github.com/opencontainers/image-spec v1.0.1 // indirect
-	github.com/opencontainers/runc v0.1.1 // indirect
+	github.com/opencontainers/runc v0.1.1
 	github.com/opencontainers/runtime-spec v0.1.2-0.20181106065543-31e0d16c1cb7
 	github.com/pkg/errors v0.8.1
 	github.com/prometheus/client_golang v0.9.2 // indirect

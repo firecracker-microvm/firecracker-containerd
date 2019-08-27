@@ -23,11 +23,11 @@ import (
 	"github.com/containerd/containerd/events/exchange"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/namespaces"
-	"github.com/containerd/containerd/runtime/v2/shim"
 	taskAPI "github.com/containerd/containerd/runtime/v2/task"
-	"github.com/containerd/containerd/sys"
+	"github.com/containerd/containerd/sys/reaper"
 	"github.com/containerd/ttrpc"
 	"github.com/mdlayher/vsock"
+	"github.com/opencontainers/runc/libcontainer/system"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/unix"
@@ -67,7 +67,7 @@ func main() {
 
 	// Ensure this process is a subreaper or else containers created via runc will
 	// not be its children.
-	if err := sys.SetSubreaper(enableSubreaper); err != nil {
+	if err := system.SetSubreaper(enableSubreaper); err != nil {
 		log.G(shimCtx).WithError(err).Fatal("failed to set shim as subreaper")
 	}
 
@@ -116,7 +116,7 @@ func main() {
 			case s := <-signals:
 				switch s {
 				case unix.SIGCHLD:
-					if err := shim.Reap(); err != nil {
+					if err := reaper.Reap(); err != nil {
 						log.G(shimCtx).WithError(err).Error("reap error")
 					}
 				case syscall.SIGINT, syscall.SIGTERM:

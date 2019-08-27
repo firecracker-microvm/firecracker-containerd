@@ -29,7 +29,7 @@ require (
 	github.com/mdlayher/vsock v0.0.0-20190329173812-a92c53d5dcab
 	github.com/opencontainers/go-digest v1.0.0-rc1 // indirect
 	github.com/opencontainers/image-spec v1.0.1 // indirect
-	github.com/opencontainers/runc v0.1.1
+	github.com/opencontainers/runc v1.0.0-rc8
 	github.com/opencontainers/runtime-spec v0.1.2-0.20181106065543-31e0d16c1cb7
 	github.com/pkg/errors v0.8.1
 	github.com/prometheus/client_golang v0.9.2 // indirect

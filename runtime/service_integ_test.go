@@ -94,6 +94,7 @@ func TestShimExitsUponContainerDelete_Isolated(t *testing.T) {
 		containerd.WithNewSnapshot(snapshotName, image),
 		containerd.WithNewSpec(
 			oci.WithProcessArgs("sleep", fmt.Sprintf("%d", testTimeout/time.Second)),
+			oci.WithDefaultPathEnv,
 		),
 	)
 	require.NoError(t, err, "failed to create container %s", containerName)
@@ -105,6 +106,7 @@ func TestShimExitsUponContainerDelete_Isolated(t *testing.T) {
 		containerd.WithNewSnapshot(snapshotName, image),
 		containerd.WithNewSpec(
 			oci.WithProcessArgs("sleep", fmt.Sprintf("%d", testTimeout/time.Second)),
+			oci.WithDefaultPathEnv,
 		),
 	)
 	require.Error(t, err, "should not be able to create additional container when no drives are available")
@@ -610,7 +612,7 @@ func testCreateContainerWithSameName(t *testing.T, vmID string) {
 		require.NoError(t, err)
 	}
 
-	withNewSpec := containerd.WithNewSpec(oci.WithProcessArgs("echo", "hello"), firecrackeroci.WithVMID(vmID))
+	withNewSpec := containerd.WithNewSpec(oci.WithProcessArgs("echo", "hello"), firecrackeroci.WithVMID(vmID), oci.WithDefaultPathEnv)
 
 	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
@@ -691,7 +693,7 @@ func TestCreateTooManyContainers_Isolated(t *testing.T) {
 	image, err := client.Pull(ctx, guestDockerImage, containerd.WithPullUnpack, containerd.WithPullSnapshotter(naiveSnapshotterName))
 	require.NoError(t, err, "failed to pull image %s, is the the %s snapshotter running?", guestDockerImage, naiveSnapshotterName)
 
-	runEchoHello := containerd.WithNewSpec(oci.WithProcessArgs("echo", "-n", "hello"), firecrackeroci.WithVMID("reuse-same-vm"))
+	runEchoHello := containerd.WithNewSpec(oci.WithProcessArgs("echo", "-n", "hello"), firecrackeroci.WithVMID("reuse-same-vm"), oci.WithDefaultPathEnv)
 
 	c1, err := client.NewContainer(ctx,
 		"c1",

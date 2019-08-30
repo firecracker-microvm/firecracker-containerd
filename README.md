@@ -37,11 +37,12 @@ Firecracker microVMs to run containers:
   gRPC proxy plugin.  We currently have two implementations of a snapshotter: a
   [naive](snapshotter/cmd/naive) copy-ahead implementation and a
   [devmapper-based](snapshotter/cmd/devmapper) copy-on-write implementation.
-* A [control plugin](../firecracker-control) managing the lifecycle of the
-  runtime and implementing our [control API](../proto/firecracker.proto) to
-  manage the lifecycle of microVMs.  The control plugin is compiled in to the
-  containerd binary, which requires us to build a specialized containerd binary
-  for firecracker-containerd.
+* A [control plugin](firecracker-control) managing the lifecycle of the
+  runtime and implementing our [control API](proto/firecracker.proto) to
+  manage the lifecycle of microVMs. The control plugin is compiled in to the
+  containerd binary since [building a Go plugin out-of-tree is hard](https://github.com/golang/go/issues/20481),
+  which requires us to build a specialized containerd binary for
+  firecracker-containerd.
 * A [runtime](runtime) linking containerd (outside the microVM) to the
   Firecracker virtual machine monitor (VMM).  The runtime is implemented as an
   out-of-process
@@ -53,7 +54,7 @@ Firecracker microVMs to run containers:
 * A [root file filesystem image builder](tools/image-builder) that
   constructs a firecracker microVM root filesystem containing runc and
   the firecracker-containerd agent.
-  
+
 For more detailed information on the components and how they work, see
 [architecture.md](docs/architecture.md).
 

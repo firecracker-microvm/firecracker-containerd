@@ -54,8 +54,15 @@ require (
 	k8s.io/utils v0.0.0-20190829053155-3a4a5477acf8 // indirect
 )
 
-// Workaround for github.com/containerd/containerd issue #3031
+// Workaround for https://github.com/containerd/containerd/issues/3031
 replace github.com/docker/distribution v2.7.1+incompatible => github.com/docker/distribution v2.7.1-0.20190205005809-0d3efadf0154+incompatible
+
+// Workaround for logrus rename
+// https://github.com/sirupsen/logrus/issues/570#issuecomment-313933276
+replace github.com/Sirupsen/logrus => github.com/sirupsen/logrus v1.0.5
+
+// Workaround for https://github.com/kubernetes/kubernetes/issues/79384
+// Please update the below dependencies by update-cri-gomod.sh
 
 replace k8s.io/api => k8s.io/api v0.0.0-20190620084959-7cf5895f2711
 
@@ -104,6 +111,4 @@ replace k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.0.0-20190620085408
 replace k8s.io/sample-cli-plugin => k8s.io/sample-cli-plugin v0.0.0-20190620085735-97320335c8c8
 
 replace k8s.io/sample-controller => k8s.io/sample-controller v0.0.0-20190620085445-e8a5bf14f039
-
-replace github.com/Sirupsen/logrus => github.com/sirupsen/logrus v1.0.5
 

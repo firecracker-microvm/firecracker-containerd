@@ -2,16 +2,18 @@ module github.com/firecracker-microvm/firecracker-containerd
 
 require (
 	github.com/Microsoft/go-winio v0.4.14 // indirect
-	github.com/Microsoft/hcsshim v0.8.1 // indirect
 	github.com/StackExchange/wmi v0.0.0-20181212234831-e0a55b97c705 // indirect
 	github.com/containerd/cgroups v0.0.0-20181105182409-82cb49fc1779 // indirect
 	github.com/containerd/console v0.0.0-20181022165439-0650fd9eeb50 // indirect
 	github.com/containerd/containerd v1.3.0-beta.2
 	github.com/containerd/continuity v0.0.0-20181027224239-bea7585dbfac
+	github.com/containerd/cri v1.11.1-0.20190814194657-f1d492b0cdd1
 	github.com/containerd/fifo v0.0.0-20190816180239-bda0ff6ed73c
+	github.com/containerd/go-cni v0.0.0-20190822145629-0d360c50b10b // indirect
 	github.com/containerd/go-runc v0.0.0-20190226155025-7d11b49dc076 // indirect
 	github.com/containerd/ttrpc v0.0.0-20190613183316-1fb3814edf44
-	github.com/containerd/typeurl v0.0.0-20181015155603-461401dc8f19
+	github.com/containerd/typeurl v0.0.0-20190228175220-2a93cfde8c20
+	github.com/containernetworking/plugins v0.8.2 // indirect
 	github.com/coreos/go-systemd v0.0.0-20181031085051-9002847aa142 // indirect
 	github.com/docker/distribution v2.7.1+incompatible // indirect
 	github.com/docker/docker v1.4.2-0.20171019062838-86f080cff091 // indirect
@@ -24,7 +26,7 @@ require (
 	github.com/gofrs/uuid v3.2.0+incompatible
 	github.com/gogo/googleapis v1.1.0 // indirect
 	github.com/gogo/protobuf v1.2.1
-	github.com/golang/protobuf v1.2.0
+	github.com/golang/protobuf v1.3.1
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0 // indirect
 	github.com/hashicorp/go-multierror v1.0.0
 	github.com/mdlayher/vsock v0.0.0-20190329173812-a92c53d5dcab
@@ -32,20 +34,24 @@ require (
 	github.com/opencontainers/image-spec v1.0.1 // indirect
 	github.com/opencontainers/runc v1.0.0-rc8
 	github.com/opencontainers/runtime-spec v1.0.2-0.20190207185410-29686dbc5559
+	github.com/opencontainers/selinux v1.3.0 // indirect
 	github.com/pkg/errors v0.8.1
-	github.com/prometheus/client_golang v0.9.2 // indirect
+	github.com/seccomp/libseccomp-golang v0.9.1 // indirect
 	github.com/shirou/gopsutil v2.18.12+incompatible
 	github.com/shirou/w32 v0.0.0-20160930032740-bb4de0191aa4 // indirect
 	github.com/sirupsen/logrus v1.4.1
-	github.com/stretchr/testify v1.2.2
+	github.com/stretchr/testify v1.3.0
 	github.com/syndtr/gocapability v0.0.0-20180916011248-d98352740cb2 // indirect
+	github.com/tchap/go-patricia v2.3.0+incompatible // indirect
 	github.com/urfave/cli v1.20.0 // indirect
 	go.etcd.io/bbolt v1.3.1-etcd.8
-	golang.org/x/sync v0.0.0-20181108010431-42b317875d0f
-	golang.org/x/sys v0.0.0-20190507160741-ecd444e8653b
+	golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4
+	golang.org/x/sys v0.0.0-20190616124812-15dcb6c0061f
 	google.golang.org/genproto v0.0.0-20181109154231-b5d43981345b // indirect
 	google.golang.org/grpc v1.21.0
-	gotest.tools v2.2.0+incompatible // indirect
+	k8s.io/klog v0.4.0 // indirect
+	k8s.io/kubernetes v1.15.3 // indirect
+	k8s.io/utils v0.0.0-20190829053155-3a4a5477acf8 // indirect
 )
 
 // Workaround for github.com/containerd/containerd issue #3031

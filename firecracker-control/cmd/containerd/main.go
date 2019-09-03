@@ -46,6 +46,9 @@ import (
 	_ "github.com/containerd/containerd/runtime/v2"
 	_ "github.com/containerd/containerd/runtime/v2/runc/options"
 
+	// CRI
+	_ "github.com/containerd/cri"
+
 	// Register fc-control plugin
 	_ "github.com/firecracker-microvm/firecracker-containerd/firecracker-control"
 )

@@ -97,3 +97,6 @@ replace k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.0.0-20190620085408
 replace k8s.io/sample-cli-plugin => k8s.io/sample-cli-plugin v0.0.0-20190620085735-97320335c8c8
 
 replace k8s.io/sample-controller => k8s.io/sample-controller v0.0.0-20190620085445-e8a5bf14f039
+
+replace github.com/Sirupsen/logrus => github.com/sirupsen/logrus v1.0.5
+

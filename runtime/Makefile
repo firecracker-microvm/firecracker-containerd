@@ -60,4 +60,7 @@ integ-test:
 clean:
 	- rm -f containerd-shim-aws-firecracker
 
-.PHONY: all runtime clean install test integ-test
+distclean: clean
+	- rm -rf logs
+
+.PHONY: all runtime clean distclean install test integ-test

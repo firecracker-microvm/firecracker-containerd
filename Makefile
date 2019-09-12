@@ -52,15 +52,18 @@ clean:
 	- rm -rf $(BINPATH)/
 	$(MAKE) -C $(RUNC_DIR) clean
 	$(MAKE) firecracker-clean
-	rm -f tools/*stamp
+	rm -f tools/*stamp *stamp
 	$(MAKE) -C tools/image-builder clean-in-docker
 
 rmi-if-exists = $(if $(shell docker images -q $(1)),docker rmi $(1),true)
 distclean: clean
+	for d in $(SUBDIRS); do $(MAKE) -C $$d distclean; done
+	$(MAKE) -C tools/image-builder distclean
 	$(call rmi-if-exists,localhost/$(RUNC_BUILDER_NAME):$(DOCKER_IMAGE_TAG))
 	$(call rmi-if-exists,localhost/$(FIRECRACKER_BUILDER_NAME):$(DOCKER_IMAGE_TAG))
 	docker volume rm -f $(CARGO_CACHE_VOLUME_NAME)
-	$(MAKE) -C tools/image-builder distclean
+	$(call rmi-if-exists,localhost/firecracker-containerd-naive-integ-test:$(DOCKER_IMAGE_TAG))
+	$(call rmi-if-exists,localhost/firecracker-containerd-test:$(DOCKER_IMAGE_TAG))
 
 lint:
 	$(BINPATH)/ltag -t ./.headers -excludes "tools $(SUBMODULES)" -check -v
@@ -106,7 +109,10 @@ image: $(RUNC_BIN) agent
 	touch tools/image-builder/files_ephemeral
 	$(MAKE) -C tools/image-builder all-in-docker
 
-test-images: | image firecracker-containerd-naive-integ-test-image firecracker-containerd-test-image
+test-images: test-images-stamp
+
+test-images-stamp: | image firecracker-containerd-naive-integ-test-image firecracker-containerd-test-image
+	touch $@
 
 firecracker-containerd-test-image:
 	DOCKER_BUILDKIT=1 docker build \
@@ -123,7 +129,7 @@ firecracker-containerd-naive-integ-test-image: $(RUNC_BIN) $(FIRECRACKER_BIN) $(
 		--build-arg FIRECRACKER_TARGET=$(FIRECRACKER_TARGET) \
 		--tag localhost/firecracker-containerd-naive-integ-test:${DOCKER_IMAGE_TAG} .
 
-.PHONY: all $(SUBDIRS) clean proto deps lint install test-images firecracker-container-test-image firecracker-containerd-naive-integ-test-image test test-in-docker $(TEST_SUBDIRS) integ-test $(INTEG_TEST_SUBDIRS)
+.PHONY: all $(SUBDIRS) clean proto deps lint install image test-images firecracker-container-test-image firecracker-containerd-naive-integ-test-image test test-in-docker $(TEST_SUBDIRS) integ-test $(INTEG_TEST_SUBDIRS)
 
 ##########################
 # Firecracker submodule

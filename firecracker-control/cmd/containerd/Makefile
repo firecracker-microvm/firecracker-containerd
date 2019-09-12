@@ -43,4 +43,6 @@ clean:
 	- rm -f firecracker-containerd
 	- rm -f firecracker-ctr
 
-.PHONY: all build install test integ-test clean
+distclean: clean
+
+.PHONY: all build install test integ-test clean distclean

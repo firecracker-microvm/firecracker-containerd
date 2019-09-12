@@ -87,11 +87,17 @@ builder_stamp:
 
 clean:
 	-rm -f *stamp
-	-rm -rf $(WORKDIR)
-	-rm -f rootfs.img
+	if [ -d $(WORKDIR) ] || [ -e rootfs.img ]; then \
+	  if [ $(UID) -eq 0 ]; then \
+	    rm -rf $(WORKDIR) \
+	    rm -f rootfs.img ;\
+	   else \
+	     $(MAKE) clean-in-docker ;\
+	   fi ; \
+	fi
 
-distclean: clean-in-docker
+distclean: clean
 	rm -rf files_ephemeral
-	docker rmi fc-image-builder:latest
+	- docker rmi fc-image-builder:latest
 
 .PHONY: debootstrap clean distclean builder %-in-docker

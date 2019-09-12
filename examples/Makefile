@@ -46,6 +46,9 @@ integ-test:
 clean:
 	- rm -f taskworkflow
 
+distclean: clean
+	- rm -rf logs
+
 install:
 
-.PHONY: all examples clean install test integ-test
+.PHONY: all examples clean distclean install test integ-test

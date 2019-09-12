@@ -18,7 +18,11 @@ steps:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
     env:
       DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
-    command: make test-images
+    command:
+      - make test-images
+      - docker run --rm -v $PWD:/mnt debian:stretch-slim rm -rf /mnt/tools/image-builder/rootfs
+      - sudo install -d -o root -g buildkite-agent -m 775 "/local/artifacts/$BUILDKITE_BUILD_NUMBER"
+      - cp tools/image-builder/rootfs.img "/local/artifacts/$BUILDKITE_BUILD_NUMBER/"
 
   - wait
 
@@ -45,7 +49,9 @@ steps:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
     env:
       EXTRAGOARGS: "-v -count=1"
-    command: 'make test-in-docker'
+    command:
+      - cp "/local/artifacts/$BUILDKITE_BUILD_NUMBER/rootfs.img" tools/image-builder/rootfs.img
+      - make test-in-docker
 
   - label: ":rotating_light: :hammer: snapshotter *root* tests"
     agents:

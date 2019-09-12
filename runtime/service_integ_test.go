@@ -544,7 +544,7 @@ func TestStubBlockDevices_Isolated(t *testing.T) {
 
 		const expectedOutput = `
 NAME MAJ:MIN RM      SIZE RO | MAGIC
-vda  254:0    0 67108864B  0 |    0   0   0   0   0   0   0   0
+vda  254:0    0 52969472B  0 |  104 115 113 115 128  28   0   0
 vdb  254:16   0        0B  0 | 
 vdc  254:32   0      512B  0 |  214 244 216 245 215 177 177 177
 vdd  254:48   0      512B  0 |  214 244 216 245 215 177 177 177

@@ -63,33 +63,6 @@ SHELL ["/bin/bash", "-c"]
 
 
 
-# Build firecracker itself
-FROM build-base as firecracker-build
-ENV RUSTUP_HOME="/home/builder/rustup" \
-	CARGO_HOME="/home/builder/cargo" \
-	PATH="/home/builder/cargo/bin:$PATH" \
-	RUST_VERSION="1.32.0"
-
-RUN curl --silent --show-error --retry 3 --max-time 30 --output rustup-init \
-	"https://static.rust-lang.org/rustup/archive/1.16.0/x86_64-unknown-linux-gnu/rustup-init" \
-	&& echo "2d4ddf4e53915a23dda722608ed24e5c3f29ea1688da55aa4e98765fc6223f71 rustup-init" | sha256sum -c - \
-	&& chmod +x rustup-init \
-	&& ./rustup-init -y --no-modify-path --default-toolchain $RUST_VERSION \
-	&& source ${CARGO_HOME}/env \
-	&& rustup target add x86_64-unknown-linux-musl
-
-RUN --mount=type=cache,from=build-base,source=/home/builder/cargo/registry,target=/home/builder/cargo/registry \
-	source ${CARGO_HOME}/env \
-	&& git clone https://github.com/firecracker-microvm/firecracker.git \
-	&& cd firecracker \
-	&& git checkout v0.17.0 \
-	&& cargo build --release --features vsock --target x86_64-unknown-linux-musl \
-	&& cp target/x86_64-unknown-linux-musl/release/firecracker /output \
-	&& cp target/x86_64-unknown-linux-musl/release/jailer /output
-
-
-
-
 # Build firecracker-containerd
 FROM build-base as firecracker-containerd-build
 ENV STATIC_AGENT='true'
@@ -160,6 +133,7 @@ RUN mkdir -p /output \
 # Derived images should include containerd/config.toml, other configuration needed to start a full
 # firecracker-containerd stack and an entrypoint that starts containerd plus one of our snapshotters.
 FROM base as firecracker-containerd-test
+
 ENV PATH="/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin:/usr/local/sbin:/usr/local/go/bin" \
 	DEBIAN_FRONTEND="noninteractive" \
 	FICD_LOG_DIR="/var/log/firecracker-containerd-test"
@@ -180,11 +154,7 @@ RUN mkdir -p /var/lib/firecracker-containerd/runtime \
 	&& mv default-vmlinux.bin /var/lib/firecracker-containerd/runtime/default-vmlinux.bin
 
 COPY --from=firecracker-containerd-build /home/builder/firecracker-containerd /firecracker-containerd
-COPY --from=firecracker-build /output/* /usr/local/bin/
-COPY --from=firecracker-vm-root-builder /output/vm.ext4 /var/lib/firecracker-containerd/runtime/default-rootfs.img
 COPY --from=firecracker-containerd-build /output/* /usr/local/bin/
-COPY _submodules/runc/runc /usr/local/bin
-COPY tools/docker/firecracker-runtime.json /etc/containerd/firecracker-runtime.json
 
 RUN --mount=type=cache,from=build-base,source=/home/builder/go/pkg/mod,target=/tmp/go/pkg/mod,readonly \
   mkdir -p ${GOPATH}/pkg/mod \
@@ -205,6 +175,14 @@ ENTRYPOINT ["/bin/bash", "-c"]
 # Test image that starts up containerd and the naive snapshotter. The default CMD will drop to a bash shell. Overrides
 # to CMD will be provided appended to /bin/bash -c
 FROM firecracker-containerd-test as firecracker-containerd-naive-integ-test
+ARG FIRECRACKER_TARGET=x86_64-unknown-linux-musl
+
+COPY _submodules/firecracker/target/$FIRECRACKER_TARGET/release/firecracker /usr/local/bin/
+COPY _submodules/firecracker/target/$FIRECRACKER_TARGET/release/jailer /usr/local/bin/
+COPY _submodules/runc/runc /usr/local/bin
+COPY --from=firecracker-vm-root-builder /output/vm.ext4 /var/lib/firecracker-containerd/runtime/default-rootfs.img
+COPY tools/docker/firecracker-runtime.json /etc/containerd/firecracker-runtime.json
+
 COPY tools/docker/naive-snapshotter/config.toml /etc/containerd/config.toml
 COPY tools/docker/naive-snapshotter/entrypoint.sh /entrypoint
 RUN mkdir -p /var/lib/firecracker-containerd/naive

@@ -23,9 +23,18 @@ export DOCKER_IMAGE_TAG?=latest
 GOPATH:=$(shell go env GOPATH)
 BINPATH:=$(abspath ./bin)
 SUBMODULES=_submodules
+UID:=$(shell id -u)
+
+FIRECRACKER_DIR=$(SUBMODULES)/firecracker
+FIRECRACKER_TARGET?=x86_64-unknown-linux-musl
+FIRECRACKER_BIN=$(FIRECRACKER_DIR)/target/$(FIRECRACKER_TARGET)/release/firecracker
+JAILER_BIN=$(FIRECRACKER_DIR)/target/$(FIRECRACKER_TARGET)/release/jailer
+FIRECRACKER_BUILDER_NAME?=firecracker-builder
+CARGO_CACHE_VOLUME_NAME?=cargocache
+
 RUNC_DIR=$(SUBMODULES)/runc
 RUNC_BIN=$(RUNC_DIR)/runc
-UID:=$(shell id -u)
+RUNC_BUILDER_NAME?=runc-builder
 
 # Set this to pass additional commandline flags to the go compiler, e.g. "make test EXTRAGOARGS=-v"
 export EXTRAGOARGS?=
@@ -42,11 +51,15 @@ clean:
 	for d in $(SUBDIRS); do $(MAKE) -C $$d clean; done
 	- rm -rf $(BINPATH)/
 	$(MAKE) -C $(RUNC_DIR) clean
-	rm -f *stamp
+	$(MAKE) firecracker-clean
+	rm -f tools/*stamp
 	$(MAKE) -C tools/image-builder clean-in-docker
 
+rmi-if-exists = $(if $(shell docker images -q $(1)),docker rmi $(1),true)
 distclean: clean
-	docker rmi localhost/runc-builder:latest
+	$(call rmi-if-exists,localhost/$(RUNC_BUILDER_NAME):$(DOCKER_IMAGE_TAG))
+	$(call rmi-if-exists,localhost/$(FIRECRACKER_BUILDER_NAME):$(DOCKER_IMAGE_TAG))
+	docker volume rm -f $(CARGO_CACHE_VOLUME_NAME)
 	$(MAKE) -C tools/image-builder distclean
 
 lint:
@@ -61,6 +74,9 @@ deps:
 	GOBIN=$(BINPATH) GO111MODULE=off go get -u github.com/kunalkushwaha/ltag
 	GOBIN=$(BINPATH) GO111MODULE=off go get -u github.com/containerd/ttrpc/cmd/protoc-gen-gogottrpc
 	GOBIN=$(BINPATH) GO111MODULE=off go get -u github.com/gogo/protobuf/protoc-gen-gogo
+
+install:
+	for d in $(SUBDIRS); do $(MAKE) -C $$d install; done
 
 test: $(TEST_SUBDIRS)
 
@@ -81,27 +97,6 @@ integ-test: $(INTEG_TEST_SUBDIRS)
 $(INTEG_TEST_SUBDIRS): test-images
 	$(MAKE) -C $(patsubst integ-test-%,%,$@) integ-test
 
-runc-builder: runc-builder-stamp
-
-runc-builder-stamp: tools/docker/Dockerfile.runc-builder
-	cd tools/docker && docker build -t localhost/runc-builder:latest -f Dockerfile.runc-builder .
-	touch $@
-
-$(RUNC_DIR)/VERSION:
-	git submodule update --init --recursive $(RUNC_DIR)
-
-runc: $(RUNC_BIN)
-
-$(RUNC_BIN): $(RUNC_DIR)/VERSION runc-builder-stamp
-	docker run --rm -it --user $(UID) \
-		--volume $(PWD)/$(RUNC_DIR):/gopath/src/github.com/opencontainers/runc \
-		--volume $(PWD)/deps:/target \
-		-e HOME=/tmp \
-		-e GOPATH=/gopath \
-		--workdir /gopath/src/github.com/opencontainers/runc \
-		localhost/runc-builder:latest \
-		make static
-
 image: $(RUNC_BIN) agent
 	mkdir -p tools/image-builder/files_ephemeral/usr/local/bin
 	cp $(RUNC_BIN) tools/image-builder/files_ephemeral/usr/local/bin
@@ -109,23 +104,82 @@ image: $(RUNC_BIN) agent
 	touch tools/image-builder/files_ephemeral
 	$(MAKE) -C tools/image-builder all-in-docker
 
-install:
-	for d in $(SUBDIRS); do $(MAKE) -C $$d install; done
-
 test-images: | firecracker-containerd-naive-integ-test-image firecracker-containerd-test-image
 
-firecracker-containerd-test-image: $(RUNC_BIN)
+firecracker-containerd-test-image:
 	DOCKER_BUILDKIT=1 docker build \
 		--progress=plain \
 		--file tools/docker/Dockerfile \
 		--target firecracker-containerd-test \
 		--tag localhost/firecracker-containerd-test:${DOCKER_IMAGE_TAG} .
 
-firecracker-containerd-naive-integ-test-image: $(RUNC_BIN)
+firecracker-containerd-naive-integ-test-image: $(RUNC_BIN) $(FIRECRACKER_BIN) $(JAILER_BIN)
 	DOCKER_BUILDKIT=1 docker build \
 		--progress=plain \
 		--file tools/docker/Dockerfile \
 		--target firecracker-containerd-naive-integ-test \
+		--build-arg FIRECRACKER_TARGET=$(FIRECRACKER_TARGET) \
 		--tag localhost/firecracker-containerd-naive-integ-test:${DOCKER_IMAGE_TAG} .
 
-.PHONY: all $(SUBDIRS) clean proto deps lint install test-images firecracker-container-test-image firecracker-containerd-naive-integ-test-image runc-builder runc test test-in-docker $(TEST_SUBDIRS) integ-test $(INTEG_TEST_SUBDIRS)
+.PHONY: all $(SUBDIRS) clean proto deps lint install test-images firecracker-container-test-image firecracker-containerd-naive-integ-test-image test test-in-docker $(TEST_SUBDIRS) integ-test $(INTEG_TEST_SUBDIRS)
+
+##########################
+# Firecracker submodule
+##########################
+.PHONY: firecracker
+firecracker: $(FIRECRACKER_BIN) $(JAILER_BIN)
+
+$(FIRECRACKER_DIR)/Cargo.toml:
+	git submodule update --init --recursive $(FIRECRACKER_DIR)
+
+tools/firecracker-builder-stamp: tools/docker/Dockerfile.firecracker-builder
+	docker build \
+		-t localhost/$(FIRECRACKER_BUILDER_NAME):$(DOCKER_IMAGE_TAG) \
+		-f tools/docker/Dockerfile.firecracker-builder \
+		tools/docker
+	touch $@
+
+$(FIRECRACKER_BIN) $(JAILER_BIN): $(FIRECRACKER_DIR)/Cargo.toml tools/firecracker-builder-stamp
+	docker run --rm -it --user $(UID) \
+		--volume $(PWD)/$(FIRECRACKER_DIR):/src \
+		--volume $(CARGO_CACHE_VOLUME_NAME):/usr/local/cargo/registry \
+		-e HOME=/tmp \
+		--workdir /src \
+		localhost/$(FIRECRACKER_BUILDER_NAME):$(DOCKER_IMAGE_TAG) \
+		cargo build --release --features vsock --target $(FIRECRACKER_TARGET)
+
+.PHONY: firecracker-clean
+firecracker-clean:
+	rm -f $(FIRECRACKER_BIN) $(JAILER_BIN)
+	- docker run --rm -it --user $(UID) \
+		--volume $(PWD)/$(FIRECRACKER_DIR):/src \
+		-e HOME=/tmp \
+		--workdir /src \
+		localhost/$(FIRECRACKER_BUILDER_NAME):$(DOCKER_IMAGE_TAG) \
+		cargo clean
+
+##########################
+# RunC submodule
+##########################
+.PHONY: runc
+runc: $(RUNC_BIN)
+
+$(RUNC_DIR)/VERSION:
+	git submodule update --init --recursive $(RUNC_DIR)
+
+tools/runc-builder-stamp: tools/docker/Dockerfile.runc-builder
+	docker build \
+		-t localhost/$(RUNC_BUILDER_NAME):$(DOCKER_IMAGE_TAG) \
+		-f tools/docker/Dockerfile.runc-builder \
+		tools/
+	touch $@
+
+$(RUNC_BIN): $(RUNC_DIR)/VERSION tools/runc-builder-stamp
+	docker run --rm -it --user $(UID) \
+		--volume $(PWD)/$(RUNC_DIR):/gopath/src/github.com/opencontainers/runc \
+		--volume $(PWD)/deps:/target \
+		-e HOME=/tmp \
+		-e GOPATH=/gopath \
+		--workdir /gopath/src/github.com/opencontainers/runc \
+		localhost/$(RUNC_BUILDER_NAME):$(DOCKER_IMAGE_TAG) \
+		make static

@@ -1,3 +1,6 @@
 [submodule "runc"]
 	path = _submodules/runc
 	url = https://github.com/opencontainers/runc
+[submodule "firecracker"]
+	path = _submodules/firecracker
+	url = https://github.com/firecracker-microvm/firecracker.git

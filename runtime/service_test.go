@@ -14,15 +14,12 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"syscall"
 	"testing"
 
-	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	"github.com/firecracker-microvm/firecracker-go-sdk"
@@ -36,30 +33,6 @@ const (
 	mac         = "AA:FC:00:00:00:01"
 	hostDevName = "tap0"
 )
-
-func TestFindNextAvailableVsockCID_Isolated(t *testing.T) {
-	internal.RequiresIsolation(t)
-
-	sysCall = func(trap, a1, a2, a3 uintptr) (r1, r2 uintptr, err syscall.Errno) {
-		return 0, 0, 0
-	}
-
-	defer func() {
-		sysCall = syscall.Syscall
-	}()
-
-	_, _, err := findNextAvailableVsockCID(context.Background())
-	require.NoError(t, err,
-		"Do you have permission to interact with /dev/vhost-vsock?\n"+
-			"Grant yourself permission with `sudo setfacl -m u:${USER}:rw /dev/vhost-vsock`")
-	// we generate a random CID, so it's not possible to make assertions on its value
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	_, _, err = findNextAvailableVsockCID(ctx)
-	require.Equal(t, context.Canceled, err)
-}
 
 func TestBuildVMConfiguration(t *testing.T) {
 	namespace := "TestBuildVMConfiguration"
@@ -220,7 +193,10 @@ func TestBuildVMConfiguration(t *testing.T) {
 			svc.shimDir = vm.Dir(tempDir)
 			// For values that remain constant between tests, they are written here
 			tc.expectedCfg.SocketPath = svc.shimDir.FirecrackerSockPath()
-			tc.expectedCfg.VsockDevices = []firecracker.VsockDevice{{Path: "root", CID: svc.machineCID}}
+			tc.expectedCfg.VsockDevices = []firecracker.VsockDevice{{
+				Path: svc.shimDir.FirecrackerVSockPath(),
+				ID:   "agent_api",
+			}}
 			tc.expectedCfg.LogFifo = svc.shimDir.FirecrackerLogFifoPath()
 			tc.expectedCfg.MetricsFifo = svc.shimDir.FirecrackerMetricsFifoPath()
 

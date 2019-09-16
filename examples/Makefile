@@ -40,7 +40,7 @@ integ-test:
 		--env EXTRAGOARGS="${EXTRAGOARGS}" \
 		--workdir="/firecracker-containerd/examples" \
 		localhost/firecracker-containerd-naive-integ-test:${DOCKER_IMAGE_TAG} \
-		"make examples && make testtap && ./taskworkflow -ip $(TEST_IP)$(TEST_SUBNET) -gw $(TEST_GATEWAY)"
+		"make examples && make testtap && sleep 3 && ./taskworkflow -ip $(TEST_IP)$(TEST_SUBNET) -gw $(TEST_GATEWAY)"
 
 TEST_GATEWAY?=172.16.0.1
 TEST_IP?=172.16.0.2

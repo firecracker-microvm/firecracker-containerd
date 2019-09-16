@@ -83,6 +83,12 @@ func (d Dir) FirecrackerSockPath() string {
 	return filepath.Join(d.RootPath(), internal.FirecrackerSockName)
 }
 
+// FirecrackerVSockPath returns the path to the vsock unix socket that the runtime uses
+// to communicate with the VM agent.
+func (d Dir) FirecrackerVSockPath() string {
+	return filepath.Join(d.RootPath(), internal.FirecrackerVSockName)
+}
+
 // FirecrackerLogFifoPath returns the path to the FIFO at which the firecracker VMM writes
 // its logs
 func (d Dir) FirecrackerLogFifoPath() string {

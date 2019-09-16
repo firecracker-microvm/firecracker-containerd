@@ -26,7 +26,6 @@ import (
 	taskAPI "github.com/containerd/containerd/runtime/v2/task"
 	"github.com/containerd/containerd/sys/reaper"
 	"github.com/containerd/ttrpc"
-	"github.com/mdlayher/vsock"
 	"github.com/opencontainers/runc/libcontainer/system"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
@@ -34,6 +33,7 @@ import (
 
 	"github.com/firecracker-microvm/firecracker-containerd/eventbridge"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/event"
+	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
 )
 
 const (
@@ -93,8 +93,8 @@ func main() {
 
 	// Run ttrpc over vsock
 
-	log.G(shimCtx).WithField("port", port).Info("listening to vsock")
-	listener, err := vsock.Listen(uint32(port))
+	vsockLogger := log.G(shimCtx).WithField("port", port)
+	listener, err := vm.VSockListener(shimCtx, vsockLogger, uint32(port))
 	if err != nil {
 		log.G(shimCtx).WithError(err).Fatalf("failed to listen to vsock on port %d", port)
 	}

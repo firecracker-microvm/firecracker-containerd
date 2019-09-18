@@ -23,6 +23,7 @@ You need to have the following things in order to use firecracker-containerd:
   the basic requirements to run Firecracker.</summary>
   
   ```bash
+  #!/bin/bash
   err=""; \
   [ "$(uname) $(uname -m)" = "Linux x86_64" ] \
     || err="ERROR: your system is not Linux x86_64."; \

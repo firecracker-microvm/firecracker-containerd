@@ -136,9 +136,9 @@ state = "/run/firecracker-containerd"
 [grpc]
   address = "/run/firecracker-containerd/containerd.sock"
 [proxy_plugins]
-  [proxy_plugins.firecracker-naive]
+  [proxy_plugins.firecracker-devmapper]
     type = "snapshot"
-    address = "/var/run/firecracker-containerd/naive-snapshotter.sock"
+    address = "/var/run/firecracker-containerd/devmapper-snapshotter.sock"
 
 [debug]
   level = "debug"
@@ -149,6 +149,76 @@ binary. `ctr` is containerd's standard cli client; `firecracker-ctr` is a build 
 from the same version of containerd as `firecracker-containerd`, which ensures the two
 binaries are in sync with one another. While other builds of `ctr` may work with
 `firecracker-containerd`, use of `firecracker-ctr` will ensure compatibility.
+
+### Prepare and configure snapshotter
+
+The devmapper snapshotter requires a thinpool to exist.
+Below is a script to create a thinpool as well as an example config file.
+
+`Note: The configuration with loopback devices is slow and not intended for use in production.`
+
+<details>
+<summary>Script to setup thinpool with dmsetup.</summary>
+
+```bash
+#!/bin/bash
+
+# Sets up a devicemapper thin pool with loop devices in
+# /var/lib/firecracker-containerd/snapshotter/devmapper
+
+set -ex
+
+DIR=/var/lib/firecracker-containerd/snapshotter/devmapper
+POOL=fc-dev-thinpool
+
+if [[ ! -f "${DIR}/data" ]]; then
+touch "${DIR}/data"
+truncate -s 100G "${DIR}/data"
+fi
+
+if [[ ! -f "${DIR}/metadata" ]]; then
+touch "${DIR}/metadata"
+truncate -s 2G "${DIR}/metadata"
+fi
+
+DATADEV="$(losetup --output NAME --noheadings --associated ${DIR}/data)"
+if [[ -z "${DATADEV}" ]]; then
+DATADEV="$(losetup --find --show ${DIR}/data)"
+fi
+
+METADEV="$(losetup --output NAME --noheadings --associated ${DIR}/metadata)"
+if [[ -z "${METADEV}" ]]; then
+METADEV="$(losetup --find --show ${DIR}/metadata)"
+fi
+
+SECTORSIZE=512
+DATASIZE="$(blockdev --getsize64 -q ${DATADEV})"
+LENGTH_SECTORS=$(bc <<< "${DATASIZE}/${SECTORSIZE}")
+DATA_BLOCK_SIZE=128 # see https://www.kernel.org/doc/Documentation/device-mapper/thin-provisioning.txt
+LOW_WATER_MARK=32768 # picked arbitrarily
+THINP_TABLE="0 ${LENGTH_SECTORS} thin-pool ${METADEV} ${DATADEV} ${DATA_BLOCK_SIZE} ${LOW_WATER_MARK} 1 skip_block_zeroing"
+echo "${THINP_TABLE}"
+
+if ! $(dmsetup reload "${POOL}" --table "${THINP_TABLE}"); then
+dmsetup create "${POOL}" --table "${THINP_TABLE}"
+fi
+```
+</details>
+
+<details>
+<summary>Snappshotter config file example.</summary>
+
+```json
+{
+  "base_image_size": "10GB",
+  "root_path": "/var/lib/firecracker-containerd/snapshotter/devmapper",
+  "pool_name": "fc-dev-thinpool"
+}
+```
+
+</details>
+
+A reasonable location for this file is at `/etc/firecracker-dm-snapshotter/config.json`.
 
 ### Configure containerd runtime plugin
 
@@ -210,10 +280,12 @@ configuration file has the following fields:
 Start the containerd snapshotter
 
 ```bash
-$ ./naive_snapshotter \
-  -address /var/run/firecracker-containerd/naive-snapshotter.sock \
-  -path /tmp/fc-snapshot
+$ ./devmapper_snapshotter \
+  -address /var/run/firecracker-containerd/devmapper-snapshotter.sock \
+  -path /tmp/fc-snapshot \
+  -config /etc/firecracker-dm-snapshotter/config.json
 ```
+`note: The path for -config needs to match the location used when configuring the devmapper snapshotter.`
 
 In another terminal, start containerd
 
@@ -226,7 +298,7 @@ Pull an image
 
 ```bash
 $ sudo firecracker-ctr --address /run/firecracker-containerd/containerd.sock images \
-  pull --snapshotter firecracker-naive \
+  pull --snapshotter firecracker-devmapper\
   docker.io/library/busybox:latest
 ```
 
@@ -234,7 +306,7 @@ And start a container!
 
 ```bash
 $ sudo firecracker-ctr --address /run/firecracker-containerd/containerd.sock \
-  run --snapshotter firecracker-naive --runtime aws.firecracker \ 
+  run --snapshotter firecracker-devmapper --runtime aws.firecracker \
   --rm --tty --net-host \
   docker.io/library/busybox:latest busybox-test
 ```
@@ -249,7 +321,7 @@ $ sudo firecracker-ctr --address /run/firecracker-containerd/containerd.sock \
 $ sudo firecracker-ctr --address /run/firecracker-containerd/containerd.sock \
   namespaces label fc \
   containerd.io/defaults/runtime=aws.firecracker \
-  containerd.io/defaults/snapshotter=firecracker-naive
+  containerd.io/defaults/snapshotter=firecracker-devmapper
 
 $ sudo firecracker-ctr --address /run/firecracker-containerd/containerd.sock \
   -n fc \

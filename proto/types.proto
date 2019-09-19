@@ -16,11 +16,83 @@ message ExtraData {
 
 // Message to specify network config for a Firecracker VM
 message FirecrackerNetworkInterface {
+	bool AllowMMDS = 1; // Specifies if metadata service should be available on this network interface
+	FirecrackerRateLimiter InRateLimiter = 2; // Specifies a rate limiter for incoming bytes
+	FirecrackerRateLimiter OutRateLimiter = 3; // Specifies a rate limiter for outgoing bytes
+
+	// CNIConfiguration specifies CNI configuration that will be used to generate
+	// a network interface for a Firecracker VM.
+	CNIConfiguration CNIConfig = 4;
+
+	// StaticNetworkConfiguration specifies static configuration parameters for a
+	// Firecracker VM's network interface
+	StaticNetworkConfiguration StaticConfig = 5;
+}
+
+// Message to specify CNI configuration that will be used to
+// generate a network interface for a Firecracker VM
+message CNIConfiguration {
+	// NetworkName is the name of a CNI network (as found in CNI
+	// configuration files) that will be used to generate the
+	// network interface.
+	string NetworkName = 1;
+
+	// InterfaceName corresponds to the CNI_IFNAME parameter that will be
+	// provided to CNI plugins during invocation.
+	string InterfaceName = 2;
+
+	// BinPath is a list of directories that will be searched when
+	// looking for CNI plugin binaries. Defaults to just "/opt/cni/bin"
+	repeated string BinPath = 3;
+
+	// ConfDir is the directory in which CNI configuration will be sought.
+	// If not specified, will default to "/etc/cni/conf.d".
+	string ConfDir = 4;
+
+	// CacheDir is the directory in which CNI results will be temporarily
+	// cached by the runtime. If not specified, it will default to
+	// "/var/lib/cni"
+	string CacheDir = 5;
+
+	message CNIArg {
+		string Key = 1;
+		string Value = 2;
+	}
+
+	// Args corresponds to the CNI_ARGS parameter that will be provided to
+	// CNI plugins on invocation.
+	repeated CNIArg Args = 6;
+}
+
+// Message to specify static configuration parameters for a
+// Firecracker VM's network interface
+message StaticNetworkConfiguration {
 	string MacAddress = 1; // Specifies the mac address for the the device
 	string HostDevName = 2; // Specifies the name of the tap device on the host
-	bool AllowMMDS = 3; // Specifies if metadata service should be available on this network interface
-	FirecrackerRateLimiter InRateLimiter = 4; // Specifies a rate limiter for incoming bytes
-	FirecrackerRateLimiter OutRateLimiter = 5; // Specifies a rate limiter for outgoing bytes
+
+	// IPConfig optionally provides static IP configuration that will be configured
+	// on the VM's internal networking interface. If not specified, no IP
+	// configuration will be applied to the VM's internal nic automatically.
+	IPConfiguration IPConfig = 3;
+}
+
+// Message to specify static IP configuration that will be
+// applied to a Firecracker VM's network interface internally
+message IPConfiguration {
+	// PrimaryAddr specifies, in CIDR notation, the primary address
+	// and subnet that a network interface will be assigned inside
+	// the VM.
+	string PrimaryAddr = 1;
+
+	// GatewayAddr specifies the default gateway that a network interface
+	// should use inside the VM.
+	string GatewayAddr = 3;
+
+	// Nameservers is a list of nameservers that the VM will be configured
+	// to use internally. Currently only up to 2 nameservers can be specified
+	// (any more in the list will be ignored) and configuration is provided
+	// to the VM via /proc/net/pnp.
+	repeated string Nameservers = 4;
 }
 
 // Message to set the machine config for a Firecracker VM
@@ -29,7 +101,7 @@ message FirecrackerMachineConfiguration {
 	bool HtEnabled = 2; // Specifies if hyper-threading should be enabled
 	 // Specifies the memory size of VM
 	 // This lets us create a Firecracker VM of up to 4096 TiB, which
-	 // for a mircroVM should be large enough
+	 // for a microVM should be large enough
 	uint32 MemSizeMib = 3;
 	uint32 VcpuCount = 4; // Specifies the number of vCPUs for the VM
 }

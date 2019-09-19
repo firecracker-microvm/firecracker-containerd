@@ -132,6 +132,34 @@ firecracker-containerd-naive-integ-test-image: $(RUNC_BIN) $(FIRECRACKER_BIN) $(
 .PHONY: all $(SUBDIRS) clean proto deps lint install image test-images firecracker-container-test-image firecracker-containerd-naive-integ-test-image test test-in-docker $(TEST_SUBDIRS) integ-test $(INTEG_TEST_SUBDIRS)
 
 ##########################
+# CNI Network
+##########################
+
+CNI_BIN_ROOT?=/opt/cni/bin
+$(CNI_BIN_ROOT):
+	mkdir -p $(CNI_BIN_ROOT)
+
+PTP_BIN?=$(CNI_BIN_ROOT)/ptp
+$(PTP_BIN): $(CNI_BIN_ROOT)
+	GOBIN=$(CNI_BIN_ROOT) GO111MODULE=off go get -u github.com/containernetworking/plugins/plugins/main/ptp
+
+HOSTLOCAL_BIN?=$(CNI_BIN_ROOT)/host-local
+$(HOSTLOCAL_BIN): $(CNI_BIN_ROOT)
+	GOBIN=$(CNI_BIN_ROOT) GO111MODULE=off go get -u github.com/containernetworking/plugins/plugins/ipam/host-local
+
+TC_REDIRECT_TAP_BIN?=$(CNI_BIN_ROOT)/tc-redirect-tap
+$(TC_REDIRECT_TAP_BIN): $(CNI_BIN_ROOT)
+	GOBIN=$(CNI_BIN_ROOT) go install github.com/firecracker-microvm/firecracker-go-sdk/cni/cmd/tc-redirect-tap
+
+FCNET_CONFIG?=/etc/cni/conf.d/fcnet.conflist
+$(FCNET_CONFIG):
+	mkdir -p $(dir $(FCNET_CONFIG))
+	cp tools/demo/fcnet.conflist $(FCNET_CONFIG)
+
+.PHONY: demo-network
+demo-network: $(PTP_BIN) $(HOSTLOCAL_BIN) $(TC_REDIRECT_TAP_BIN) $(FCNET_CONFIG)
+
+##########################
 # Firecracker submodule
 ##########################
 .PHONY: firecracker

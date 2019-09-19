@@ -4,7 +4,10 @@ This quickstart guide provides simple steps to get a working
 firecracker-containerd environment, with each of the major components built from
 source.  Once you have completed this quickstart, you should be able to run and
 develop firecracker-containerd (the components in this repository), the
-Firecracker VMM, and containerd.
+Firecracker VMM, and containerd. Note that the guide below should result in VMs
+by default having network access to IPs assigned on the host and may, depending
+on the configuration of your host's network, also have outbound access to the
+internet.
 
 This quickstart will clone repositories under your `$HOME` directory and install
 files into `/usr/local/bin`.
@@ -67,7 +70,6 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get \
      install --yes \
      docker-ce aufs-tools-
 sudo usermod -aG docker $(whoami)
-exec newgrp docker
 
 cd ~
 
@@ -80,11 +82,14 @@ cd ~
 #   overlay
 # * firecracker-containerd, an alternative containerd binary that includes the
 #   firecracker VM lifecycle plugin and API
+# * tc-redirect-tap and other CNI dependencies that enable VMs to start with
+#   access to networks available on the host
 git clone https://github.com/firecracker-microvm/firecracker-containerd.git
 cd firecracker-containerd
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y dmsetup
-make all image
+sg docker -c 'make all image'
 sudo make install
+sudo make demo-network
 
 cd ~
 
@@ -128,7 +133,13 @@ sudo tee /etc/containerd/firecracker-runtime.json <<EOF
   "log_fifo": "fc-logs.fifo",
   "log_level": "Debug",
   "metrics_fifo": "fc-metrics.fifo",
-  "kernel_args": "console=ttyS0 noapic reboot=k panic=1 pci=off nomodules ro systemd.journald.forward_to_console systemd.unit=firecracker.target init=/sbin/overlay-init"
+  "kernel_args": "console=ttyS0 noapic reboot=k panic=1 pci=off nomodules ro systemd.journald.forward_to_console systemd.unit=firecracker.target init=/sbin/overlay-init",
+  "default_network_interfaces": [{
+    "CNIConfig": {
+      "NetworkName": "fcnet",
+      "InterfaceName": "veth0"
+    }
+  }]
 }
 EOF
 
@@ -164,7 +175,7 @@ sudo firecracker-ctr --address /run/firecracker-containerd/containerd.sock \
      run \
      --snapshotter firecracker-naive \
      --runtime aws.firecracker \
-     --tty \
+     --rm --tty --net-host \
      docker.io/library/debian:latest \
      test
 ```

@@ -46,8 +46,8 @@ integ-test:
 		docker run --rm -it \
 			--privileged \
 			--ipc=host \
+			--network=none \
 			--volume /dev:/dev \
-			--volume /sys:/sys \
 			--volume /run/udev/control:/run/udev/control \
 			--volume $(CURDIR)/logs:/var/log/firecracker-containerd-test \
 			--env ENABLE_ISOLATED_TESTS=1 \

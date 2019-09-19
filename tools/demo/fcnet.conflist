@@ -1,0 +1,19 @@
+{
+  "cniVersion": "0.3.1",
+  "name": "fcnet",
+  "plugins": [
+    {
+      "type": "ptp",
+      "ipMasq": true,
+      "mtu": 1500,
+      "ipam": {
+        "type": "host-local",
+        "subnet": "192.168.1.0/24",
+        "resolvConf": "/etc/resolv.conf"
+      }
+    },
+    {
+      "type": "tc-redirect-tap"
+    }
+  ]
+}

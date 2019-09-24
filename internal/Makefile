@@ -28,6 +28,8 @@ integ-test:
 
 clean:
 
+distclean: clean
+
 install:
 
-.PHONY: clean all install test integ-test
+.PHONY: clean distclean all install test integ-test

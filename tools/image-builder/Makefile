@@ -18,6 +18,8 @@ IMAGE_DIRS := /dev /bin /etc /etc/init.d /tmp /var /run /proc /sys /container/ro
 DIRS       := $(foreach dir,$(IMAGE_DIRS),"$(WORKDIR)$(dir)")
 DEBMIRROR  ?= http://deb.debian.org/debian
 
+export DOCKER_IMAGE_TAG?=latest
+
 # When referenced in a _stamp target's recipe,
 # e.g. files_debootstrap_stamp, this function uses tar to copy the
 # contents of the base directory (e.g. files_debootstrap) to the image
@@ -68,7 +70,7 @@ rootfs.img: files_common_stamp files_debootstrap_stamp files_ephemeral_stamp
 builder: builder_stamp
 
 builder_stamp:
-	docker build -t fc-image-builder -f Dockerfile.debian-image .
+	docker build -t fc-image-builder:$(DOCKER_IMAGE_TAG) -f Dockerfile.debian-image .
 	touch $@
 
 # For any given target, append "-in-docker" to it to run the build
@@ -83,15 +85,21 @@ builder_stamp:
 		--cap-add=sys_admin \
 		--cap-add=sys_chroot \
 		--env=DEBMIRROR \
-		fc-image-builder:latest $(subst -in-docker,,$@)
+		fc-image-builder:$(DOCKER_IMAGE_TAG) $(subst -in-docker,,$@)
 
 clean:
 	-rm -f *stamp
-	-rm -rf $(WORKDIR)
-	-rm -f rootfs.img
+	if [ -d $(WORKDIR) ] || [ -e rootfs.img ]; then \
+	  if [ $(UID) -eq 0 ]; then \
+	    rm -rf $(WORKDIR) \
+	    rm -f rootfs.img ;\
+	   else \
+	     $(MAKE) clean-in-docker ;\
+	   fi ; \
+	fi
 
-distclean: clean-in-docker
+distclean: clean
 	rm -rf files_ephemeral
-	docker rmi fc-image-builder:latest
+	- docker rmi fc-image-builder:$(DOCKER_IMAGE_TAG)
 
 .PHONY: debootstrap clean distclean builder %-in-docker

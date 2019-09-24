@@ -36,7 +36,9 @@ integ-test:
 clean:
 	- rm -f agent
 
+distclean: clean
+
 # Install is a noop here, for now.
 install:
 
-.PHONY: clean all install test integ-test
+.PHONY: clean distclean all install test integ-test

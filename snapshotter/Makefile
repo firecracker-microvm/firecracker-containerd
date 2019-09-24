@@ -46,4 +46,6 @@ integ-test:
 clean:
 	for d in $(SUBDIRS); do $(MAKE) -C $$d clean; done
 
-.PHONY: all $(SUBDIRS) clean install test integ-test
+distclean: clean
+
+.PHONY: all $(SUBDIRS) clean distclean install test integ-test

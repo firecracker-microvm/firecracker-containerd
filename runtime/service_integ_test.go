@@ -218,9 +218,6 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 	image, err := client.Pull(ctx, guestDockerImage, containerd.WithPullUnpack, containerd.WithPullSnapshotter(naiveSnapshotterName))
 	require.NoError(t, err, "failed to pull image %s, is the the %s snapshotter running?", guestDockerImage, naiveSnapshotterName)
 
-	rootfsBytes, err := ioutil.ReadFile(defaultVMRootfsPath)
-	require.NoError(t, err, "failed to read rootfs file")
-
 	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
 	require.NoError(t, err, "failed to create ttrpc client")
 
@@ -237,11 +234,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 			err = createTapDevice(ctx, tapName)
 			require.NoError(t, err, "failed to create tap device for vm %d", vmID)
 
-			// TODO once Noah's immutable rootfs change is merged, we can use that as our rootfs for all VMs instead of copying
-			// one per-VM
-			rootfsPath := fmt.Sprintf("%s.%d", defaultVMRootfsPath, vmID)
-			err = ioutil.WriteFile(rootfsPath, rootfsBytes, 0600)
-			require.NoError(t, err, "failed to copy vm rootfs to %s", rootfsPath)
+			rootfsPath := defaultVMRootfsPath
 
 			fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
 			_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
@@ -450,13 +443,7 @@ func TestStubBlockDevices_Isolated(t *testing.T) {
 	image, err := client.Pull(ctx, guestDockerImage, containerd.WithPullUnpack, containerd.WithPullSnapshotter(naiveSnapshotterName))
 	require.NoError(t, err, "failed to pull image %s, is the the %s snapshotter running?", guestDockerImage, naiveSnapshotterName)
 
-	// TODO once Noah's immutable rootfs change is merged, we can use that as our rootfs for all VMs instead of copying
-	// one per-VM
-	rootfsBytes, err := ioutil.ReadFile(defaultVMRootfsPath)
-	require.NoError(t, err, "failed to read rootfs file")
-	rootfsPath := fmt.Sprintf("%s.%d", defaultVMRootfsPath, vmID)
-	err = ioutil.WriteFile(rootfsPath, rootfsBytes, 0600)
-	require.NoError(t, err, "failed to copy vm rootfs to %s", rootfsPath)
+	rootfsPath := defaultVMRootfsPath
 
 	tapName := fmt.Sprintf("tap%d", vmID)
 	err = createTapDevice(ctx, tapName)
@@ -544,7 +531,7 @@ func TestStubBlockDevices_Isolated(t *testing.T) {
 
 		const expectedOutput = `
 NAME MAJ:MIN RM      SIZE RO | MAGIC
-vda  254:0    0 67108864B  0 |    0   0   0   0   0   0   0   0
+vda  254:0    0 52969472B  0 |  104 115 113 115 128  28   0   0
 vdb  254:16   0        0B  0 | 
 vdc  254:32   0      512B  0 |  214 244 216 245 215 177 177 177
 vdd  254:48   0      512B  0 |  214 244 216 245 215 177 177 177

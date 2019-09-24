@@ -19,6 +19,7 @@ import (
 	"github.com/firecracker-microvm/firecracker-go-sdk"
 	models "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 )
@@ -111,18 +112,88 @@ func TestMachineConfigurationFromProto(t *testing.T) {
 	}
 }
 
-func TestNetworkConfigFromProto(t *testing.T) {
-	network := networkConfigFromProto(&proto.FirecrackerNetworkInterface{
-		MacAddress:  mac,
-		HostDevName: hostDevName,
-		AllowMMDS:   true,
-	})
+func TestNetworkConfigFromProto_Static(t *testing.T) {
+	primaryAddr := "198.51.100.2/24"
+	gatewayAddr := "198.51.100.1"
+	nameservers := []string{"192.0.2.1", "192.0.2.2", "192.0.2.3"}
 
-	assert.Equal(t, mac, network.MacAddress)
-	assert.Equal(t, hostDevName, network.HostDevName)
+	network, err := networkConfigFromProto(&proto.FirecrackerNetworkInterface{
+		AllowMMDS: true,
+		StaticConfig: &proto.StaticNetworkConfiguration{
+			MacAddress:  mac,
+			HostDevName: hostDevName,
+			IPConfig: &proto.IPConfiguration{
+				PrimaryAddr: primaryAddr,
+				GatewayAddr: gatewayAddr,
+				Nameservers: nameservers,
+			},
+		},
+	}, "vmID")
+	require.NoError(t, err, "failed to parse static network config from proto")
+
+	assert.Equal(t, mac, network.StaticConfiguration.MacAddress)
+	assert.Equal(t, hostDevName, network.StaticConfiguration.HostDevName)
+	assert.Equal(t, primaryAddr, network.StaticConfiguration.IPConfiguration.IPAddr.String())
+	assert.Equal(t, gatewayAddr, network.StaticConfiguration.IPConfiguration.Gateway.String())
+	assert.Equal(t, nameservers, network.StaticConfiguration.IPConfiguration.Nameservers)
+
 	assert.True(t, network.AllowMMDS)
 	assert.Nil(t, network.InRateLimiter)
 	assert.Nil(t, network.OutRateLimiter)
+}
+
+func TestNetworkConfigFromProto_CNI(t *testing.T) {
+	networkName := "da-network"
+	ifName := "da-iface"
+	vmID := "da-vm"
+	cniConfDir := "/da/cni/config"
+	cniCacheDir := "/da/cni/cache"
+	cniBinPath := []string{"/foo", "/boo/far"}
+	cniKey1 := "foo"
+	cniVal1 := "bar"
+	cniKey2 := "boo"
+	cniVal2 := "far"
+
+	inputArgs := []*proto.CNIConfiguration_CNIArg{
+		{
+			Key:   cniKey1,
+			Value: cniVal1,
+		},
+		{
+			Key:   cniKey2,
+			Value: cniVal2,
+		},
+	}
+
+	network, err := networkConfigFromProto(&proto.FirecrackerNetworkInterface{
+		AllowMMDS: true,
+		CNIConfig: &proto.CNIConfiguration{
+			NetworkName:   networkName,
+			InterfaceName: ifName,
+			ConfDir:       cniConfDir,
+			CacheDir:      cniCacheDir,
+			BinPath:       cniBinPath,
+			Args:          inputArgs,
+		},
+	}, vmID)
+	require.NoError(t, err, "failed to parse CNI network config from proto")
+
+	assert.True(t, network.AllowMMDS)
+	assert.Nil(t, network.InRateLimiter)
+	assert.Nil(t, network.OutRateLimiter)
+
+	assert.Equal(t, network.CNIConfiguration.NetworkName, networkName)
+	assert.Equal(t, network.CNIConfiguration.IfName, ifName)
+	assert.Equal(t, network.CNIConfiguration.ConfDir, cniConfDir)
+	assert.Equal(t, network.CNIConfiguration.CacheDir, cniCacheDir)
+	assert.Equal(t, network.CNIConfiguration.BinPath, cniBinPath)
+
+	require.Len(t, network.CNIConfiguration.Args, 2, "unexpected number of CNI args")
+	for i, inputArg := range inputArgs {
+		outputArg := network.CNIConfiguration.Args[i]
+		assert.Equal(t, inputArg.Key, outputArg[0])
+		assert.Equal(t, inputArg.Value, outputArg[1])
+	}
 }
 
 func TestTokenBucketFromProto(t *testing.T) {

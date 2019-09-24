@@ -596,6 +596,7 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 		MachineCfg:   machineConfigurationFromProto(s.config, req.MachineCfg),
 		LogLevel:     s.config.LogLevel,
 		Debug:        s.config.Debug,
+		VMID:         s.vmID,
 	}
 
 	logger.Debugf("using socket path: %s", cfg.SocketPath)
@@ -645,10 +646,22 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 	// a micro VM must know all drives
 	cfg.Drives = append(handler.GetDrives(), driveBuilder.Build()...)
 
-	// Setup network interfaces
+	// If no value for NetworkInterfaces was specified (not even an empty but non-nil list) and
+	// the runtime config specifies a default list, use those defaults
+	if req.NetworkInterfaces == nil {
+		for _, ni := range s.config.DefaultNetworkInterfaces {
+			niCopy := ni // we don't want to allow any further calls to modify structs in s.config.DefaultNetworkInterfaces
+			req.NetworkInterfaces = append(req.NetworkInterfaces, &niCopy)
+		}
+	}
 
 	for _, ni := range req.NetworkInterfaces {
-		cfg.NetworkInterfaces = append(cfg.NetworkInterfaces, networkConfigFromProto(ni))
+		netCfg, err := networkConfigFromProto(ni, s.vmID)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to convert network config %+v", ni)
+		}
+
+		cfg.NetworkInterfaces = append(cfg.NetworkInterfaces, *netCfg)
 	}
 
 	return &cfg, nil

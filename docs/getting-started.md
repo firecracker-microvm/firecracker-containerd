@@ -193,6 +193,10 @@ configuration file has the following fields:
   delivered.
 * `ht_enabled` (unused) - Reserved for future use.
 * `debug` (optional) - Enable debug-level logging from the runtime.
+* `default_network_interfaces` (optional) - a list of network interfaces to configure
+  a VM with if no list of network interfaces is provided with a CreateVM call. Defaults
+  to an empty list. The structure of the items in the list is the same as the Go API
+  FirecrackerNetworkInterface defined [in protobuf here](../proto/types.proto).
 
 <details>
 <summary>A reasonable example configuration</summary>
@@ -206,8 +210,7 @@ configuration file has the following fields:
   "cpu_template": "T2",
   "log_fifo": "fc-logs.fifo",
   "log_level": "Debug",
-  "metrics_fifo": "fc-metrics.fifo",
-
+  "metrics_fifo": "fc-metrics.fifo"
 }
 ```
 </details>
@@ -241,11 +244,13 @@ And start a container!
 
 ```bash
 $ sudo firecracker-ctr --address /run/firecracker-containerd/containerd.sock \
-  run --snapshotter firecracker-naive --runtime aws.firecracker --tty \
+  run --snapshotter firecracker-naive --runtime aws.firecracker \ 
+  --rm --tty --net-host \
   docker.io/library/busybox:latest busybox-test
 ```
 
-Alternatively you can specify `--runtime` and `--snapshotter` just once when creating a new namespace using containerd's default labels:
+Alternatively you can specify `--runtime` and `--snapshotter` just once when 
+creating a new namespace using containerd's default labels:
 
 ```bash
 $ sudo firecracker-ctr --address /run/firecracker-containerd/containerd.sock \
@@ -258,6 +263,75 @@ $ sudo firecracker-ctr --address /run/firecracker-containerd/containerd.sock \
 
 $ sudo firecracker-ctr --address /run/firecracker-containerd/containerd.sock \
   -n fc \
-  run --tty \
+  run --rm --tty --net-host \
   docker.io/library/busybox:latest busybox-test
 ```
+
+## Networking support 
+Firecracker-containerd supports the same networking options as provided by the 
+Firecracker Go SDK, [documented here](https://github.com/firecracker-microvm/firecracker-go-sdk#network-configuration).
+This includes support for configuring VM network interfaces both with
+pre-created tap devices and with tap devices created automatically by 
+[CNI](https://github.com/containernetworking/cni) plugins.
+
+### CNI Setup
+CNI-configured networks offer the quickest way to get VMs up and running with 
+connectivity to external networks. Setting one up requires a few extra steps in 
+addition to the above Setup steps.
+
+To install the required CNI dependencies, run the following make target from the 
+previously cloned firecracker-containerd repository:
+```bash
+$ sudo make demo-network
+```
+
+You can check the Makefile to see exactly what is installed and where, but for a 
+quick summary:
+* [`ptp` CNI plugin](https://github.com/containernetworking/plugins/tree/master/plugins/main/ptp) 
+  - Creates a [veth](http://man7.org/linux/man-pages/man4/veth.4.html) pair with 
+  one end in a private network namespace and the other end in the host's network namespace.
+* [`host-local` CNI
+  plugin](https://github.com/containernetworking/plugins/tree/master/plugins/ipam/host-local)
+  - Manages IP allocations of network devices present on the local machine by 
+  vending them from a statically defined subnet.
+* [`tc-redirect-tap` CNI
+  plugin](https://github.com/firecracker-microvm/firecracker-go-sdk/tree/master/cni) 
+  - A CNI plugin that adapts other CNI plugins to be usable by Firecracker VMs.
+  [See this doc for more details](networking.md). It is used here to adapt veth 
+  devices created by the `ptp` plugin to tap devices provided to VMs.
+* [`fcnet.conflist`](../tools/demo/fcnet.conflist) - A sample CNI configuration 
+  file that defines a `fcnet` network created via the `ptp`, `host-local` and 
+  `tc-redirect-tap` plugins
+
+After those dependencies are installed, an update to the firecracker-containerd 
+configuration file is required for VMs to use the `fcnet` CNI-configuration as 
+their default way of generating network interfaces. Just include the following `
+default_network_interfaces` key in your runtime configuration file (by default 
+at `/etc/containerd/firecracker-runtime.json`):
+```json
+"default_network_interfaces": [
+  {
+    "CNIConfig": {
+      "NetworkName": "fcnet",
+      "InterfaceName": "veth0"
+    }
+  }
+]
+```
+
+After that, start up a container (as described in the above Usage section) and 
+try pinging your host IP.
+
+At the time of this writing, there is a bug in the ptp plugin that prevents the
+DNS settings from the IPAM plugin being propagated. This is being addressed, but
+until that time DNS resolution will require users manually tweak the installed
+CNI configuration to specify static DNS nameservers appropriate to their local
+network in [the `dns` section of the PTP plugin](https://github.com/containernetworking/plugins/tree/master/plugins/main/ptp#network-configuration-reference)
+
+While your host's IP should always be reachable from the VM given the above
+networking setup, your VM may or may not have outbound internet access depending
+on the details of your host's network. The ptp plugin attempts to setup iptables
+rules to allow the VM's traffic to be forwarded on your host's network but may
+not be able to if there are pre-existing iptables rules that overlap. In those
+cases, granting your VM outbound internet access may require customization of
+the CNI configuration past what's installed above.

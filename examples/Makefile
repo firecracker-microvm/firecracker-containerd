@@ -35,13 +35,23 @@ integ-test:
 		--privileged \
 		--ipc=host \
 		--volume /dev:/dev \
-		--volume /sys:/sys \
 		--volume /run/udev/control:/run/udev/control \
 		--volume $(CURDIR)/logs:/var/log/firecracker-containerd-test \
 		--env EXTRAGOARGS="${EXTRAGOARGS}" \
 		--workdir="/firecracker-containerd/examples" \
 		localhost/firecracker-containerd-naive-integ-test:${DOCKER_IMAGE_TAG} \
-		"make examples && ./taskworkflow"
+		"make examples && make testtap && ./taskworkflow -ip $(TEST_IP)$(TEST_SUBNET) -gw $(TEST_GATEWAY)"
+
+TEST_GATEWAY?=172.16.0.1
+TEST_IP?=172.16.0.2
+TEST_SUBNET?=/24
+testtap:
+	ip link add br0 type bridge
+	ip tuntap add tap0 mode tap
+	ip link set tap0 master br0
+	ip link set dev tap0 up
+	ip link set dev br0 up
+	ip addr add dev br0 $(TEST_GATEWAY)$(TEST_SUBNET)
 
 clean:
 	- rm -f taskworkflow
@@ -51,4 +61,4 @@ distclean: clean
 
 install:
 
-.PHONY: all examples clean distclean install test integ-test
+.PHONY: all examples clean distclean install test integ-test testtap

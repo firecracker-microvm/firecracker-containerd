@@ -70,6 +70,7 @@ The Linux Kernel’s [Traffic Control (TC)](http://tldp.org/HOWTO/Traffic-Contro
 Most relevant to our interests, the [U32 filter](http://man7.org/linux/man-pages/man8/tc-u32.8.html) provided as part of TC allows you to create a rule that essentially says “take all the packets entering the ingress queue of this device and move them to the egress queue of this other device”. For example, if you have DeviceA and DeviceB you can setup that rule on each of them such that the end effect is every packet sent into DeviceA goes out of DeviceB and every packet sent to DeviceB goes out of DeviceA. The host kernel just moves the ethernet packets from one device’s queue to the other’s, so the redirection is entirely transparent to any userspace application or VM guest kernel all the way down to and including the link layer.
 
 * We first learned about this approach from [Kata Containers](https://github.com/kata-containers/runtime), who are using it for similar purposes in their framework. They have [some more background information documented here](https://gist.github.com/mcastelino/7d85f4164ffdaf48242f9281bb1d0f9b).
+* Another use of TC redirect filters in the context of CNI plugins can be found in the [bandwidth CNI plugin](https://github.com/containernetworking/plugins/tree/master/plugins/meta/bandwidth).
 
 This technique can be used to redirect between a Firecracker VM’s tap device and another device in the network namespace Firecracker is running in. If, for example, the VM tap is redirecting with a veth device in a network namespace, the VM guest internally gets a network device with the same mac address as the veth and needs to assign to it the same IP and routes the veth uses. After that, the VM guest essentially operates as though its nic is the same as the veth device outside on the host.
 
@@ -117,51 +118,45 @@ VMs will execute in.
 In this option, Firecracker-containerd just asks for CNI configuration during a CreateVM call, which it will use to configure a network namespace for the Firecracker VM to execute in. The API updates may look something like:
 
 ```
-message FirecrackerNetworkConfiguration {
-    // CNI Configuration to use to create the network namespace in which the
-    // VM will execute. It's an error to specify both this and any NetworkInterfaces
-    // below.
-    FirecrackerCNIConfiguration CNIConfiguration;
+message FirecrackerNetworkInterface {
+    // <existing fields...>
+    
+    // CNI Configuration that will be used to configure the network interface
+    CNIConfiguration CNIConfig;
 
-    // The existing FirecrackerNetworkInterface configuration
-    // which specifies the name of the tap device on the host and rate limiters
-    repeated FirecrackerNetworkInterface NetworkInterfaces;
+    // Static configuration that will be used to configure the network interface
+    StaticNetworkConfiguration StaticConfig;
 }
 
 message FirecrackerCNIConfiguration {
     // Name of the CNI network that will be used to configure the VM
     string NetworkName;
     
-    // Path to CNI bin directory and CNI conf directory, respectively, that will
-    // be used to configure the VM.
-    string BinDirectory;
+    // IF_NAME CNI parameter provided to plugins for the name of devices to create
+    string InterfaceName;
+    
+    // Paths to CNI bin directories, CNI conf directory and CNI cache directory, 
+    // respectively, that will be used to configure the VM.
+    repeated string BinPath;
     string ConfDirectory;
+    string CacheDirectory;
+    
+    // CNI Args passed to plugins
+    repeated CNIArg Args;
 }
 
-message FirecrackerNetworkInterface {
-    // <existing fields...>
-
-    // (Optional) Static configuration that will be applied internally in the
-    // Guest VM. At first, it will be an error to specify this for multiple
-    // NetworkInterfacesin the same CreateVM call (due to the limitations of
-    // using "ip=..."). In time, we may be able to lift that restriction with
-    // updates to the implementation.
-    StaticIPConfiguration StaticIP;
+message StaticNetworkConfiguration {
+    string MacAddress;
+    string HostDevName;
+    IPConfiguration IPConfig;
 }
 
-message StaticIPConfiguration {
+message IPConfiguration {
     // Network configuration that will be applied to a network interface in a
     // Guest VM on boot.
-    string IP;
-    string SubnetMask;
-    string DefaultGateway;
+    string PrimaryAddress;
+    string GatewayAddress;
     repeated string Nameservers;
-    string Hostname;
-}
-
-message CreateVMRequest {
-    // <same existing fields except FirecrackerNetworkInterface which is replaced with the following...>
-    FirecrackerNetworkConfiguration NetworkConfiguration;
 }
 ```
 
@@ -258,7 +253,7 @@ In order for networking to work as expected inside the VM, it needs to have IP a
 
 The IP configuration is just pre-configured in the kernel when the system starts (the same end effect of having run the corresponding netlink commands to configure IP and routes). The DNS configuration is applied by writing the nameserver and search domain configuration to /proc/net/pnp in a format that is compatible with /etc/resolv.conf. The typical approach is to then have /etc/resolv.conf be a symlink to /proc/net/pnp.
 
-Users of Firecracker-containerd are also free to provide their own kernel boot options, which could include their own static IP/DNS configuration. In those cases, if they have enabled CNI configuration, Firecracker-containerd will return an error.  
+Users of Firecracker-containerd are also free to provide their own kernel boot options, which could include their own static IP/DNS configuration. In those cases, if they have enabled CNI configuration, Firecracker-containerd will return an error.
 
 **Pros**
 
@@ -335,21 +330,15 @@ The biggest immediate downside of Option A is the requirement that /etc/resolv.c
 
 Firecracker-containerd will build the current binaries it does today plus a new CNI-plugin compatible binary, `tc-redirect-tap`, that takes an existing network namespace and creates within it a tap device that is redirected via a TC filter to an already networked device in the netns. This CNI plugin is only useful when chained with other CNI-plugins (which will setup the device that the tap will redirect with).
 
-When setting up Firecracker-containerd, users can optionally include CNI configuration in Firecracker-containerd’s runtime config file. If CNI configuration is not passed during CreateVM (such as the single-container VM use case), the runtime will fall back to configuration in the runtime config. If there’s no CNI configuration present in either the CreateVM call or the runtime config, the behavior will remain the same as it is today.
+When setting up Firecracker-containerd, users can optionally include a set of default network interfaces to provide to a VM if none are specified by the user. This allows users to optionally set their VMs to use CNI-configured network interfaces by default. The user is free to provide an explicit NetworkInterfaces list during the CreateVM call (including an empty list), in which case that will be used instead of any defaults present in the runtime config file.
 
-On a high-level, the implementation of CreateVM relevant to the new networking configuration will look something like this:
-
-1. Parse what, if any, CNI configuration is provided via either the CreateVM call or the defaults in the runtime config file.
-2. If CNI Configuration is not present, just continue the VM creation process as it is today
-3. If CNI Configuration is present, check to see if the Jailer configuration specifies a network namespace
-    1. If it does, that will be the network namespace provided to the CNI plugins
-    2. If it does not, a new empty network namespace will be created by the runtime and provided to the CNI plugins
-4. Use the provided CNI configuration to configure the network namespace
-5. Start the Firecracker VM in the network namespace via the Jailer and with the corresponding `ip=...` kernel boot parameters
+The Firecracker Go SDK will take care of checking whether any Jailer config specifies a pre-existing network namespace to use and, if not, creating a new network namespace for the VM on behalf of the user. The Go SDK will also take care of invoking CNI on that network namespace, starting the VMM inside of it, and handling CNI network deletion after the VM stops.
 
 If CreateVM succeeds, any containers running inside the VM with a “host” network namespace will have access to the network configured via CNI outside the VM.
 
-The CNI configuration Firecracker-containerd asks for are just references to a CNI network name, a CNI bin directory (i.e. `/opt/cni/bin`) and a CNI configuration directory (i.e. `/etc/cni/net.d`). A hypothetical example CNI configuration file that uses the standard [ptp CNI plugin](https://github.com/containernetworking/plugins/tree/master/plugins/main/ptp) to create a veth device whose traffic is redirected with a tap device:
+The CNI configuration Firecracker-containerd requires from users are a CNI network name and an IfName parameter to provide to CNI plugins. Other values such as the a CNI bin directories and CNI configuration directories can be provided but will have sensible defaults if not provided.
+
+A hypothetical example CNI configuration file that uses the standard [ptp CNI plugin](https://github.com/containernetworking/plugins/tree/master/plugins/main/ptp) to create a veth device whose traffic is redirected with a tap device:
 
 ```
 {
@@ -361,10 +350,8 @@ The CNI configuration Firecracker-containerd asks for are just references to a C
       "ipMasq": true,
       "ipam": {
         "type": "host-local",
-        "subnet": "192.168.1.0/24"
-      },
-      "dns": {
-        "nameservers": [ "1.1.1.1" ]
+        "subnet": "192.168.1.0/24",
+        "resolvConf": "/etc/resolv.conf"
       }
     },
     {
@@ -376,7 +363,7 @@ The CNI configuration Firecracker-containerd asks for are just references to a C
 
 Given the above configuration, the containers inside the VM will have access to the 192.168.1.0/24 network. Thanks to setting `ipMasq: true`, the containers should also have internet access (assuming the host itself has internet access).
 
-Firecracker-containerd will also provide an example CNI configuration that, if used, will result in Firecracker VMs being spun up with the same access to the network the host has on its default interface (something comparable to Docker’s default networking configuration). This can be setup via a Makefile target (i.e. `install-default-network`), which allows users trying out Firecracker-containerd to get networking, including outbound internet access, working in their Firecracker VMs by default if they so choose.
+Firecracker-containerd will also provide an example CNI configuration that, if used, will result in Firecracker VMs being spun up with the same access to the network the host has on its default interface (something comparable to Docker’s default networking configuration). This can be setup via a Makefile target (i.e. `demo-network`), which allows users trying out Firecracker-containerd to get networking, including outbound internet access, working in their Firecracker VMs by default if they so choose.
 
 ## Hypothetical CRI interactions
 

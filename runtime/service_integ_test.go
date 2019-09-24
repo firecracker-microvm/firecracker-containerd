@@ -54,7 +54,6 @@ const (
 	defaultNamespace = namespaces.Default
 
 	containerdSockPath = "/run/containerd/containerd.sock"
-	guestDockerImage   = "docker.io/library/alpine:3.10.1"
 
 	firecrackerRuntime   = "aws.firecracker"
 	naiveSnapshotterName = "firecracker-naive"
@@ -65,6 +64,27 @@ const (
 	varRunDir           = "/var/run/firecracker-containerd"
 )
 
+// Images are presumed by the isolated tests to have already been pulled
+// into the content store. This will just unpack the layers into an
+// image with the provided snapshotter.
+func unpackImage(ctx context.Context, client *containerd.Client, snapshotterName string, imageRef string) (containerd.Image, error) {
+	img, err := client.GetImage(ctx, imageRef)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get image")
+	}
+
+	err = img.Unpack(ctx, snapshotterName)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to unpack image")
+	}
+
+	return img, nil
+}
+
+func alpineImage(ctx context.Context, client *containerd.Client, snapshotterName string) (containerd.Image, error) {
+	return unpackImage(ctx, client, snapshotterName, "docker.io/library/alpine:3.10.1")
+}
+
 func TestShimExitsUponContainerDelete_Isolated(t *testing.T) {
 	internal.RequiresIsolation(t)
 
@@ -74,12 +94,8 @@ func TestShimExitsUponContainerDelete_Isolated(t *testing.T) {
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
 	defer client.Close()
 
-	pullTimeout := 180 * time.Second
-	pullCtx, pullCancel := context.WithTimeout(ctx, pullTimeout)
-	defer pullCancel()
-
-	image, err := client.Pull(pullCtx, guestDockerImage, containerd.WithPullUnpack, containerd.WithPullSnapshotter(naiveSnapshotterName))
-	require.NoError(t, err, "failed to pull image %s, is the the %s snapshotter running?", guestDockerImage, naiveSnapshotterName)
+	image, err := alpineImage(ctx, client, naiveSnapshotterName)
+	require.NoError(t, err, "failed to get alpine image")
 
 	testTimeout := 60 * time.Second
 	testCtx, testCancel := context.WithTimeout(ctx, testTimeout)
@@ -215,8 +231,8 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
 	defer client.Close()
 
-	image, err := client.Pull(ctx, guestDockerImage, containerd.WithPullUnpack, containerd.WithPullSnapshotter(naiveSnapshotterName))
-	require.NoError(t, err, "failed to pull image %s, is the the %s snapshotter running?", guestDockerImage, naiveSnapshotterName)
+	image, err := alpineImage(ctx, client, naiveSnapshotterName)
+	require.NoError(t, err, "failed to get alpine image")
 
 	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
 	require.NoError(t, err, "failed to create ttrpc client")
@@ -249,9 +265,11 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 				},
 				NetworkInterfaces: []*proto.FirecrackerNetworkInterface{
 					{
-						HostDevName: tapName,
-						MacAddress:  vmIDtoMacAddr(uint(vmID)),
-						AllowMMDS:   true,
+						AllowMMDS: true,
+						StaticConfig: &proto.StaticNetworkConfiguration{
+							HostDevName: tapName,
+							MacAddress:  vmIDtoMacAddr(uint(vmID)),
+						},
 					},
 				},
 				ContainerCount: containersPerVM,
@@ -440,8 +458,8 @@ func TestStubBlockDevices_Isolated(t *testing.T) {
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
 	defer client.Close()
 
-	image, err := client.Pull(ctx, guestDockerImage, containerd.WithPullUnpack, containerd.WithPullSnapshotter(naiveSnapshotterName))
-	require.NoError(t, err, "failed to pull image %s, is the the %s snapshotter running?", guestDockerImage, naiveSnapshotterName)
+	image, err := alpineImage(ctx, client, naiveSnapshotterName)
+	require.NoError(t, err, "failed to get alpine image")
 
 	rootfsPath := defaultVMRootfsPath
 
@@ -465,9 +483,11 @@ func TestStubBlockDevices_Isolated(t *testing.T) {
 		},
 		NetworkInterfaces: []*proto.FirecrackerNetworkInterface{
 			{
-				HostDevName: tapName,
-				MacAddress:  vmIDtoMacAddr(uint(vmID)),
-				AllowMMDS:   true,
+				AllowMMDS: true,
+				StaticConfig: &proto.StaticNetworkConfiguration{
+					HostDevName: tapName,
+					MacAddress:  vmIDtoMacAddr(uint(vmID)),
+				},
 			},
 		},
 		ContainerCount: 5,
@@ -531,7 +551,7 @@ func TestStubBlockDevices_Isolated(t *testing.T) {
 
 		const expectedOutput = `
 NAME MAJ:MIN RM      SIZE RO | MAGIC
-vda  254:0    0 52969472B  0 |  104 115 113 115 128  28   0   0
+vda  254:0    0 53633024B  0 |  104 115 113 115 128  28   0   0
 vdb  254:16   0        0B  0 | 
 vdc  254:32   0      512B  0 |  214 244 216 245 215 177 177 177
 vdd  254:48   0      512B  0 |  214 244 216 245 215 177 177 177
@@ -560,16 +580,19 @@ func startAndWaitTask(ctx context.Context, t *testing.T, c containerd.Container)
 	err = task.Start(ctx)
 	require.NoError(t, err, "failed to start task for container %s", c.ID())
 	defer func() {
-		status, err := task.Delete(ctx)
-		require.NoError(t, status.Error())
 		require.NoError(t, err, "failed to delete task for container %s", c.ID())
 	}()
 
 	select {
 	case exitStatus := <-exitCh:
-		require.NoError(t, exitStatus.Error(), "failed to retrieve exitStatus")
-		require.Equal(t, uint32(0), exitStatus.ExitCode())
-		require.Equal(t, "", stderr.String())
+		assert.Equal(t, uint32(0), exitStatus.ExitCode())
+
+		status, err := task.Delete(ctx)
+		assert.NoErrorf(t, err, "failed to delete task %q after exit", c.ID())
+		assert.NoError(t, status.Error())
+		assert.NoError(t, exitStatus.Error(), "failed to retrieve exitStatus")
+
+		assert.Equal(t, "", stderr.String())
 	case <-ctx.Done():
 		require.Fail(t, "context cancelled",
 			"context cancelled while waiting for container %s to exit, err: %v", c.ID(), ctx.Err())
@@ -605,8 +628,8 @@ func testCreateContainerWithSameName(t *testing.T, vmID string) {
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
 	defer client.Close()
 
-	image, err := client.Pull(ctx, guestDockerImage, containerd.WithPullUnpack, containerd.WithPullSnapshotter(naiveSnapshotterName))
-	require.NoError(t, err, "failed to pull image %s, is the the %s snapshotter running?", guestDockerImage, naiveSnapshotterName)
+	image, err := alpineImage(ctx, client, naiveSnapshotterName)
+	require.NoError(t, err, "failed to get alpine image")
 
 	containerName := fmt.Sprintf("%s-%d", t.Name(), time.Now().UnixNano())
 	snapshotName := fmt.Sprintf("%s-snapshot", containerName)
@@ -677,8 +700,8 @@ func TestCreateTooManyContainers_Isolated(t *testing.T) {
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
 	defer client.Close()
 
-	image, err := client.Pull(ctx, guestDockerImage, containerd.WithPullUnpack, containerd.WithPullSnapshotter(naiveSnapshotterName))
-	require.NoError(t, err, "failed to pull image %s, is the the %s snapshotter running?", guestDockerImage, naiveSnapshotterName)
+	image, err := alpineImage(ctx, client, naiveSnapshotterName)
+	require.NoError(t, err, "failed to get alpine image")
 
 	runEchoHello := containerd.WithNewSpec(oci.WithProcessArgs("echo", "-n", "hello"), firecrackeroci.WithVMID("reuse-same-vm"), oci.WithDefaultPathEnv)
 

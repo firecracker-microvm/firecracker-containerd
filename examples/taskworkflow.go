@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"syscall"
 	"time"
@@ -27,7 +28,6 @@ import (
 	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/oci"
-	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 
 	fcclient "github.com/firecracker-microvm/firecracker-containerd/firecracker-control/client"
@@ -39,37 +39,35 @@ const (
 	containerdAddress      = "/run/containerd/containerd.sock"
 	containerdTTRPCAddress = containerdAddress + ".ttrpc"
 	namespaceName          = "firecracker-containerd-example"
-	kernelArgsFormat       = "console=ttyS0 noapic reboot=k panic=1 pci=off nomodules rw ip=%s::%s:%s:::off::::"
 	macAddress             = "AA:FC:00:00:00:01"
 	hostDevName            = "tap0"
 )
 
 func main() {
-	var ip = flag.String("ip", "", "ip address assigned to the container. Example: -ip 172.16.0.1")
-	var gateway = flag.String("gw", "", "gateway ip address. Example: -gw 172.16.0.1")
-	var netMask = flag.String("mask", "", "subnet gatway mask. Example: -mask 255.255.255.0")
+	var containerCIDR = flag.String("ip", "", "ip address and subnet assigned to the container in CIDR notation. Example: -ip 172.16.0.2/24")
+	var gatewayIP = flag.String("gw", "", "gateway ip address. Example: -gw 172.16.0.1")
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
 	flag.Parse()
-	if *ip != "" && (*gateway == "" || *netMask == "") {
-		log.Fatal("Incorrect usage. 'gw' and 'mask' need to be specified when 'ip' is specified")
+	if *containerCIDR != "" && *gatewayIP == "" {
+		log.Fatal("Incorrect usage. 'gw' needs to be specified when 'ip' is specified")
 	}
-	if err := taskWorkflow(*ip, *gateway, *netMask); err != nil {
+	if err := taskWorkflow(*containerCIDR, *gatewayIP); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func taskWorkflow(containerIP string, gateway string, netMask string) (err error) {
+func taskWorkflow(containerCIDR string, gateway string) (err error) {
 	log.Println("Creating containerd client")
 	client, err := containerd.New(containerdAddress)
 	if err != nil {
 		return errors.Wrapf(err, "creating client")
-
 	}
+
 	defer client.Close()
 	log.Println("Created containerd client")
 
 	ctx := namespaces.WithNamespace(context.Background(), namespaceName)
-	image, err := client.Pull(ctx, "docker.io/library/nginx:latest",
+	image, err := client.Pull(ctx, "docker.io/library/nginx:1.17-alpine",
 		containerd.WithPullUnpack,
 		containerd.WithPullSnapshotter("firecracker-naive"),
 	)
@@ -85,16 +83,21 @@ func taskWorkflow(containerIP string, gateway string, netMask string) (err error
 	defer fcClient.Close()
 
 	vmID := "fc-example"
-	createVMRequest := &proto.CreateVMRequest{VMID: vmID}
+	createVMRequest := &proto.CreateVMRequest{
+		VMID: vmID,
+	}
 
-	if containerIP != "" {
-		createVMRequest.NetworkInterfaces = []*proto.FirecrackerNetworkInterface{
-			{
+	if containerCIDR != "" {
+		createVMRequest.NetworkInterfaces = []*proto.FirecrackerNetworkInterface{{
+			StaticConfig: &proto.StaticNetworkConfiguration{
 				MacAddress:  macAddress,
 				HostDevName: hostDevName,
+				IPConfig: &proto.IPConfiguration{
+					PrimaryAddr: containerCIDR,
+					GatewayAddr: gateway,
+				},
 			},
-		}
-		createVMRequest.KernelArgs = fmt.Sprintf(kernelArgsFormat, containerIP, gateway, netMask)
+		}}
 	}
 
 	_, err = fcClient.CreateVM(ctx, createVMRequest)
@@ -120,10 +123,8 @@ func taskWorkflow(containerIP string, gateway string, netMask string) (err error
 		containerd.WithNewSnapshot("demo-snapshot", image),
 		containerd.WithNewSpec(
 			oci.WithImageConfig(image),
-			oci.WithHostNamespace(specs.NetworkNamespace),
-			oci.WithHostHostsFile,
-			oci.WithHostResolvconf,
 			firecrackeroci.WithVMID(vmID),
+			firecrackeroci.WithVMNetwork,
 		),
 		containerd.WithRuntime("aws.firecracker", nil),
 	)
@@ -155,37 +156,47 @@ func taskWorkflow(containerIP string, gateway string, netMask string) (err error
 	log.Println("Successfully started the container task")
 	time.Sleep(3 * time.Second)
 
-	if containerIP != "" {
-		log.Println("Executing http GET on " + containerIP)
-		getResponse(containerIP)
+	var httpGetErr error
+	if containerCIDR != "" {
+		ip, _, err := net.ParseCIDR(containerCIDR)
+		if err != nil {
+			// this is validated as part of the CreateVM call, should never happen
+			return errors.Wrapf(err, "failed parsing CIDR %q", containerCIDR)
+		}
+
+		log.Println("Executing http GET on " + ip.String())
+		httpGetErr = getResponse(ip.String())
+		if httpGetErr != nil {
+			log.Printf("error making http GET request: %v\n", err)
+		}
 	}
 
 	if err := task.Kill(ctx, syscall.SIGTERM); err != nil {
 		return errors.Wrapf(err, "killing task")
-
 	}
+
 	status := <-exitStatusC
 	code, _, err := status.Result()
 	if err != nil {
 		return errors.Wrapf(err, "getting task's exit code")
-
 	}
 	log.Printf("task exited with status: %d\n", code)
-	return nil
+
+	return httpGetErr
 }
 
-func getResponse(containerIP string) {
-	response, err := http.Get("http://" + containerIP)
+func getResponse(containerIP string) error {
+	response, err := http.Get(fmt.Sprintf("http://%s/", containerIP))
 	if err != nil {
-		log.Println("Unable to get response from " + containerIP)
-		return
+		return errors.Wrapf(err, "Unable to get response from %s", containerIP)
 	}
 	defer response.Body.Close()
+
 	contents, err := ioutil.ReadAll(response.Body)
 	if err != nil {
-		log.Printf("Unable to read response body: %v\n", err)
-		return
+		return errors.Wrapf(err, "Unable to read response body from %s", containerIP)
 	}
 
 	log.Printf("Response from [%s]: \n[%s]\n", containerIP, contents)
+	return nil
 }

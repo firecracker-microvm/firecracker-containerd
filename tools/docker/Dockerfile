@@ -72,20 +72,7 @@ ENV STATIC_AGENT='true'
 # directory to a tmp location and copy to one we will actually use (giving ourselves permission to it in the process).
 RUN --mount=type=bind,target=_firecracker-containerd cp -R _firecracker-containerd firecracker-containerd
 RUN --mount=type=cache,from=build-base,source=/home/builder/go/pkg/mod,target=/home/builder/go/pkg/mod \
-	cd firecracker-containerd \
-	&& make \
-	&& cp \
-		agent/agent \
-		runtime/containerd-shim-aws-firecracker \
-		snapshotter/cmd/devmapper/devmapper_snapshotter \
-		snapshotter/cmd/naive/naive_snapshotter \
-		/output
-RUN --mount=type=cache,from=build-base,source=/home/builder/go/pkg/mod,target=/home/builder/go/pkg/mod \
-  cd firecracker-containerd/firecracker-control/cmd/containerd/ \
-  && make \
-  && cp firecracker-containerd /output/containerd \
-  && cp firecracker-ctr /output/ctr
-
+	cd firecracker-containerd && make
 
 
 #########################################
@@ -112,6 +99,7 @@ RUN apt-get update && apt-get install --yes --no-install-recommends \
 		ca-certificates \
 		curl \
 		git \
+		iptables \
 		libdevmapper-dev \
 		libseccomp-dev
 
@@ -126,13 +114,23 @@ COPY tools/image-builder/rootfs.img /var/lib/firecracker-containerd/runtime/defa
 COPY --from=firecracker-containerd-build /output/* /usr/local/bin/
 
 RUN --mount=type=cache,from=build-base,source=/home/builder/go/pkg/mod,target=/tmp/go/pkg/mod,readonly \
-  mkdir -p ${GOPATH}/pkg/mod \
-  && cp -R /tmp/go/pkg/mod/* ${GOPATH}/pkg/mod \
-  && cp -R /tmp/go/pkg/mod/* /home/builder/go/pkg/mod \
-  && chown -R builder /home/builder/go/pkg/mod
+	mkdir -p ${GOPATH}/pkg/mod \
+	&& cp -R /tmp/go/pkg/mod/* ${GOPATH}/pkg/mod \
+	&& cp -R /tmp/go/pkg/mod/* /home/builder/go/pkg/mod \
+	&& chown -R builder /home/builder/go/pkg/mod
+
+COPY --from=firecracker-containerd-build /home/builder/firecracker-containerd /firecracker-containerd
+RUN make -C /firecracker-containerd install
+RUN chmod a+r /firecracker-containerd/go.mod /firecracker-containerd/go.sum # fix for https://github.com/golang/go/issues/31871
+RUN ln -s /usr/local/bin/firecracker-containerd /usr/local/bin/containerd
+RUN ln -s /usr/local/bin/firecracker-ctr /usr/local/bin/ctr
 
 RUN mkdir -p /var/run/firecracker-containerd \
 	&& mkdir -p ${FICD_LOG_DIR}
+
+# make sure all our dependencies, including test dependencies, are pulled into the
+# image so we don't need internet access during the test runs themselves
+RUN cd /firecracker-containerd && go get -d ./...
 
 ENTRYPOINT ["/bin/bash", "-c"]
 
@@ -152,9 +150,16 @@ COPY _submodules/runc/runc /usr/local/bin
 COPY tools/image-builder/rootfs.img /var/lib/firecracker-containerd/runtime/default-rootfs.img
 COPY tools/docker/firecracker-runtime.json /etc/containerd/firecracker-runtime.json
 
+# pull the images the tests need into the content store so we don't need internet
+# access during the tests themselves
 COPY tools/docker/naive-snapshotter/config.toml /etc/containerd/config.toml
-COPY tools/docker/naive-snapshotter/entrypoint.sh /entrypoint
+RUN containerd 2>/dev/null & \
+	ctr content fetch docker.io/library/alpine:3.10.1 >/dev/null
+
 RUN mkdir -p /var/lib/firecracker-containerd/naive
+RUN make -C /firecracker-containerd demo-network
+COPY tools/docker/firecracker-runtime.json /etc/containerd/firecracker-runtime.json
+COPY tools/docker/naive-snapshotter/entrypoint.sh /entrypoint
 
 ENTRYPOINT ["/entrypoint"]
 CMD ["exec /bin/bash"]

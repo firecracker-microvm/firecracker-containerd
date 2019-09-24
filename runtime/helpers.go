@@ -14,7 +14,10 @@
 package main
 
 import (
+	"net"
 	"time"
+
+	"github.com/pkg/errors"
 
 	"github.com/firecracker-microvm/firecracker-go-sdk"
 	models "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
@@ -53,11 +56,9 @@ func machineConfigurationFromProto(cfg *Config, req *proto.FirecrackerMachineCon
 
 // networkConfigFromProto creates a firecracker NetworkInterface object from
 // the protobuf FirecrackerNetworkInterface message.
-func networkConfigFromProto(nwIface *proto.FirecrackerNetworkInterface) firecracker.NetworkInterface {
-	result := firecracker.NetworkInterface{
-		MacAddress:  nwIface.MacAddress,
-		HostDevName: nwIface.HostDevName,
-		AllowMMDS:   nwIface.AllowMMDS,
+func networkConfigFromProto(nwIface *proto.FirecrackerNetworkInterface, vmID string) (*firecracker.NetworkInterface, error) {
+	result := &firecracker.NetworkInterface{
+		AllowMMDS: nwIface.AllowMMDS,
 	}
 
 	if nwIface.InRateLimiter != nil {
@@ -68,7 +69,47 @@ func networkConfigFromProto(nwIface *proto.FirecrackerNetworkInterface) firecrac
 		result.OutRateLimiter = rateLimiterFromProto(nwIface.OutRateLimiter)
 	}
 
-	return result
+	if staticConf := nwIface.StaticConfig; staticConf != nil {
+		result.StaticConfiguration = &firecracker.StaticNetworkConfiguration{
+			HostDevName: staticConf.HostDevName,
+			MacAddress:  staticConf.MacAddress,
+		}
+
+		if ipConf := staticConf.IPConfig; ipConf != nil {
+			ip, ipNet, err := net.ParseCIDR(ipConf.PrimaryAddr)
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to parse CIDR from %q", ipConf.PrimaryAddr)
+			}
+
+			result.StaticConfiguration.IPConfiguration = &firecracker.IPConfiguration{
+				IPAddr: net.IPNet{
+					IP:   ip,
+					Mask: ipNet.Mask,
+				},
+				Gateway:     net.ParseIP(ipConf.GatewayAddr),
+				Nameservers: ipConf.Nameservers,
+			}
+		}
+	}
+
+	if cniConf := nwIface.CNIConfig; cniConf != nil {
+		result.CNIConfiguration = &firecracker.CNIConfiguration{
+			NetworkName: cniConf.NetworkName,
+			IfName:      cniConf.InterfaceName,
+			BinPath:     cniConf.BinPath,
+			ConfDir:     cniConf.ConfDir,
+			CacheDir:    cniConf.CacheDir,
+		}
+
+		for _, cniArg := range cniConf.Args {
+			var kv [2]string
+			kv[0] = cniArg.Key
+			kv[1] = cniArg.Value
+			result.CNIConfiguration.Args = append(result.CNIConfiguration.Args, kv)
+		}
+	}
+
+	return result, nil
 }
 
 func addDriveFromProto(builder firecracker.DrivesBuilder, drive *proto.FirecrackerDrive) firecracker.DrivesBuilder {

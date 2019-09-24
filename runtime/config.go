@@ -20,6 +20,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	models "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 )
 
@@ -46,6 +47,11 @@ type Config struct {
 	LogLevel              string `json:"log_level"`
 	HtEnabled             bool   `json:"ht_enabled"`
 	Debug                 bool   `json:"debug"`
+
+	// If a CreateVM call specifies no network interfaces and DefaultNetworkInterfaces is non-empty,
+	// the VM will default to using the network interfaces as specified here. This is especially
+	// useful when a CNI-based network interface is provided in DefaultNetworkInterfaces.
+	DefaultNetworkInterfaces []proto.FirecrackerNetworkInterface `json:"default_network_interfaces"`
 }
 
 // LoadConfig loads configuration from JSON file at 'path'

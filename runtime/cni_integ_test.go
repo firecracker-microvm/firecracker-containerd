@@ -17,6 +17,9 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"os"
+	"os/exec"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -25,6 +28,7 @@ import (
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/oci"
 	"github.com/containerd/containerd/pkg/ttrpcutil"
+	"github.com/shirou/gopsutil/cpu"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -64,7 +68,8 @@ func TestCNISupport_Isolated(t *testing.T) {
 	require.NoError(t, err, "failed to create local network test services")
 
 	cniNetworkName := "fcnet-test"
-	err = writeCNIConf("/etc/cni/conf.d/fcnet-test.conflist", cniNetworkName, localServices.DNSServerIP())
+	err = writeCNIConf("/etc/cni/conf.d/fcnet-test.conflist",
+		"tc-redirect-tap", cniNetworkName, localServices.DNSServerIP())
 	require.NoError(t, err, "failed to write test cni conf")
 
 	go func() {
@@ -155,7 +160,8 @@ func TestAutomaticCNISupport_Isolated(t *testing.T) {
 	require.NoError(t, err, "failed to create local network test services")
 
 	cniNetworkName := "fcnet"
-	err = writeCNIConf("/etc/cni/conf.d/fcnet.conflist", cniNetworkName, localServices.DNSServerIP())
+	err = writeCNIConf("/etc/cni/conf.d/fcnet.conflist",
+		"tc-redirect-tap", cniNetworkName, localServices.DNSServerIP())
 	require.NoError(t, err, "failed to write test cni conf")
 
 	go func() {
@@ -193,7 +199,141 @@ func TestAutomaticCNISupport_Isolated(t *testing.T) {
 	taskGroup.Wait()
 }
 
-func writeCNIConf(path string, networkName string, nameserver string) error {
+func TestCNIPlugin_Performance(t *testing.T) {
+	internal.RequiresIsolation(t)
+
+	numVMs := perfTestVMCount(t)
+	runtimeDuration := perfTestRuntime(t)
+	vmMemSizeMB := perfTestVMMemsizeMB(t)
+	targetBandwidth := perfTestTargetBandwidth(t)
+	pluginName := perfTestChainedPluginName(t)
+
+	testTimeout := runtimeDuration + 20*time.Minute
+	ctx, cancel := context.WithTimeout(namespaces.WithNamespace(context.Background(), defaultNamespace), testTimeout)
+	defer cancel()
+
+	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	defer client.Close()
+
+	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
+	require.NoError(t, err, "failed to create ttrpc client")
+
+	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
+
+	image, err := iperf3Image(ctx, client, naiveSnapshotterName)
+	require.NoError(t, err, "failed to get iperf3 image")
+
+	cniNetworkName := "fcnet"
+	err = writeCNIConf("/etc/cni/conf.d/fcnet.conflist",
+		pluginName, cniNetworkName, "")
+	require.NoError(t, err, "failed to write test cni conf")
+
+	// create an endpoint in the host netns for the iperf servers to bind/listen to
+	testDevName := "testdev0"
+	ipAddr := "10.0.0.1"
+	ipCidr := fmt.Sprintf("%s/32", ipAddr)
+	runCommand(ctx, t, "ip", "tuntap", "add", testDevName, "mode", "tun")
+	runCommand(ctx, t, "ip", "addr", "add", ipCidr, "dev", testDevName)
+	runCommand(ctx, t, "ip", "link", "set", "dev", testDevName, "up")
+
+	vmID := func(vmIndex int) string {
+		return fmt.Sprintf("vm-%d", vmIndex)
+	}
+
+	var vmGroup sync.WaitGroup
+	containers := make(chan containerd.Container, numVMs)
+	for i := 0; i < numVMs; i++ {
+		vmGroup.Add(1)
+		go func(vmIndex int) {
+			defer vmGroup.Done()
+
+			// use a unique port for each VM
+			iperfPort := fmt.Sprintf("34%03d", vmIndex)
+			ifName := fmt.Sprintf("veth%d", vmIndex)
+
+			go func() {
+				runCommand(ctx, t, "iperf3",
+					"--bind", ipAddr,
+					"--port", iperfPort,
+					"--interval", "60",
+					"--server",
+				)
+			}()
+
+			_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
+				VMID: vmID(vmIndex),
+				MachineCfg: &proto.FirecrackerMachineConfiguration{
+					MemSizeMib: uint32(vmMemSizeMB),
+				},
+				RootDrive: &proto.FirecrackerDrive{
+					PathOnHost:   defaultVMRootfsPath,
+					IsReadOnly:   false,
+					IsRootDevice: true,
+				},
+				NetworkInterfaces: []*proto.FirecrackerNetworkInterface{{
+					CNIConfig: &proto.CNIConfiguration{
+						NetworkName:   cniNetworkName,
+						InterfaceName: ifName,
+					},
+				}},
+			})
+			require.NoError(t, err, "failed to create vm")
+
+			containerName := fmt.Sprintf("%s-container", vmID(vmIndex))
+			snapshotName := fmt.Sprintf("%s-snapshot", vmID(vmIndex))
+
+			newContainer, err := client.NewContainer(ctx,
+				containerName,
+				containerd.WithSnapshotter(naiveSnapshotterName),
+				containerd.WithNewSnapshot(snapshotName, image),
+				containerd.WithNewSpec(
+					oci.WithProcessArgs("/usr/bin/iperf3",
+						"--port", iperfPort,
+						"--time", strconv.Itoa(int(runtimeDuration/time.Second)),
+						"--bitrate", targetBandwidth,
+						"--interval", "60",
+						"--client", ipAddr,
+					),
+					firecrackeroci.WithVMID(vmID(vmIndex)),
+					firecrackeroci.WithVMNetwork,
+				),
+			)
+			require.NoError(t, err, "failed to create container %s", containerName)
+
+			containers <- newContainer
+		}(i)
+	}
+
+	vmGroup.Wait()
+	close(containers)
+
+	avgCPUDeltas := make(chan cpu.TimesStat)
+	cpuCtx, cpuCtxCancel := context.WithCancel(ctx)
+	go func() {
+		defer close(avgCPUDeltas)
+		result, err := internal.AverageCPUDeltas(cpuCtx, 1*time.Second)
+		require.NoError(t, err, "failed collecting cpu times")
+		avgCPUDeltas <- *result
+	}()
+
+	var taskGroup sync.WaitGroup
+	for container := range containers {
+		taskGroup.Add(1)
+		go func(container containerd.Container) {
+			defer taskGroup.Done()
+			stdout := startAndWaitTask(ctx, t, container)
+			t.Logf("stdout output from task %q: %s", container.ID(), stdout)
+		}(container)
+	}
+
+	taskGroup.Wait()
+	cpuCtxCancel()
+
+	t.Logf("%+v", <-avgCPUDeltas)
+}
+
+func writeCNIConf(path, chainedPluginName, networkName, nameserver string) error {
 	return ioutil.WriteFile(path, []byte(fmt.Sprintf(`{
   "cniVersion": "0.3.1",
   "name": "%s",
@@ -209,8 +349,53 @@ func writeCNIConf(path string, networkName string, nameserver string) error {
       "dns": {"nameservers": ["%s"]}
     },
     {
-      "type": "tc-redirect-tap"
+      "type": "%s"
     }
   ]
-}`, networkName, nameserver)), 0644)
+}`, networkName, nameserver, chainedPluginName)), 0644)
+}
+
+func runCommand(ctx context.Context, t *testing.T, name string, args ...string) {
+	t.Helper()
+	output, err := exec.CommandContext(ctx, name, args...).CombinedOutput()
+	require.NoErrorf(t, err, "command %+v failed, output: %s", append([]string{name}, args...), string(output))
+}
+
+func perfTestVMCount(t *testing.T) int {
+	t.Helper()
+	return requiredEnvInt(t, "PERF_VMCOUNT")
+}
+
+func perfTestRuntime(t *testing.T) time.Duration {
+	t.Helper()
+	return time.Duration(requiredEnvInt(t, "PERF_RUNTIME_SECONDS")) * time.Second
+}
+
+func perfTestVMMemsizeMB(t *testing.T) int {
+	t.Helper()
+	return requiredEnvInt(t, "PERF_VM_MEMSIZE_MB")
+}
+
+func perfTestTargetBandwidth(t *testing.T) string {
+	t.Helper()
+	return requiredEnv(t, "PERF_TARGET_BANDWIDTH")
+}
+
+func perfTestChainedPluginName(t *testing.T) string {
+	t.Helper()
+	return requiredEnv(t, "PERF_PLUGIN_NAME")
+}
+
+func requiredEnvInt(t *testing.T, key string) int {
+	t.Helper()
+	val, err := strconv.Atoi(requiredEnv(t, key))
+	require.NoErrorf(t, err, "%s env is not an int: %q", key, val)
+	return val
+}
+
+func requiredEnv(t *testing.T, key string) string {
+	t.Helper()
+	envVal := os.Getenv(key)
+	require.NotEmpty(t, envVal, "%s env is not set", key)
+	return envVal
 }

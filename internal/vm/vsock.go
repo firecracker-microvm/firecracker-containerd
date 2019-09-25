@@ -15,125 +15,127 @@ package vm
 
 import (
 	"context"
+	"fmt"
 	"net"
-	"strings"
 	"time"
 
 	"github.com/mdlayher/vsock"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
 const (
-	vsockConnectTimeout = 20 * time.Second
+	vsockRetryTimeout      = 20 * time.Second
+	vsockRetryInterval     = 100 * time.Millisecond
+	unixDialTimeout        = 100 * time.Millisecond
+	vsockConnectMsgTimeout = 100 * time.Millisecond
+	vsockAckMsgTimeout     = 1 * time.Second
 )
 
-// VSockDial attempts to connect to a vsock listener at the provided cid and port with a hardcoded number
-// of retries.
-func VSockDial(reqCtx context.Context, logger *logrus.Entry, contextID, port uint32) (net.Conn, error) {
-	// Retries occur every 100ms up to vsockConnectTimeout
-	const retryInterval = 100 * time.Millisecond
-	ctx, cancel := context.WithTimeout(reqCtx, vsockConnectTimeout)
+// VSockDial attempts to connect to the Firecracker host-side vsock at the provided unix
+// path and port. It will retry connect attempts if a temporary error is encountered (up
+// to a fixed timeout) or the provided request is canceled.
+func VSockDial(reqCtx context.Context, logger *logrus.Entry, udsPath string, port uint32) (net.Conn, error) {
+	ctx, cancel := context.WithTimeout(reqCtx, vsockRetryTimeout)
 	defer cancel()
 
+	tickerCh := time.NewTicker(vsockRetryInterval).C
 	var attemptCount int
-	for range time.NewTicker(retryInterval).C {
+	for {
 		attemptCount++
-		logger = logger.WithField("attempt", attemptCount)
+		logger := logger.WithField("attempt", attemptCount)
 
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
-		default:
-			conn, err := vsock.Dial(contextID, port)
-			if err == nil {
-				logger.WithField("connection", conn).Debug("vsock dial succeeded")
-				return conn, nil
-			}
-
-			// ENXIO and ECONNRESET can be returned while the VM+agent are still in the midst of booting
-			if isTemporaryNetErr(err) || isENXIO(err) || isECONNRESET(err) {
-				logger.WithError(err).Debug("temporary vsock dial failure")
+		case <-tickerCh:
+			conn, err := tryConnect(logger, udsPath, port)
+			if isTemporaryNetErr(err) {
+				err = errors.Wrap(err, "temporary vsock dial failure")
+				logger.WithError(err).Debug()
 				continue
+			} else if err != nil {
+				err = errors.Wrap(err, "non-temporary vsock dial failure")
+				logger.WithError(err).Error()
+				return nil, err
 			}
 
-			logger.WithError(err).Error("non-temporary vsock dial failure")
-			return nil, err
+			return conn, nil
 		}
 	}
-
-	panic("unreachable code") // appeases the compiler, which doesn't know the for loop is infinite
 }
 
-// VSockDialConnector provides an IOConnector interface to the VSockDial function.
-func VSockDialConnector(contextID, port uint32) IOConnector {
-	return func(procCtx context.Context, logger *logrus.Entry) <-chan IOConnectorResult {
-		returnCh := make(chan IOConnectorResult)
-
-		go func() {
-			defer close(returnCh)
-
-			conn, err := VSockDial(procCtx, logger, contextID, port)
-			returnCh <- IOConnectorResult{
-				ReadWriteCloser: conn,
-				Err:             err,
-			}
-		}()
-
-		return returnCh
-	}
+type vsockListener struct {
+	listener net.Listener
+	port     uint32
+	ctx      context.Context
+	logger   *logrus.Entry
 }
 
-func vsockAccept(reqCtx context.Context, logger *logrus.Entry, port uint32) (net.Conn, error) {
+// VSockListener returns a net.Listener implementation for guest-side Firecracker vsock
+// connections.
+func VSockListener(ctx context.Context, logger *logrus.Entry, port uint32) (net.Listener, error) {
 	listener, err := vsock.Listen(port)
 	if err != nil {
 		return nil, err
 	}
 
-	defer listener.Close()
+	return vsockListener{
+		listener: listener,
+		port:     port,
+		ctx:      ctx,
+		logger:   logger,
+	}, nil
+}
 
-	// Retries occur every 10ms up to vsockConnectTimeout
-	const retryInterval = 10 * time.Millisecond
-	ctx, cancel := context.WithTimeout(reqCtx, vsockConnectTimeout)
+func (l vsockListener) Accept() (net.Conn, error) {
+	ctx, cancel := context.WithTimeout(l.ctx, vsockRetryTimeout)
 	defer cancel()
 
 	var attemptCount int
-	for range time.NewTicker(retryInterval).C {
+	tickerCh := time.NewTicker(vsockRetryInterval).C
+	for {
 		attemptCount++
-		logger = logger.WithField("attempt", attemptCount)
+		logger := l.logger.WithField("attempt", attemptCount)
 
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
-		default:
-			// accept is non-blocking so try to accept until we get a connection
-			conn, err := listener.Accept()
-			if err == nil {
-				return conn, nil
-			}
-
+		case <-tickerCh:
+			conn, err := tryAccept(logger, l.listener, l.port)
 			if isTemporaryNetErr(err) {
-				logger.WithError(err).Debug("temporary stdio vsock accept failure")
+				err = errors.Wrap(err, "temporary vsock accept failure")
+				logger.WithError(err).Debug()
 				continue
+			} else if err != nil {
+				err = errors.Wrap(err, "non-temporary vsock accept failure")
+				logger.WithError(err).Error()
+				return nil, err
 			}
 
-			logger.WithError(err).Error("non-temporary stdio vsock accept failure")
-			return nil, err
+			return conn, nil
 		}
 	}
-
-	panic("unreachable code") // appeases the compiler, which doesn't know the for loop is infinite
 }
 
-// VSockAcceptConnector provides an IOConnector that establishes the connection by listening on the provided
-// vsock port and accepting the first connection that comes in.
-func VSockAcceptConnector(port uint32) IOConnector {
+func (l vsockListener) Close() error {
+	return l.listener.Close()
+}
+
+func (l vsockListener) Addr() net.Addr {
+	return l.listener.Addr()
+}
+
+// VSockDialConnector returns an IOConnector for establishing vsock connections
+// that are dialed from the host to a guest listener.
+func VSockDialConnector(udsPath string, port uint32) IOConnector {
 	return func(procCtx context.Context, logger *logrus.Entry) <-chan IOConnectorResult {
 		returnCh := make(chan IOConnectorResult)
 
 		go func() {
 			defer close(returnCh)
 
-			conn, err := vsockAccept(procCtx, logger, port)
+			conn, err := VSockDial(procCtx, logger, udsPath, port)
 			returnCh <- IOConnectorResult{
 				ReadWriteCloser: conn,
 				Err:             err,
@@ -144,23 +146,183 @@ func VSockAcceptConnector(port uint32) IOConnector {
 	}
 }
 
+// VSockAcceptConnector provides an IOConnector that establishes the connection by listening
+// on the provided guest-side vsock port and accepting the first connection that comes in.
+func VSockAcceptConnector(port uint32) IOConnector {
+	return func(procCtx context.Context, logger *logrus.Entry) <-chan IOConnectorResult {
+		returnCh := make(chan IOConnectorResult)
+
+		listener, err := VSockListener(procCtx, logger, port)
+		if err != nil {
+			returnCh <- IOConnectorResult{
+				Err: err,
+			}
+			close(returnCh)
+			return returnCh
+		}
+
+		go func() {
+			defer close(returnCh)
+			defer listener.Close()
+
+			conn, err := listener.Accept()
+			returnCh <- IOConnectorResult{
+				ReadWriteCloser: conn,
+				Err:             err,
+			}
+		}()
+
+		return returnCh
+	}
+}
+
+func vsockConnectMsg(port uint32) string {
+	// The message a host-side connection must write after connecting to a firecracker
+	// vsock unix socket in order to establish a connection with a guest-side listener
+	// at the provided port number. This is specified in Firecracker documentation:
+	// https://github.com/firecracker-microvm/firecracker/blob/master/docs/vsock.md#host-initiated-connections
+	return fmt.Sprintf("CONNECT %d\n", port)
+}
+
+func vsockAckMsg(port uint32) string {
+	// The message a guest-side connection will write after accepting a connection from
+	// a host dial. This is not part of the official Firecracker vsock spec, but is
+	// recommended in order to allow the host to verify connections were established
+	// successfully: https://github.com/firecracker-microvm/firecracker/issues/1272#issuecomment-533004066
+	return fmt.Sprintf("IMALIVE %d\n", port)
+}
+
+// tryConnect attempts to dial a guest vsock listener at the provided host-side
+// unix socket and provided guest-listener port.
+func tryConnect(logger *logrus.Entry, udsPath string, port uint32) (net.Conn, error) {
+	conn, err := net.DialTimeout("unix", udsPath, unixDialTimeout)
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() {
+		if err != nil {
+			closeErr := conn.Close()
+			if closeErr != nil {
+				logger.WithError(closeErr).Error(
+					"failed to close vsock socket after previous error")
+			}
+		}
+	}()
+
+	err = tryConnWrite(conn, vsockConnectMsg(port), vsockConnectMsgTimeout)
+	if err != nil {
+		return nil, vsockConnectMsgError{cause: err}
+	}
+
+	err = tryConnRead(conn, vsockAckMsg(port), vsockAckMsgTimeout)
+	if err != nil {
+		return nil, vsockAckError{cause: err}
+	}
+	return conn, nil
+}
+
+// tryAccept attempts to accept a single host-side connection from the provided
+// guest-side listener at the provided port.
+func tryAccept(logger *logrus.Entry, listener net.Listener, port uint32) (net.Conn, error) {
+	conn, err := listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() {
+		if err != nil {
+			closeErr := conn.Close()
+			if closeErr != nil {
+				logger.WithError(closeErr).Error(
+					"failed to close vsock after previous error")
+			}
+		}
+	}()
+
+	err = tryConnWrite(conn, vsockAckMsg(port), vsockAckMsgTimeout)
+	if err != nil {
+		return nil, vsockAckError{cause: err}
+	}
+
+	return conn, nil
+}
+
+// tryConnRead will try to do a read from the provided conn, returning an error if
+// the bytes read does not match what was provided or if the read does not complete
+// within the provided timeout. It will reset socket deadlines to none after returning.
+// It's only intended to be used for connect/ack messages, not general purpose reads
+// after the vsock connection is established fully.
+func tryConnRead(conn net.Conn, expectedRead string, timeout time.Duration) error {
+	conn.SetDeadline(time.Now().Add(timeout))
+	defer conn.SetDeadline(time.Time{})
+
+	actualRead := make([]byte, len(expectedRead))
+	_, err := conn.Read(actualRead)
+	if err != nil {
+		return err
+	}
+
+	if expectedRead != string(actualRead) {
+		return errors.Errorf("expected to read %q, but instead read %q",
+			expectedRead, string(actualRead))
+	}
+
+	return nil
+}
+
+// tryConnWrite will try to do a write to the provided conn, returning an error if
+// the write fails, is partial or does not complete within the provided timeout. It
+// will reset socket deadlines to none after returning. It's only intended to be
+// used for connect/ack messages, not general purpose writes after the vsock
+// connection is established fully.
+func tryConnWrite(conn net.Conn, expectedWrite string, timeout time.Duration) error {
+	conn.SetDeadline(time.Now().Add(timeout))
+	defer conn.SetDeadline(time.Time{})
+
+	bytesWritten, err := conn.Write([]byte(expectedWrite))
+	if err != nil {
+		return err
+	}
+	if bytesWritten != len(expectedWrite) {
+		return errors.Errorf("incomplete write, expected %d bytes but wrote %d",
+			len(expectedWrite), bytesWritten)
+	}
+
+	return nil
+}
+
+type vsockConnectMsgError struct {
+	cause error
+}
+
+func (e vsockConnectMsgError) Error() string {
+	return errors.Wrap(e.cause, "vsock connect message failure").Error()
+}
+
+func (e vsockConnectMsgError) Temporary() bool {
+	return false
+}
+
+type vsockAckError struct {
+	cause error
+}
+
+func (e vsockAckError) Error() string {
+	return errors.Wrap(e.cause, "vsock ack message failure").Error()
+}
+
+func (e vsockAckError) Temporary() bool {
+	return true
+}
+
+// isTemporaryNetErr returns whether the provided error is a retriable
+// error, according to the interface defined here:
+// https://golang.org/pkg/net/#Error
 func isTemporaryNetErr(err error) bool {
 	terr, ok := err.(interface {
 		Temporary() bool
 	})
 
 	return err != nil && ok && terr.Temporary()
-}
-
-// Unfortunately, as "documented" on various online forums, there's no ideal way to
-// test for actual Linux error codes returned by the net library or wrappers
-// around that library. The common approach is to fall back on string matching,
-// which is done for the functions below
-
-func isENXIO(err error) bool {
-	return strings.HasSuffix(err.Error(), "no such device")
-}
-
-func isECONNRESET(err error) bool {
-	return strings.HasSuffix(err.Error(), "connection reset by peer")
 }

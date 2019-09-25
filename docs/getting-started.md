@@ -50,27 +50,6 @@ You need to have the following things in order to use firecracker-containerd:
 
 ## Setup
 
-### Build Firecracker with `vsock` support
-
-Clone the repository to your computer in a directory of your choice:
-
-```bash
-git clone https://github.com/firecracker-microvm/firecracker.git
-```
-Change into the new directory, and build with Cargo.  Make sure to enable the
-optional `vsock` feature using the `--features vsock` flag.
-
-> Note: Firecracker normally builds a statically-linked binary with musl libc.
-> On Amazon Linux 2, you must specify `--target x86_64-unknown-linux-gnu`
-> because musl libc is not available.  Switching to this target changes the set
-> of syscalls invoked by Firecracker.  If you intend to jail Firecracker using
-> seccomp, you must adjust your seccomp profile for these changes.
-
-```bash
-git checkout v0.17.0 # latest released tag
-cargo build --release --features vsock # --target x86_64-unknown-linux-gnu
-```
-
 ### Download appropriate kernel
 
 You can use the following kernel:
@@ -90,7 +69,7 @@ Clone this repository to your computer in a directory of your choice.
 We recommend choosing a directory outside of `$GOPATH` or `~/go`.
 
 ```bash
-git clone https://github.com/firecracker-microvm/firecracker-containerd
+git clone --recurse-submodules https://github.com/firecracker-microvm/firecracker-containerd
 make all
 ```
 
@@ -109,6 +88,21 @@ Once you have built the runtime, be sure to place the following binaries on your
 * `firecracker-control/cmd/containerd/firecracker-ctr`
 
 You can use the `make install` target to install the files to `/usr/local/bin`,
+or specify a different `INSTALLROOT` if you prefer another location.
+
+### Build Firecracker
+
+From the repository cloned in the previous step, run
+```bash
+make firecracker
+```
+
+Once you have built firecracker, be sure to place the following binaries on your
+`$PATH`:
+* `_submodules/firecracker/target/x86_64-unknown-linux-musl/release/firecracker`
+* `_submodules/firecracker/target/x86_64-unknown-linux-musl/release/jailer`
+
+You can use the `make install-firecracker` target to install the files to `/usr/local/bin`,
 or specify a different `INSTALLROOT` if you prefer another location.
 
 ### Build a root filesystem

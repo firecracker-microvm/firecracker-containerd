@@ -31,6 +31,9 @@ const (
 
 	// FirecrackerSockName is the name of the Firecracker VMM API socket
 	FirecrackerSockName = "firecracker.sock"
+	// FirecrackerVSockName is the name of the Firecracker VSock unix path used for communication
+	// between the runtime and the agent
+	FirecrackerVSockName = "firecracker.vsock"
 	// FirecrackerLogFifoName is the name of the Firecracker VMM log FIFO
 	FirecrackerLogFifoName = "fc-logs.fifo"
 	// FirecrackerMetricsFifoName is the name of the Firecracker VMM metrics FIFO

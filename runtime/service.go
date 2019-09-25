@@ -22,9 +22,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
-	"unsafe"
 
 	// disable gosec check for math/rand. We just need a random starting
 	// place to start looking for CIDs; no need for cryptographically
@@ -81,8 +79,6 @@ var (
 	// type assertions
 	_ taskAPI.TaskService = &service{}
 	_ shim.Init           = NewService
-
-	sysCall = syscall.Syscall
 )
 
 // implements shimapi
@@ -127,7 +123,6 @@ type service struct {
 
 	machine          *firecracker.Machine
 	machineConfig    *firecracker.Config
-	machineCID       uint32
 	vsockIOPortCount uint32
 	vsockPortMu      sync.Mutex
 }
@@ -463,11 +458,6 @@ func (s *service) createVM(requestCtx context.Context, request *proto.CreateVMRe
 
 	s.logger.Info("creating new VM")
 
-	s.machineCID, vsockFd, err = findNextAvailableVsockCID(requestCtx)
-	if err != nil {
-		return errors.Wrapf(err, "failed to find vsock for VM")
-	}
-
 	s.machineConfig, err = s.buildVMConfiguration(request)
 	if err != nil {
 		return errors.Wrapf(err, "failed to build VM configuration")
@@ -485,22 +475,12 @@ func (s *service) createVM(requestCtx context.Context, request *proto.CreateVMRe
 		return errors.Wrapf(err, "failed to create new machine instance")
 	}
 
-	// Close the vsock FD before starting the machine so firecracker doesn't get EADDRINUSE.
-	// This technically leaves us vulnerable to race conditions, but given the small time
-	// window and the fact that we choose a random CID from a 32bit range, the chances are
-	// infinitesimal. This will also no longer be an issue when firecracker implements its
-	// new vsock model.
-	err = vsockFd.Close()
-	if err != nil {
-		return errors.Wrapf(err, "failed to close vsock")
-	}
-
 	if err = s.machine.Start(s.shimCtx); err != nil {
 		return errors.Wrapf(err, "failed to start the VM")
 	}
 
 	s.logger.Info("calling agent")
-	conn, err := vm.VSockDial(requestCtx, s.logger, s.machineCID, defaultVsockPort)
+	conn, err := vm.VSockDial(requestCtx, s.logger, s.shimDir.FirecrackerVSockPath(), defaultVsockPort)
 	if err != nil {
 		return errors.Wrapf(err, "failed to dial the VM over vsock")
 	}
@@ -557,7 +537,6 @@ func (s *service) GetVMInfo(requestCtx context.Context, request *proto.GetVMInfo
 
 	return &proto.GetVMInfoResponse{
 		VMID:            s.vmID,
-		ContextID:       s.machineCID,
 		SocketPath:      s.machineConfig.SocketPath,
 		LogFifoPath:     s.machineConfig.LogFifo,
 		MetricsFifoPath: s.machineConfig.MetricsFifo,
@@ -586,20 +565,21 @@ func (s *service) SetVMMetadata(requestCtx context.Context, request *proto.SetVM
 }
 
 func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker.Config, error) {
-	logger := s.logger.WithField("cid", s.machineCID)
-
 	cfg := firecracker.Config{
-		SocketPath:   s.shimDir.FirecrackerSockPath(),
-		VsockDevices: []firecracker.VsockDevice{{Path: "root", CID: s.machineCID}},
-		LogFifo:      s.shimDir.FirecrackerLogFifoPath(),
-		MetricsFifo:  s.shimDir.FirecrackerMetricsFifoPath(),
-		MachineCfg:   machineConfigurationFromProto(s.config, req.MachineCfg),
-		LogLevel:     s.config.LogLevel,
-		Debug:        s.config.Debug,
-		VMID:         s.vmID,
+		SocketPath: s.shimDir.FirecrackerSockPath(),
+		VsockDevices: []firecracker.VsockDevice{{
+			Path: s.shimDir.FirecrackerVSockPath(),
+			ID:   "agent_api",
+		}},
+		LogFifo:     s.shimDir.FirecrackerLogFifoPath(),
+		MetricsFifo: s.shimDir.FirecrackerMetricsFifoPath(),
+		MachineCfg:  machineConfigurationFromProto(s.config, req.MachineCfg),
+		LogLevel:    s.config.LogLevel,
+		Debug:       s.config.Debug,
+		VMID:        s.vmID,
 	}
 
-	logger.Debugf("using socket path: %s", cfg.SocketPath)
+	s.logger.Debugf("using socket path: %s", cfg.SocketPath)
 
 	// Kernel configuration
 
@@ -625,7 +605,7 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 	}
 
 	// Create stub drives first and let stub driver handler manage the drives
-	handler, err := newStubDriveHandler(s.shimDir.RootPath(), logger, containerCount)
+	handler, err := newStubDriveHandler(s.shimDir.RootPath(), s.logger, containerCount)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create stub drives")
 	}
@@ -740,14 +720,14 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 		if request.Stdin != "" {
 			stdinConnectorPair = &vm.IOConnectorPair{
 				ReadConnector:  vm.FIFOConnector(request.Stdin),
-				WriteConnector: vm.VSockDialConnector(s.machineCID, extraData.StdinPort),
+				WriteConnector: vm.VSockDialConnector(s.shimDir.FirecrackerVSockPath(), extraData.StdinPort),
 			}
 		}
 
 		var stdoutConnectorPair *vm.IOConnectorPair
 		if request.Stdout != "" {
 			stdoutConnectorPair = &vm.IOConnectorPair{
-				ReadConnector:  vm.VSockDialConnector(s.machineCID, extraData.StdoutPort),
+				ReadConnector:  vm.VSockDialConnector(s.shimDir.FirecrackerVSockPath(), extraData.StdoutPort),
 				WriteConnector: vm.FIFOConnector(request.Stdout),
 			}
 		}
@@ -755,7 +735,7 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 		var stderrConnectorPair *vm.IOConnectorPair
 		if request.Stderr != "" {
 			stderrConnectorPair = &vm.IOConnectorPair{
-				ReadConnector:  vm.VSockDialConnector(s.machineCID, extraData.StderrPort),
+				ReadConnector:  vm.VSockDialConnector(s.shimDir.FirecrackerVSockPath(), extraData.StderrPort),
 				WriteConnector: vm.FIFOConnector(request.Stderr),
 			}
 		}
@@ -850,14 +830,14 @@ func (s *service) Exec(requestCtx context.Context, req *taskAPI.ExecProcessReque
 		if req.Stdin != "" {
 			stdinConnectorPair = &vm.IOConnectorPair{
 				ReadConnector:  vm.FIFOConnector(req.Stdin),
-				WriteConnector: vm.VSockDialConnector(s.machineCID, extraData.StdinPort),
+				WriteConnector: vm.VSockDialConnector(s.shimDir.FirecrackerVSockPath(), extraData.StdinPort),
 			}
 		}
 
 		var stdoutConnectorPair *vm.IOConnectorPair
 		if req.Stdout != "" {
 			stdoutConnectorPair = &vm.IOConnectorPair{
-				ReadConnector:  vm.VSockDialConnector(s.machineCID, extraData.StdoutPort),
+				ReadConnector:  vm.VSockDialConnector(s.shimDir.FirecrackerVSockPath(), extraData.StdoutPort),
 				WriteConnector: vm.FIFOConnector(req.Stdout),
 			}
 		}
@@ -865,7 +845,7 @@ func (s *service) Exec(requestCtx context.Context, req *taskAPI.ExecProcessReque
 		var stderrConnectorPair *vm.IOConnectorPair
 		if req.Stderr != "" {
 			stderrConnectorPair = &vm.IOConnectorPair{
-				ReadConnector:  vm.VSockDialConnector(s.machineCID, extraData.StderrPort),
+				ReadConnector:  vm.VSockDialConnector(s.shimDir.FirecrackerVSockPath(), extraData.StderrPort),
 				WriteConnector: vm.FIFOConnector(req.Stderr),
 			}
 		}
@@ -1100,63 +1080,6 @@ func (s *service) Cleanup(requestCtx context.Context) (*taskAPI.DeleteResponse, 
 		ExitedAt:   time.Now(),
 		ExitStatus: 128 + uint32(unix.SIGKILL),
 	}, nil
-}
-
-// findNextAvailableVsockCID finds first available vsock context ID.
-// It uses VHOST_VSOCK_SET_GUEST_CID ioctl which allows some CID ranges to be statically reserved in advance.
-// The ioctl fails with EADDRINUSE if cid is already taken and with EINVAL if the CID is invalid.
-// Taken from https://bugzilla.redhat.com/show_bug.cgi?id=1291851
-func findNextAvailableVsockCID(requestCtx context.Context) (cid uint32, file *os.File, err error) {
-	const (
-		// Corresponds to VHOST_VSOCK_SET_GUEST_CID in vhost.h
-		ioctlVsockSetGuestCID = uintptr(0x4008AF60)
-		// 0, 1 and 2 are reserved CIDs, see http://man7.org/linux/man-pages/man7/vsock.7.html
-		minCID          = 3
-		maxCID          = math.MaxUint32
-		cidRange        = maxCID - minCID
-		vsockDevicePath = "/dev/vhost-vsock"
-	)
-
-	defer func() {
-		// close the vsock file if anything bad happens
-		if err != nil && file != nil {
-			file.Close()
-		}
-	}()
-
-	file, err = os.OpenFile(vsockDevicePath, syscall.O_RDWR, 0600)
-	if err != nil {
-		return 0, nil, errors.Wrap(err, "failed to open vsock device")
-	}
-
-	// Start at a random ID to minimize chances of conflicts when shims are racing each other here
-	start := rand.Intn(cidRange)
-	for n := 0; n < cidRange; n++ {
-		cid := minCID + ((start + n) % cidRange)
-		select {
-		case <-requestCtx.Done():
-			return 0, nil, requestCtx.Err()
-		default:
-			_, _, err = sysCall(
-				unix.SYS_IOCTL,
-				file.Fd(),
-				ioctlVsockSetGuestCID,
-				uintptr(unsafe.Pointer(&cid)))
-
-			switch err {
-			case unix.Errno(0):
-				return uint32(cid), file, nil
-			case unix.EADDRINUSE:
-				// ID is already taken, try next one
-				continue
-			default:
-				// Fail if we get an error we don't expect
-				return 0, nil, err
-			}
-		}
-	}
-
-	return 0, nil, errors.New("couldn't find any available vsock context id")
 }
 
 func (s *service) monitorVMExit() {

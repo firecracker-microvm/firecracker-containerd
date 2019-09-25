@@ -165,6 +165,11 @@ demo-network: $(PTP_BIN) $(HOSTLOCAL_BIN) $(TC_REDIRECT_TAP_BIN) $(FCNET_CONFIG)
 .PHONY: firecracker
 firecracker: $(FIRECRACKER_BIN) $(JAILER_BIN)
 
+.PHONY: install-firecracker
+install-firecracker: firecracker
+	install -D -o root -g root -m755 -t $(INSTALLROOT)/bin $(FIRECRACKER_BIN)
+	install -D -o root -g root -m755 -t $(INSTALLROOT)/bin $(JAILER_BIN)
+
 $(FIRECRACKER_DIR)/Cargo.toml:
 	git submodule update --init --recursive $(FIRECRACKER_DIR)
 
@@ -182,7 +187,7 @@ $(FIRECRACKER_BIN) $(JAILER_BIN): $(FIRECRACKER_DIR)/Cargo.toml tools/firecracke
 		-e HOME=/tmp \
 		--workdir /src \
 		localhost/$(FIRECRACKER_BUILDER_NAME):$(DOCKER_IMAGE_TAG) \
-		cargo build --release --features vsock --target $(FIRECRACKER_TARGET)
+		cargo build --release --target $(FIRECRACKER_TARGET)
 
 .PHONY: firecracker-clean
 firecracker-clean:

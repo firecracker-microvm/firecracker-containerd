@@ -41,20 +41,7 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get \
   git \
   curl \
   e2fsprogs \
-  musl-tools \
   util-linux
-
-# Install Rust
-curl https://sh.rustup.rs -sSf | sh -s -- --verbose -y --default-toolchain 1.32.0
-source $HOME/.cargo/env
-rustup target add x86_64-unknown-linux-musl
-
-# Check out Firecracker and build it from the v0.17.0 tag
-git clone https://github.com/firecracker-microvm/firecracker.git
-cd firecracker
-git checkout v0.17.0
-cargo build --release --features vsock --target x86_64-unknown-linux-musl
-sudo cp target/x86_64-unknown-linux-musl/release/{firecracker,jailer} /usr/local/bin
 
 cd ~
 
@@ -87,9 +74,8 @@ cd ~
 git clone https://github.com/firecracker-microvm/firecracker-containerd.git
 cd firecracker-containerd
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y dmsetup
-sg docker -c 'make all image'
-sudo make install
-sudo make demo-network
+sg docker -c 'make all image firecracker'
+sudo make install install-firecracker demo-network
 
 cd ~
 
@@ -142,9 +128,6 @@ sudo tee /etc/containerd/firecracker-runtime.json <<EOF
   }]
 }
 EOF
-
-# Enable vhost-vsock
-sudo modprobe vhost-vsock
 ```
 
 4. Open a new terminal and start the `naive_snapshotter` program in the

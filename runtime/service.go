@@ -463,9 +463,19 @@ func (s *service) createVM(requestCtx context.Context, request *proto.CreateVMRe
 		return errors.Wrapf(err, "failed to build VM configuration")
 	}
 
+	relSockPath, err := s.shimDir.FirecrackerSockRelPath()
+	if err != nil {
+		return errors.Wrapf(err, "failed to get relative path to firecracker api socket")
+	}
+
+	relVSockPath, err := s.shimDir.FirecrackerVSockRelPath()
+	if err != nil {
+		return errors.Wrapf(err, "failed to get relative path to firecracker vsock")
+	}
+
 	cmd := firecracker.VMCommandBuilder{}.
 		WithBin(s.config.FirecrackerBinaryPath).
-		WithSocketPath(s.shimDir.FirecrackerSockPath()).
+		WithSocketPath(relSockPath).
 		Build(s.shimCtx) // shimCtx so the VM process is only killed when the shim shuts down
 
 	// use shimCtx so the VM is killed when the shim shuts down
@@ -480,7 +490,7 @@ func (s *service) createVM(requestCtx context.Context, request *proto.CreateVMRe
 	}
 
 	s.logger.Info("calling agent")
-	conn, err := vm.VSockDial(requestCtx, s.logger, s.shimDir.FirecrackerVSockPath(), defaultVsockPort)
+	conn, err := vm.VSockDial(requestCtx, s.logger, relVSockPath, defaultVsockPort)
 	if err != nil {
 		return errors.Wrapf(err, "failed to dial the VM over vsock")
 	}
@@ -537,7 +547,7 @@ func (s *service) GetVMInfo(requestCtx context.Context, request *proto.GetVMInfo
 
 	return &proto.GetVMInfoResponse{
 		VMID:            s.vmID,
-		SocketPath:      s.machineConfig.SocketPath,
+		SocketPath:      s.shimDir.FirecrackerSockPath(),
 		LogFifoPath:     s.machineConfig.LogFifo,
 		MetricsFifoPath: s.machineConfig.MetricsFifo,
 	}, nil
@@ -565,10 +575,20 @@ func (s *service) SetVMMetadata(requestCtx context.Context, request *proto.SetVM
 }
 
 func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker.Config, error) {
+	relSockPath, err := s.shimDir.FirecrackerSockRelPath()
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to get relative path to firecracker api socket")
+	}
+
+	relVSockPath, err := s.shimDir.FirecrackerVSockRelPath()
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to get relative path to firecracker vsock")
+	}
+
 	cfg := firecracker.Config{
-		SocketPath: s.shimDir.FirecrackerSockPath(),
+		SocketPath: relSockPath,
 		VsockDevices: []firecracker.VsockDevice{{
-			Path: s.shimDir.FirecrackerVSockPath(),
+			Path: relVSockPath,
 			ID:   "agent_api",
 		}},
 		LogFifo:     s.shimDir.FirecrackerLogFifoPath(),
@@ -711,6 +731,11 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 		return nil, err
 	}
 
+	relVSockPath, err := s.shimDir.FirecrackerVSockRelPath()
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to get relative path to firecracker vsock")
+	}
+
 	var ioConnectorSet vm.IOProxy
 
 	if vm.IsAgentOnlyIO(request.Stdout, logger) {
@@ -720,14 +745,14 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 		if request.Stdin != "" {
 			stdinConnectorPair = &vm.IOConnectorPair{
 				ReadConnector:  vm.FIFOConnector(request.Stdin),
-				WriteConnector: vm.VSockDialConnector(s.shimDir.FirecrackerVSockPath(), extraData.StdinPort),
+				WriteConnector: vm.VSockDialConnector(relVSockPath, extraData.StdinPort),
 			}
 		}
 
 		var stdoutConnectorPair *vm.IOConnectorPair
 		if request.Stdout != "" {
 			stdoutConnectorPair = &vm.IOConnectorPair{
-				ReadConnector:  vm.VSockDialConnector(s.shimDir.FirecrackerVSockPath(), extraData.StdoutPort),
+				ReadConnector:  vm.VSockDialConnector(relVSockPath, extraData.StdoutPort),
 				WriteConnector: vm.FIFOConnector(request.Stdout),
 			}
 		}
@@ -735,7 +760,7 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 		var stderrConnectorPair *vm.IOConnectorPair
 		if request.Stderr != "" {
 			stderrConnectorPair = &vm.IOConnectorPair{
-				ReadConnector:  vm.VSockDialConnector(s.shimDir.FirecrackerVSockPath(), extraData.StderrPort),
+				ReadConnector:  vm.VSockDialConnector(relVSockPath, extraData.StderrPort),
 				WriteConnector: vm.FIFOConnector(request.Stderr),
 			}
 		}
@@ -821,6 +846,11 @@ func (s *service) Exec(requestCtx context.Context, req *taskAPI.ExecProcessReque
 		return nil, err
 	}
 
+	relVSockPath, err := s.shimDir.FirecrackerVSockRelPath()
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to get relative path to firecracker vsock")
+	}
+
 	var ioConnectorSet vm.IOProxy
 
 	if vm.IsAgentOnlyIO(req.Stdout, logger) {
@@ -830,14 +860,14 @@ func (s *service) Exec(requestCtx context.Context, req *taskAPI.ExecProcessReque
 		if req.Stdin != "" {
 			stdinConnectorPair = &vm.IOConnectorPair{
 				ReadConnector:  vm.FIFOConnector(req.Stdin),
-				WriteConnector: vm.VSockDialConnector(s.shimDir.FirecrackerVSockPath(), extraData.StdinPort),
+				WriteConnector: vm.VSockDialConnector(relVSockPath, extraData.StdinPort),
 			}
 		}
 
 		var stdoutConnectorPair *vm.IOConnectorPair
 		if req.Stdout != "" {
 			stdoutConnectorPair = &vm.IOConnectorPair{
-				ReadConnector:  vm.VSockDialConnector(s.shimDir.FirecrackerVSockPath(), extraData.StdoutPort),
+				ReadConnector:  vm.VSockDialConnector(relVSockPath, extraData.StdoutPort),
 				WriteConnector: vm.FIFOConnector(req.Stdout),
 			}
 		}
@@ -845,7 +875,7 @@ func (s *service) Exec(requestCtx context.Context, req *taskAPI.ExecProcessReque
 		var stderrConnectorPair *vm.IOConnectorPair
 		if req.Stderr != "" {
 			stderrConnectorPair = &vm.IOConnectorPair{
-				ReadConnector:  vm.VSockDialConnector(s.shimDir.FirecrackerVSockPath(), extraData.StderrPort),
+				ReadConnector:  vm.VSockDialConnector(relVSockPath, extraData.StderrPort),
 				WriteConnector: vm.FIFOConnector(req.Stderr),
 			}
 		}

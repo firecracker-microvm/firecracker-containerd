@@ -43,7 +43,12 @@ func ShimDir(namespace, vmID string) (Dir, error) {
 		return "", errors.Wrap(err, "invalid vm id")
 	}
 
-	return Dir(filepath.Join(varRunDir, namespace, vmID)), nil
+	resolvedVarRunDir, err := filepath.EvalSymlinks(varRunDir)
+	if err != nil {
+		return "", errors.Wrapf(err, "failed evaluating any symlinks in path %q", varRunDir)
+	}
+
+	return Dir(filepath.Join(resolvedVarRunDir, namespace, vmID)), nil
 }
 
 // Dir represents the root of a firecracker-containerd VM directory, which
@@ -83,10 +88,22 @@ func (d Dir) FirecrackerSockPath() string {
 	return filepath.Join(d.RootPath(), internal.FirecrackerSockName)
 }
 
+// FirecrackerSockRelPath returns the path to FirecrackerSockPath relative to the
+// current working directory
+func (d Dir) FirecrackerSockRelPath() (string, error) {
+	return relPathTo(d.FirecrackerSockPath())
+}
+
 // FirecrackerVSockPath returns the path to the vsock unix socket that the runtime uses
 // to communicate with the VM agent.
 func (d Dir) FirecrackerVSockPath() string {
 	return filepath.Join(d.RootPath(), internal.FirecrackerVSockName)
+}
+
+// FirecrackerVSockRelPath returns the path to FirecrackerVSockPath relative to the
+// current working directory
+func (d Dir) FirecrackerVSockRelPath() (string, error) {
+	return relPathTo(d.FirecrackerVSockPath())
 }
 
 // FirecrackerLogFifoPath returns the path to the FIFO at which the firecracker VMM writes
@@ -156,4 +173,18 @@ func createSymlink(oldPath, newPath string, errMsgName string) error {
 	}
 
 	return nil
+}
+
+func relPathTo(absPath string) (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to get current working directory")
+	}
+
+	relPath, err := filepath.Rel(cwd, absPath)
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to get relative path from %q to %q", cwd, absPath)
+	}
+
+	return relPath, nil
 }

@@ -191,10 +191,17 @@ func TestBuildVMConfiguration(t *testing.T) {
 			defer os.RemoveAll(tempDir)
 
 			svc.shimDir = vm.Dir(tempDir)
+
+			relSockPath, err := svc.shimDir.FirecrackerSockRelPath()
+			require.NoError(t, err, "failed to get firecracker sock rel path")
+
+			relVSockPath, err := svc.shimDir.FirecrackerVSockRelPath()
+			require.NoError(t, err, "failed to get firecracker vsock rel path")
+
 			// For values that remain constant between tests, they are written here
-			tc.expectedCfg.SocketPath = svc.shimDir.FirecrackerSockPath()
+			tc.expectedCfg.SocketPath = relSockPath
 			tc.expectedCfg.VsockDevices = []firecracker.VsockDevice{{
-				Path: svc.shimDir.FirecrackerVSockPath(),
+				Path: relVSockPath,
 				ID:   "agent_api",
 			}}
 			tc.expectedCfg.LogFifo = svc.shimDir.FirecrackerLogFifoPath()
@@ -260,7 +267,10 @@ func TestDebugConfig(t *testing.T) {
 		},
 	}
 
-	path, err := ioutil.TempDir("./", "TestDebugConfig")
+	cwd, err := os.Getwd()
+	require.NoError(t, err, "failed to get working dir")
+
+	path, err := ioutil.TempDir(cwd, "TestDebugConfig")
 	assert.NoError(t, err, "failed to create temp directory")
 
 	defer os.RemoveAll(path)
@@ -270,7 +280,9 @@ func TestDebugConfig(t *testing.T) {
 		stubDrivePath := filepath.Join(path, fmt.Sprintf("%d", i))
 		err := os.MkdirAll(stubDrivePath, os.ModePerm)
 		assert.NoError(t, err, "failed to create stub drive path")
+
 		c.service.shimDir = vm.Dir(stubDrivePath)
+
 		req := proto.CreateVMRequest{}
 
 		cfg, err := c.service.buildVMConfiguration(&req)

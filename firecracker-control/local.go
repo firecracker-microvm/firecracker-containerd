@@ -280,6 +280,12 @@ func (s *local) newShim(ns, vmID, containerdAddress string, shimSocket *net.Unix
 		return nil, err
 	}
 
+	// note: The working dir of the shim has an effect on the length of the path
+	// needed to specify various unix sockets that the shim uses to communicate
+	// with the firecracker VMM and guest agent within. The length of that path
+	// has a relatively low limit (usually 108 chars), so modifying the working
+	// dir should be done with caution. See internal/vm/dir.go for the path
+	// definitions.
 	cmd.Dir = shimDir.RootPath()
 
 	shimSocketFile, err := shimSocket.File()

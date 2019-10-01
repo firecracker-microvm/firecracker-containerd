@@ -40,9 +40,9 @@ func TestShimDir(t *testing.T) {
 		{name: "id with ?", ns: "test", id: "?", outErr: `invalid vm id: identifier "?" must match`},
 		{name: "id with *", ns: "test", id: "*", outErr: `invalid vm id: identifier "*" must match`},
 		{name: "id with ,", ns: "test", id: ",", outErr: `invalid vm id: identifier "," must match`},
-		{name: "valid", ns: "ns", id: "1", outDir: "/var/run/firecracker-containerd/ns/1"},
-		{name: "valid with dashes", ns: "test-123", id: "123-456", outDir: "/var/run/firecracker-containerd/test-123/123-456"},
-		{name: "valid with dots", ns: "test.123", id: "123.456", outDir: "/var/run/firecracker-containerd/test.123/123.456"},
+		{name: "valid", ns: "ns", id: "1", outDir: "/run/firecracker-containerd/ns/1"},
+		{name: "valid with dashes", ns: "test-123", id: "123-456", outDir: "/run/firecracker-containerd/test-123/123-456"},
+		{name: "valid with dots", ns: "test.123", id: "123.456", outDir: "/run/firecracker-containerd/test.123/123.456"},
 	}
 
 	for _, tc := range tests {

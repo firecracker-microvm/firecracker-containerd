@@ -45,6 +45,7 @@ import (
 
 	_ "github.com/firecracker-microvm/firecracker-containerd/firecracker-control"
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
+	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	fccontrol "github.com/firecracker-microvm/firecracker-containerd/proto/service/fccontrol/ttrpc"
 	"github.com/firecracker-microvm/firecracker-containerd/runtime/firecrackeroci"
@@ -61,7 +62,7 @@ const (
 
 	defaultVMRootfsPath = "/var/lib/firecracker-containerd/runtime/default-rootfs.img"
 	defaultVMNetDevName = "eth0"
-	varRunDir           = "/var/run/firecracker-containerd"
+	varRunDir           = "/run/firecracker-containerd"
 )
 
 // Images are presumed by the isolated tests to have already been pulled
@@ -448,6 +449,53 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 
 	vmWg.Wait()
 }
+
+func TestLongUnixSocketPath_Isolated(t *testing.T) {
+	// Verify that if the absolute path of the Firecracker unix sockets are longer
+	// than the max length enforced by the kernel (UNIX_PATH_MAX, usually 108), we
+	// don't fail (due to the internal implementation using relative paths).
+	// We do this by using the max VMID len (76 chars), which in combination with the
+	// default location we store state results in a path like
+	// "/run/firecracker-containerd/default/<vmID>" (with len 112).
+	internal.RequiresIsolation(t)
+	const maxUnixSockLen = 108
+	vmID := strings.Repeat("x", 76)
+
+	ctx := namespaces.WithNamespace(context.Background(), "default")
+
+	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
+	require.NoError(t, err, "failed to create ttrpc client")
+
+	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
+	_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
+		VMID: vmID,
+		RootDrive: &proto.FirecrackerDrive{
+			PathOnHost:   defaultVMRootfsPath,
+			IsReadOnly:   false,
+			IsRootDevice: true,
+		},
+		NetworkInterfaces: []*proto.FirecrackerNetworkInterface{},
+	})
+	require.NoError(t, err, "failed to create VM")
+
+	// double-check that the sockets are at the expected path and that their absolute
+	// length exceeds 108 bytes
+	shimDir, err := vm.ShimDir("default", vmID)
+	require.NoError(t, err, "failed to get shim dir")
+
+	_, err = os.Stat(shimDir.FirecrackerSockPath())
+	require.NoError(t, err, "failed to stat firecracker socket path")
+	if len(shimDir.FirecrackerSockPath()) <= maxUnixSockLen {
+		assert.Failf(t, "firecracker sock absolute path %q is not greater than max unix socket path length", shimDir.FirecrackerSockPath())
+	}
+
+	_, err = os.Stat(shimDir.FirecrackerVSockPath())
+	require.NoError(t, err, "failed to stat firecracker vsock path")
+	if len(shimDir.FirecrackerVSockPath()) <= maxUnixSockLen {
+		assert.Failf(t, "firecracker vsock absolute path %q is not greater than max unix socket path length", shimDir.FirecrackerVSockPath())
+	}
+}
+
 func TestStubBlockDevices_Isolated(t *testing.T) {
 	internal.RequiresIsolation(t)
 	const vmID = 0

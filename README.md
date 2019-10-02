@@ -60,14 +60,18 @@ For more detailed information on the components and how they work, see
 
 ## Roadmap
 
-Initially, this project allows you to launch one container per microVM.  We
-intend it to be a drop-in component that can run a variety of containerized
-applications, so the short term roadmap contains work to support container
-standards such as OCI and CNI. In addition, we intend to support launching
-multiple containers inside of one microVM.  To support the widest variety of
-workloads, the new runtime component has to work with popular container
-orchestration frameworks such as Kubernetes and Amazon ECS, so we will work to
-ensure that the software is conformant or compatible where necessary.
+To support the widest variety of workloads, firecracker-containerd has to work
+with popular container orchestration frameworks such as Kubernetes and Amazon
+ECS, so we will work to ensure that the software is conformant or compatible
+where necessary.  The project currently allows you to launch a few containers
+colocated in the same microVM, and we are exploring how to raise the number of
+containers.  We recently added support for configuring networking at the microVM
+level with CNI plugins and provide a CNI plugin suitable for chaining called
+"tc-redirect-tap".  Our short term roadmap includes constraining or "jailing"
+the Firecracker VMM process to improve the host security posture.  Our
+longer-term roadmap includes polishing, packaging, and generally making
+firecracker-containerd easier to run as well as exploring CRI conformance and
+compatibility with Kubernetes.
 
 Details of specific roadmap items are tracked in [GitHub
 issues](https://github.com/firecracker-microvm/firecracker-containerd/issues).

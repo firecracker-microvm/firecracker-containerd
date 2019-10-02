@@ -37,20 +37,31 @@ embedded by default for security and licensing reasons.
 There are two alternatives for providing the build environment. You
 can perform the image build in Docker, in which case the only
 build-time dependency is that you can launch Docker container directly
-(i.e. without `sudo`, etc). To build an image in this configuration, use:
+(i.e. without `sudo`, etc). To build an image in this configuration,
+run from [the root of the firecracker-containerd package](../../Makefile):
 
-`$ make rootfs.img-in-docker`
+`$ make image`
 
 Alternatively, to build outside a container, you'll need:
 
-* To run the build process as root.
+* To pre-build the `agent` binary, set appropriate permissions and place it
+  under the rootfs builder directory.
+  * For example, run `make agent` from the root of the firecracker-containerd
+    package and copy `agent/agent` to 
+	`tools/image-builder/files_ephemeral/usr/local/bin/agent`.
+* To pre-build the `runc` binary, set appropriate permissions and place it
+  under the rootfs builder directory.
+  * For example, run `make -C _submodules/runc static` from the root of the 
+    firecracker-containerd package and copy `_submodules/runc/runc` to 
+	`tools/image-builder/files_ephemeral/usr/local/bin/runc`
 * [`debootstrap`](https://salsa.debian.org/installer-team/debootstrap)
   (Install via the package of the same name on Debian and Ubuntu)
 * `mksquashfs`, available in the
-   `[squashfs-tools](https://packages.debian.org/stretch/squashfs-tools)
+   [`squashfs-tools`](https://packages.debian.org/stretch/squashfs-tools)
    package on Debian and Ubuntu.
+* To run the image build process as root.
 
-Then execute `make rootfs.img`
+Then execute `make rootfs.img` from this directory (`tools/image-builder`)
 
 ### Usage ###
 

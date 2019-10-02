@@ -67,6 +67,7 @@ const (
 	defaultVsockPort        = 10789
 	minVsockIOPort          = uint32(11000)
 	firecrackerStartTimeout = 5 * time.Second
+	defaultStopVMTimeout    = 5 * time.Second
 
 	// StartEventName is the topic published to when a VM starts
 	StartEventName = "/firecracker-vm/start"
@@ -499,6 +500,11 @@ func (s *service) createVM(requestCtx context.Context, request *proto.CreateVMRe
 // created yet and the timeout is hit waiting for it to exist, an error will be returned but the shim will
 // continue to shutdown.
 func (s *service) StopVM(requestCtx context.Context, request *proto.StopVMRequest) (_ *empty.Empty, err error) {
+	timeout := defaultStopVMTimeout
+	if request.TimeoutSeconds > 0 {
+		timeout = time.Duration(request.TimeoutSeconds) * time.Second
+	}
+	timer := time.NewTimer(timeout)
 	defer logPanicAndDie(s.logger)
 	// If something goes wrong here, just shut down ungracefully. This eliminates some scenarios that would result
 	// in the user being unable to shut down the VM.
@@ -514,14 +520,22 @@ func (s *service) StopVM(requestCtx context.Context, request *proto.StopVMReques
 		return nil, err
 	}
 
-	// The graceful shutdown logic, including stopping the VM, is centralized in Shutdown. We set "Now" to true
-	// to ensure that the service will actually shutdown even if there are still containers being managed.
-	_, err = s.Shutdown(requestCtx, &taskAPI.ShutdownRequest{Now: true})
-	if err != nil {
-		return nil, err
-	}
+	shutdownCh := make(chan error)
+	go func() {
+		defer close(shutdownCh)
+		_, err := s.Shutdown(requestCtx, &taskAPI.ShutdownRequest{Now: true})
+		shutdownCh <- err
+	}()
 
-	return &empty.Empty{}, nil
+	select {
+	case <-timer.C:
+		return nil, status.Error(codes.DeadlineExceeded, "timed out waiting for VM shutdown")
+	case err = <-shutdownCh:
+		if err != nil {
+			return nil, err
+		}
+		return &empty.Empty{}, nil
+	}
 }
 
 // GetVMInfo returns metadata for the VM being managed by this shim. If the VM has not been created yet, this

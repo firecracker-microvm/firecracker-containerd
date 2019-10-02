@@ -36,6 +36,7 @@ message CreateVMRequest {
 
 message StopVMRequest {
     string VMID = 1;
+    uint32 TimeoutSeconds = 2;
 }
 
 message GetVMInfoRequest {

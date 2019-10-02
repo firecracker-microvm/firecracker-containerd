@@ -441,7 +441,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 
 			containerWg.Wait()
 
-			_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: strconv.Itoa(vmID)})
+			_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: strconv.Itoa(vmID), TimeoutSeconds: 5})
 			require.NoError(t, err, "failed to stop VM %d", vmID)
 		}(vmID)
 	}

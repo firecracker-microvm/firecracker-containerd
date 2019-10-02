@@ -182,7 +182,7 @@ tools/firecracker-builder-stamp: tools/docker/Dockerfile.firecracker-builder
 
 $(FIRECRACKER_BIN) $(JAILER_BIN): $(FIRECRACKER_DIR)/Cargo.toml tools/firecracker-builder-stamp
 	docker run --rm -it --user $(UID) \
-		--volume $(PWD)/$(FIRECRACKER_DIR):/src \
+		--volume $(CURDIR)/$(FIRECRACKER_DIR):/src \
 		--volume $(CARGO_CACHE_VOLUME_NAME):/usr/local/cargo/registry \
 		-e HOME=/tmp \
 		--workdir /src \
@@ -193,7 +193,7 @@ $(FIRECRACKER_BIN) $(JAILER_BIN): $(FIRECRACKER_DIR)/Cargo.toml tools/firecracke
 firecracker-clean:
 	rm -f $(FIRECRACKER_BIN) $(JAILER_BIN)
 	- docker run --rm -it --user $(UID) \
-		--volume $(PWD)/$(FIRECRACKER_DIR):/src \
+		--volume $(CURDIR)/$(FIRECRACKER_DIR):/src \
 		-e HOME=/tmp \
 		--workdir /src \
 		localhost/$(FIRECRACKER_BUILDER_NAME):$(DOCKER_IMAGE_TAG) \
@@ -217,8 +217,8 @@ tools/runc-builder-stamp: tools/docker/Dockerfile.runc-builder
 
 $(RUNC_BIN): $(RUNC_DIR)/VERSION tools/runc-builder-stamp
 	docker run --rm -it --user $(UID) \
-		--volume $(PWD)/$(RUNC_DIR):/gopath/src/github.com/opencontainers/runc \
-		--volume $(PWD)/deps:/target \
+		--volume $(CURDIR)/$(RUNC_DIR):/gopath/src/github.com/opencontainers/runc \
+		--volume $(CURDIR)/deps:/target \
 		-e HOME=/tmp \
 		-e GOPATH=/gopath \
 		--workdir /gopath/src/github.com/opencontainers/runc \

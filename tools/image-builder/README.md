@@ -21,10 +21,6 @@ e.g. `overlay_root=vdc`. This device should already contain a
 possible to preserve the filesystem state beyond the termination of
 the VM, and potentially re-use it for subsequent VM execution.
 
-The image currently expects `vdb` to be the block device containing
-the container root filesystem, and this device is mounted on
-`/container/rootfs`.
-
 ### Generation ###
 
 There are two alternatives for providing the build environment. You

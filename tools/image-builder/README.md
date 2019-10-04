@@ -25,13 +25,6 @@ The image currently expects `vdb` to be the block device containing
 the container root filesystem, and this device is mounted on
 `/container/rootfs`.
 
-If the `vsock_srv` program from the
-[clownix](https://github.com/clownix/cloonix_vsock) github repository
-is present in `ephemeral_files/bin/` when the image is built, it will
-be embedded in the image and run at boot, allowing easy shell access
-to the VM. This can be convenient for debugging, but it is not
-embedded by default for security and licensing reasons.
-
 ### Generation ###
 
 There are two alternatives for providing the build environment. You

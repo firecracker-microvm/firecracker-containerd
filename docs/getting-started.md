@@ -275,28 +275,41 @@ previously cloned firecracker-containerd repository:
 $ sudo make demo-network
 ```
 
-You can check the Makefile to see exactly what is installed and where, but for a 
+You can check the Makefile to see exactly what is installed and where, but for a
 quick summary:
-* [`ptp` CNI plugin](https://github.com/containernetworking/plugins/tree/master/plugins/main/ptp) 
-  - Creates a [veth](http://man7.org/linux/man-pages/man4/veth.4.html) pair with 
-  one end in a private network namespace and the other end in the host's network namespace.
+* [`ptp` CNI plugin](https://github.com/containernetworking/plugins/tree/master/plugins/main/ptp)
+  - Creates a [veth](http://man7.org/linux/man-pages/man4/veth.4.html) pair with
+  one end in a private network namespace and the other end in the host's network
+  namespace.
 * [`host-local` CNI
   plugin](https://github.com/containernetworking/plugins/tree/master/plugins/ipam/host-local)
-  - Manages IP allocations of network devices present on the local machine by 
+  - Manages IP allocations of network devices present on the local machine by
   vending them from a statically defined subnet.
+* [`firewall` CNI
+  plugin](https://github.com/containernetworking/plugins/tree/master/plugins/meta/firewall)
+  - Sets up firewall rules on the host that allows traffic to/from VMs via the host
+    network.
 * [`tc-redirect-tap` CNI
-  plugin](https://github.com/firecracker-microvm/firecracker-go-sdk/tree/master/cni) 
+  plugin](https://github.com/firecracker-microvm/firecracker-go-sdk/tree/master/cni)
   - A CNI plugin that adapts other CNI plugins to be usable by Firecracker VMs.
-  [See this doc for more details](networking.md). It is used here to adapt veth 
+  [See this doc for more details](networking.md). It is used here to adapt veth
   devices created by the `ptp` plugin to tap devices provided to VMs.
-* [`fcnet.conflist`](../tools/demo/fcnet.conflist) - A sample CNI configuration 
-  file that defines a `fcnet` network created via the `ptp`, `host-local` and 
+* [`fcnet.conflist`](../tools/demo/fcnet.conflist) - A sample CNI configuration
+  file that defines a `fcnet` network created via the `ptp`, `host-local` and
   `tc-redirect-tap` plugins
+  - Note that, by default, the nameserver configuration within your host's
+    `/etc/resolv.conf` will be parsed and provided to VMs as their nameserver
+	configuration. This can cause problems if your host is using a systemd
+	resolver or other resolver that operates on localhost (which results in the
+	VM using its own localhost as the nameserver instead of your host's). This
+	situation may require manual tweaking of the default CNI configuration, such
+	as specifying [static DNS configuration as part of the `ptp` plugin](
+	https://github.com/containernetworking/plugins/tree/master/plugins/main/ptp#network-configuration-reference).
 
-After those dependencies are installed, an update to the firecracker-containerd 
-configuration file is required for VMs to use the `fcnet` CNI-configuration as 
-their default way of generating network interfaces. Just include the following `
-default_network_interfaces` key in your runtime configuration file (by default 
+After those dependencies are installed, an update to the firecracker-containerd
+configuration file is required for VMs to use the `fcnet` CNI-configuration as
+their default way of generating network interfaces. Just include the following
+`default_network_interfaces` key in your runtime configuration file (by default
 at `/etc/containerd/firecracker-runtime.json`):
 ```json
 "default_network_interfaces": [
@@ -309,19 +322,6 @@ at `/etc/containerd/firecracker-runtime.json`):
 ]
 ```
 
-After that, start up a container (as described in the above Usage section) and 
-try pinging your host IP.
-
-At the time of this writing, there is a bug in the ptp plugin that prevents the
-DNS settings from the IPAM plugin being propagated. This is being addressed, but
-until that time DNS resolution will require users manually tweak the installed
-CNI configuration to specify static DNS nameservers appropriate to their local
-network in [the `dns` section of the PTP plugin](https://github.com/containernetworking/plugins/tree/master/plugins/main/ptp#network-configuration-reference)
-
-While your host's IP should always be reachable from the VM given the above
-networking setup, your VM may or may not have outbound internet access depending
-on the details of your host's network. The ptp plugin attempts to setup iptables
-rules to allow the VM's traffic to be forwarded on your host's network but may
-not be able to if there are pre-existing iptables rules that overlap. In those
-cases, granting your VM outbound internet access may require customization of
-the CNI configuration past what's installed above.
+After that, start up a container (as described in the above Usage section) and
+try pinging any IP available on your host. If your host has internet access,
+you should also be able to access the internet from the container too.

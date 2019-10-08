@@ -38,15 +38,11 @@ You need to have the following things in order to use firecracker-containerd:
   
   </details>
 * git
-* The Firecracker binary with the optional `vsock` feature enabled.  This
-  feature requires building from source; instructions for doing so are in the
-  [Firecracker getting started guide](https://github.com/firecracker-microvm/firecracker/blob/master/docs/getting-started.md#building-from-source)
 * A root filesystem image (you can use the one
   [described here](https://github.com/firecracker-microvm/firecracker/blob/master/docs/getting-started.md#running-firecracker)
   as `hello-rootfs.ext4`). 
 * A recent installation of [Docker CE](https://docker.com).
 * Go 1.11 or later, which you can download from [here](https://golang.org/dl/).
-* Rust 1.32 (and Cargo), which you can download from [here](https://rustup.rs/).
 
 ## Setup
 

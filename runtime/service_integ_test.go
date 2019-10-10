@@ -86,6 +86,10 @@ func alpineImage(ctx context.Context, client *containerd.Client, snapshotterName
 	return unpackImage(ctx, client, snapshotterName, "docker.io/library/alpine:3.10.1")
 }
 
+func iperf3Image(ctx context.Context, client *containerd.Client, snapshotterName string) (containerd.Image, error) {
+	return unpackImage(ctx, client, snapshotterName, "docker.io/mlabbe/iperf3:3.6-r0")
+}
+
 func TestShimExitsUponContainerDelete_Isolated(t *testing.T) {
 	internal.RequiresIsolation(t)
 
@@ -632,12 +636,14 @@ func startAndWaitTask(ctx context.Context, t *testing.T, c containerd.Container)
 
 	select {
 	case exitStatus := <-exitCh:
+		assert.NoError(t, exitStatus.Error(), "failed to retrieve exitStatus")
 		assert.Equal(t, uint32(0), exitStatus.ExitCode())
 
 		status, err := task.Delete(ctx)
 		assert.NoErrorf(t, err, "failed to delete task %q after exit", c.ID())
-		assert.NoError(t, status.Error())
-		assert.NoError(t, exitStatus.Error(), "failed to retrieve exitStatus")
+		if status != nil {
+			assert.NoError(t, status.Error())
+		}
 
 		assert.Equal(t, "", stderr.String())
 	case <-ctx.Done():

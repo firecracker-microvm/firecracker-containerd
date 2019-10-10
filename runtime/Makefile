@@ -57,6 +57,40 @@ integ-test:
 			"go test $(EXTRAGOARGS) -run \"^$(TESTNAME)$$\"" || exit 1; \
 	)
 
+PERF_TESTNAME?=TestCNIPlugin_Performance
+PERF_VMCOUNT?=25
+PERF_RUNTIME_SECONDS?=600
+PERF_VM_MEMSIZE_MB?=1024
+PERF_TARGET_BANDWIDTH?=1G
+
+tc-redirect-tap-perf:
+	$(MAKE) PERF_PLUGIN_NAME=tc-redirect-tap perf-test
+
+test-bridged-tap-perf:
+	$(MAKE) PERF_PLUGIN_NAME=test-bridged-tap perf-test
+
+perf-test:
+	$(if $(PERF_PLUGIN_NAME),true,$(error PERF_PLUGIN_NAME must be set for perf-test target))
+	mkdir -p $(CURDIR)/logs
+
+	docker run --rm -it \
+		--privileged \
+		--ipc=host \
+		--network=none \
+		--volume /dev:/dev \
+		--volume /run/udev/control:/run/udev/control \
+		--volume $(CURDIR)/logs:/var/log/firecracker-containerd-test \
+		--env ENABLE_ISOLATED_TESTS=1 \
+		--env PERF_PLUGIN_NAME=$(PERF_PLUGIN_NAME) \
+		--env PERF_VMCOUNT=$(PERF_VMCOUNT) \
+		--env PERF_RUNTIME_SECONDS=$(PERF_RUNTIME_SECONDS) \
+		--env PERF_VM_MEMSIZE_MB=$(PERF_VM_MEMSIZE_MB) \
+		--env PERF_TARGET_BANDWIDTH=$(PERF_TARGET_BANDWIDTH) \
+		--workdir="/firecracker-containerd/runtime" \
+		--init \
+		localhost/firecracker-containerd-naive-integ-test:$(DOCKER_IMAGE_TAG) \
+		"go test -timeout 0 -v -count=1 -run \"^$(PERF_TESTNAME)$$\""
+
 clean:
 	- rm -f containerd-shim-aws-firecracker
 

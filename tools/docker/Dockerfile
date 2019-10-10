@@ -100,6 +100,7 @@ RUN apt-get update && apt-get install --yes --no-install-recommends \
 		curl \
 		git \
 		iptables \
+		iperf3 \
 		libdevmapper-dev \
 		libseccomp-dev
 
@@ -154,10 +155,15 @@ COPY tools/docker/firecracker-runtime.json /etc/containerd/firecracker-runtime.j
 # access during the tests themselves
 COPY tools/docker/naive-snapshotter/config.toml /etc/containerd/config.toml
 RUN containerd 2>/dev/null & \
-	ctr content fetch docker.io/library/alpine:3.10.1 >/dev/null
+	ctr content fetch docker.io/library/alpine:3.10.1 >/dev/null && \
+	ctr content fetch docker.io/mlabbe/iperf3:3.6-r0 >/dev/null
 
 RUN mkdir -p /var/lib/firecracker-containerd/naive
 RUN make -C /firecracker-containerd demo-network
+RUN make -C /firecracker-containerd/internal test-bridged-tap && \
+	cp /firecracker-containerd/internal/test-bridged-tap /opt/cni/bin/ && \
+	chmod a+x /firecracker-containerd/internal/test-bridged-tap
+
 COPY tools/docker/firecracker-runtime.json /etc/containerd/firecracker-runtime.json
 COPY tools/docker/naive-snapshotter/entrypoint.sh /entrypoint
 

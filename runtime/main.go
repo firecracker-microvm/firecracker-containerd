@@ -35,5 +35,6 @@ func init() {
 func main() {
 	shim.Run(shimID, NewService, func(cfg *shim.Config) {
 		cfg.NoSetupLogger = true
+		cfg.NoSubreaper = true
 	})
 }

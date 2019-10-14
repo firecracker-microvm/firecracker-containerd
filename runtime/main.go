@@ -35,5 +35,12 @@ func init() {
 func main() {
 	shim.Run(shimID, NewService, func(cfg *shim.Config) {
 		cfg.NoSetupLogger = true
+
+		// Just let child processes get reparented to init
+		// (or the nearest subreaper). Enabling reaping
+		// creates races with `os.Exec` commands that expect
+		// to be able to wait on their child processes.
+		cfg.NoSubreaper = true
+		cfg.NoReaper = true
 	})
 }

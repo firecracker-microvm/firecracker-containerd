@@ -53,8 +53,8 @@ const (
 // - Change v1 file to v2 on 'thin-1'
 // - Mount 'snap-1' and make sure test file is v1
 // - Unmount volumes and remove all devices
-func TestPoolDevice(t *testing.T) {
-	internal.RequiresRoot(t)
+func TestPoolDevice_Isolated(t *testing.T) {
+	internal.RequiresIsolation(t)
 	logrus.SetLevel(logrus.DebugLevel)
 	ctx := context.Background()
 

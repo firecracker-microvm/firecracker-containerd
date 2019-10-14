@@ -36,8 +36,8 @@ import (
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/pkg/losetup"
 )
 
-func TestSnapshotterSuite(t *testing.T) {
-	internal.RequiresRoot(t)
+func TestSnapshotterSuite_Isolated(t *testing.T) {
+	internal.RequiresIsolation(t)
 	logrus.SetLevel(logrus.DebugLevel)
 
 	snapshotterFn := func(ctx context.Context, root string) (snapshots.Snapshotter, func() error, error) {

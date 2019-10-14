@@ -27,8 +27,8 @@ import (
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 )
 
-func TestCreateImage(t *testing.T) {
-	internal.RequiresRoot(t)
+func TestCreateImage_Isolated(t *testing.T) {
+	internal.RequiresIsolation(t)
 	snap := Snapshotter{}
 
 	tempDir, err := ioutil.TempDir("", "fc-snapshotter")
@@ -66,7 +66,7 @@ func createSnapshotter(ctx context.Context, root string) (snapshots.Snapshotter,
 	return snap, snap.Close, nil
 }
 
-func TestSnapshotterSuite(t *testing.T) {
-	internal.RequiresRoot(t)
+func TestSnapshotterSuite_Isolated(t *testing.T) {
+	internal.RequiresIsolation(t)
 	testsuite.SnapshotterSuite(t, "Snapshotter", createSnapshotter)
 }

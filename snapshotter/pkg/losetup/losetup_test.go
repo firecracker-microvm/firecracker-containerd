@@ -24,8 +24,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLosetup(t *testing.T) {
-	internal.RequiresRoot(t)
+func TestLosetup_Isolated(t *testing.T) {
+	internal.RequiresIsolation(t)
 	var (
 		imagePath   = createSparseImage(t)
 		loopDevice1 string

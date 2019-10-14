@@ -35,8 +35,8 @@ const (
 	snapshotID     = 2
 )
 
-func TestDMSetup(t *testing.T) {
-	internal.RequiresRoot(t)
+func TestDMSetup_Isolated(t *testing.T) {
+	internal.RequiresIsolation(t)
 	tempDir, err := ioutil.TempDir("", "dmsetup-tests-")
 	require.NoErrorf(t, err, "failed to make temp dir for tests")
 

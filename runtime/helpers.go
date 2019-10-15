@@ -140,6 +140,15 @@ func rateLimiterFromProto(rl *proto.FirecrackerRateLimiter) *models.RateLimiter 
 	return &result
 }
 
+func withRateLimiterFromProto(rl *proto.FirecrackerRateLimiter) firecracker.DriveOpt {
+	if rl == nil {
+		return func(d *models.Drive) {
+			// no-op
+		}
+	}
+	return firecracker.WithRateLimiter(*rateLimiterFromProto(rl))
+}
+
 // tokenBucketFromProto creates a firecracker TokenBucket object from the
 // protobuf message.
 func tokenBucketFromProto(bucket *proto.FirecrackerTokenBucket) *models.TokenBucket {

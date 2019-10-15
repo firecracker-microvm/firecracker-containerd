@@ -672,20 +672,12 @@ func (s *service) buildNonStubDrives(req *proto.CreateVMRequest) []models.Drive 
 	var builder firecracker.DrivesBuilder
 
 	if input := req.RootDrive; input != nil {
-		builder = firecracker.DrivesBuilder{}.
-			WithRootDrive(input.PathOnHost, func(d *models.Drive) {
-				d.IsReadOnly = firecracker.Bool(!input.IsWritable)
-				d.Partuuid = input.Partuuid
-
-				if limiter := input.RateLimiter; limiter != nil {
-					d.RateLimiter = rateLimiterFromProto(limiter)
-				}
-			})
+		builder = builder.WithRootDrive(input.PathOnHost,
+			firecracker.WithReadOnly(!input.IsWritable),
+			firecracker.WithPartuuid(input.Partuuid),
+			withRateLimiterFromProto(input.RateLimiter))
 	} else {
-		builder = firecracker.DrivesBuilder{}.
-			WithRootDrive(s.config.RootDrive, func(d *models.Drive) {
-				d.IsReadOnly = firecracker.Bool(true)
-			})
+		builder = builder.WithRootDrive(s.config.RootDrive, firecracker.WithReadOnly(true))
 	}
 
 	for _, drive := range req.AdditionalDrives {

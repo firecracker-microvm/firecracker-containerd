@@ -40,6 +40,7 @@ import (
 	"github.com/containerd/fifo"
 	"github.com/containerd/ttrpc"
 	"github.com/firecracker-microvm/firecracker-go-sdk"
+	"github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 	"github.com/gofrs/uuid"
 	ptypes "github.com/gogo/protobuf/types"
 	"github.com/golang/protobuf/ptypes/empty"
@@ -638,27 +639,13 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 		containerCount = 1
 	}
 
-	// Create stub drives first and let stub driver handler manage the drives
-	handler, err := newStubDriveHandler(s.shimDir.RootPath(), s.logger, containerCount)
+	stubDriveHandler, err := newStubDriveHandler(s.shimDir.RootPath(), s.logger, containerCount)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create stub drives")
 	}
-	s.stubDriveHandler = handler
+	s.stubDriveHandler = stubDriveHandler
 
-	var driveBuilder firecracker.DrivesBuilder
-	// Create non-stub drives
-	if root := req.RootDrive; root != nil {
-		driveBuilder = firecracker.NewDrivesBuilder(root.PathOnHost)
-	} else {
-		driveBuilder = firecracker.NewDrivesBuilder(s.config.RootDrive)
-	}
-
-	for _, drive := range req.AdditionalDrives {
-		driveBuilder = addDriveFromProto(driveBuilder, drive)
-	}
-
-	// a micro VM must know all drives
-	cfg.Drives = append(handler.GetDrives(), driveBuilder.Build()...)
+	cfg.Drives = append(stubDriveHandler.GetDrives(), s.buildNonStubDrives(req)...)
 
 	// If no value for NetworkInterfaces was specified (not even an empty but non-nil list) and
 	// the runtime config specifies a default list, use those defaults
@@ -679,6 +666,25 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 	}
 
 	return &cfg, nil
+}
+
+func (s *service) buildNonStubDrives(req *proto.CreateVMRequest) []models.Drive {
+	var builder firecracker.DrivesBuilder
+
+	if input := req.RootDrive; input != nil {
+		builder = builder.WithRootDrive(input.PathOnHost,
+			firecracker.WithReadOnly(!input.IsWritable),
+			firecracker.WithPartuuid(input.Partuuid),
+			withRateLimiterFromProto(input.RateLimiter))
+	} else {
+		builder = builder.WithRootDrive(s.config.RootDrive, firecracker.WithReadOnly(true))
+	}
+
+	for _, drive := range req.AdditionalDrives {
+		builder = addDriveFromProto(builder, drive)
+	}
+
+	return builder.Build()
 }
 
 func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTaskRequest) (*taskAPI.CreateTaskResponse, error) {

@@ -268,7 +268,6 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 				},
 				RootDrive: &proto.FirecrackerDrive{
 					PathOnHost:   rootfsPath,
-					IsReadOnly:   false,
 					IsRootDevice: true,
 				},
 				NetworkInterfaces: []*proto.FirecrackerNetworkInterface{
@@ -478,7 +477,6 @@ func TestLongUnixSocketPath_Isolated(t *testing.T) {
 		VMID: vmID,
 		RootDrive: &proto.FirecrackerDrive{
 			PathOnHost:   defaultVMRootfsPath,
-			IsReadOnly:   false,
 			IsRootDevice: true,
 		},
 		NetworkInterfaces: []*proto.FirecrackerNetworkInterface{},
@@ -533,7 +531,6 @@ func TestStubBlockDevices_Isolated(t *testing.T) {
 		VMID: strconv.Itoa(vmID),
 		RootDrive: &proto.FirecrackerDrive{
 			PathOnHost:   rootfsPath,
-			IsReadOnly:   false,
 			IsRootDevice: true,
 		},
 		NetworkInterfaces: []*proto.FirecrackerNetworkInterface{
@@ -670,7 +667,6 @@ func testCreateContainerWithSameName(t *testing.T, vmID string) {
 			VMID: vmID,
 			RootDrive: &proto.FirecrackerDrive{
 				PathOnHost:   defaultRootfsPath,
-				IsReadOnly:   true,
 				IsRootDevice: true,
 			},
 			ContainerCount: 2,

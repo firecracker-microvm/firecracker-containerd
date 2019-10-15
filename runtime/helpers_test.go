@@ -210,7 +210,7 @@ func TestTokenBucketFromProto(t *testing.T) {
 
 func TestAddDriveFromProto(t *testing.T) {
 	list := addDriveFromProto(firecracker.DrivesBuilder{}, &proto.FirecrackerDrive{
-		IsReadOnly: true,
+		IsWritable: false,
 		PathOnHost: "/a",
 		Partuuid:   "xy",
 	}).Build()

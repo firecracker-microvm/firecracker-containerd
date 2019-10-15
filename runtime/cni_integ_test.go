@@ -94,7 +94,6 @@ func TestCNISupport_Isolated(t *testing.T) {
 				},
 				RootDrive: &proto.FirecrackerDrive{
 					PathOnHost:   defaultVMRootfsPath,
-					IsReadOnly:   false,
 					IsRootDevice: true,
 				},
 				NetworkInterfaces: []*proto.FirecrackerNetworkInterface{{
@@ -269,7 +268,6 @@ func TestCNIPlugin_Performance(t *testing.T) {
 				},
 				RootDrive: &proto.FirecrackerDrive{
 					PathOnHost:   defaultVMRootfsPath,
-					IsReadOnly:   false,
 					IsRootDevice: true,
 				},
 				NetworkInterfaces: []*proto.FirecrackerNetworkInterface{{

@@ -80,7 +80,7 @@ func TestBuildVMConfiguration(t *testing.T) {
 				KernelImagePath: "REQUEST KERNEL IMAGE",
 				RootDrive: &proto.FirecrackerDrive{
 					PathOnHost: "REQUEST ROOT DRIVE",
-					IsReadOnly: false,
+					IsWritable: true,
 				},
 				MachineCfg: &proto.FirecrackerMachineConfiguration{
 					CPUTemplate: "C3",
@@ -115,7 +115,7 @@ func TestBuildVMConfiguration(t *testing.T) {
 				KernelImagePath: "REQUEST KERNEL IMAGE",
 				RootDrive: &proto.FirecrackerDrive{
 					PathOnHost: "REQUEST ROOT DRIVE",
-					IsReadOnly: true,
+					IsWritable: true,
 				},
 				MachineCfg: &proto.FirecrackerMachineConfiguration{
 					CPUTemplate: "T2",
@@ -135,13 +135,49 @@ func TestBuildVMConfiguration(t *testing.T) {
 					{
 						DriveID:      firecracker.String("root_drive"),
 						PathOnHost:   firecracker.String("REQUEST ROOT DRIVE"),
-						IsReadOnly:   firecracker.Bool(true),
+						IsReadOnly:   firecracker.Bool(false),
 						IsRootDevice: firecracker.Bool(true),
 					},
 				},
 				MachineCfg: models.MachineConfiguration{
 					CPUTemplate: models.CPUTemplateT2,
 					VcpuCount:   firecracker.Int64(3),
+					MemSizeMib:  firecracker.Int64(defaultMemSizeMb),
+					HtEnabled:   firecracker.Bool(false),
+				},
+			},
+			expectedStubDriveCount: 1,
+		},
+		{
+			name: "Request can omit some fields",
+			request: &proto.CreateVMRequest{
+				KernelArgs:      "REQUEST KERNEL ARGS",
+				KernelImagePath: "REQUEST KERNEL IMAGE",
+				RootDrive: &proto.FirecrackerDrive{
+					PathOnHost: "REQUEST ROOT DRIVE",
+				},
+				MachineCfg: &proto.FirecrackerMachineConfiguration{},
+			},
+			config: &Config{
+				KernelArgs:      "KERNEL ARGS",
+				KernelImagePath: "KERNEL IMAGE",
+				CPUTemplate:     "C3",
+				CPUCount:        2,
+			},
+			expectedCfg: &firecracker.Config{
+				KernelArgs:      "REQUEST KERNEL ARGS",
+				KernelImagePath: "REQUEST KERNEL IMAGE",
+				Drives: []models.Drive{
+					{
+						DriveID:      firecracker.String("root_drive"),
+						PathOnHost:   firecracker.String("REQUEST ROOT DRIVE"),
+						IsReadOnly:   firecracker.Bool(true),
+						IsRootDevice: firecracker.Bool(true),
+					},
+				},
+				MachineCfg: models.MachineConfiguration{
+					CPUTemplate: models.CPUTemplateC3,
+					VcpuCount:   firecracker.Int64(2),
 					MemSizeMib:  firecracker.Int64(defaultMemSizeMb),
 					HtEnabled:   firecracker.Bool(false),
 				},

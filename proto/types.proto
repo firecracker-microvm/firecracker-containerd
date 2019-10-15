@@ -108,7 +108,7 @@ message FirecrackerMachineConfiguration {
 
 // Message to specify the block device config for a Firecracker VM
 message FirecrackerDrive {
-	bool IsReadOnly = 1; // Specifies if the drive is read only
+	bool IsWritable = 1; // Specifies if the drive is writable from a guest
 	bool IsRootDevice = 2; // Specifies if the drive is the root device
 	string Partuuid = 3; // Specifies the unique id of the boot partition on this device
 	string PathOnHost = 4; // Specifies the host level path for the guest drive

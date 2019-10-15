@@ -122,7 +122,7 @@ func addDriveFromProto(builder firecracker.DrivesBuilder, drive *proto.Firecrack
 		}
 	}
 
-	return builder.AddDrive(drive.PathOnHost, drive.IsReadOnly, opt)
+	return builder.AddDrive(drive.PathOnHost, !drive.IsWritable, opt)
 }
 
 // rateLimiterFromProto creates a firecracker RateLimiter object from the

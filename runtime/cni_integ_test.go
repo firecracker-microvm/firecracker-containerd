@@ -135,6 +135,7 @@ func TestCNISupport_Isolated(t *testing.T) {
 
 func TestAutomaticCNISupport_Isolated(t *testing.T) {
 	internal.RequiresIsolation(t)
+	useDefaultNetworkInterfaceRuntimeConfig(t)
 
 	testTimeout := 120 * time.Second
 	ctx, cancel := context.WithTimeout(namespaces.WithNamespace(context.Background(), defaultNamespace), testTimeout)
@@ -353,6 +354,16 @@ func writeCNIConf(path, chainedPluginName, networkName, nameserver string) error
     }
   ]
 }`, networkName, nameserver, chainedPluginName)), 0644)
+}
+
+func useDefaultNetworkInterfaceRuntimeConfig(t *testing.T) {
+	t.Helper()
+
+	err := os.RemoveAll(runtimeConfigPath)
+	require.NoError(t, err, "failed to remove existing firecracker containerd runtime config file")
+
+	err = os.Symlink(defaultNetworkInterfaceRuntimeConfigPath, runtimeConfigPath)
+	require.NoError(t, err, "failed to symlink default network interface runtime config")
 }
 
 func runCommand(ctx context.Context, t *testing.T, name string, args ...string) {

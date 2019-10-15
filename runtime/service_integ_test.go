@@ -63,6 +63,9 @@ const (
 	defaultVMRootfsPath = "/var/lib/firecracker-containerd/runtime/default-rootfs.img"
 	defaultVMNetDevName = "eth0"
 	varRunDir           = "/run/firecracker-containerd"
+
+	runtimeConfigPath                        = "/etc/containerd/firecracker-runtime.json"
+	defaultNetworkInterfaceRuntimeConfigPath = "/etc/containerd/firecracker-runtime-defaultnetwork.json"
 )
 
 // Images are presumed by the isolated tests to have already been pulled

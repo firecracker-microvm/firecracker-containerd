@@ -5,15 +5,5 @@
   "root_drive": "/var/lib/firecracker-containerd/runtime/default-rootfs.img",
   "cpu_count": 1,
   "cpu_template": "T2",
-  "log_fifo": "/tmp/fc-logs.fifo",
-  "log_level": "Debug",
-  "metrics_fifo": "/tmp/fc-metrics.fifo",
-  "default_network_interfaces": [
-    {
-      "CNIConfig": {
-        "NetworkName": "fcnet",
-        "InterfaceName": "veth0"
-      }
-    }
-  ]
+  "log_level": "Debug"
 }

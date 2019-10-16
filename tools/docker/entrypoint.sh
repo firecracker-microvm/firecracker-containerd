@@ -12,8 +12,10 @@ case "$FICD_SNAPSHOTTER" in
             -path /var/lib/firecracker-containerd/naive \
             -debug &>> ${FICD_SNAPSHOTTER_OUTFILE} &
         ;;
+    devmapper)
+        ;;
     *)
-        "This Docker image doesn't support $FICD_SNAPSHOTTER snapshotter"
+        echo "This Docker image doesn't support $FICD_SNAPSHOTTER snapshotter"
         exit 1
         ;;
 esac

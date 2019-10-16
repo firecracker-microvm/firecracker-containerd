@@ -38,14 +38,18 @@ integ-test:
 		--volume /run/udev/control:/run/udev/control \
 		--volume $(CURDIR)/etc/containerd/firecracker-runtime.json:/etc/containerd/firecracker-runtime.json \
 		--volume $(CURDIR)/logs:/var/log/firecracker-containerd-test \
+		--volume $(shell ./prepare-config-toml.sh $(TEST_SS) $(TEST_POOL)):/etc/containerd/snapshotter/config.toml \
+		--env FICD_SNAPSHOTTER=$(TEST_SS) \
 		--env EXTRAGOARGS="${EXTRAGOARGS}" \
 		--workdir="/firecracker-containerd/examples" \
 		localhost/firecracker-containerd-integ-test:${DOCKER_IMAGE_TAG} \
-		"make examples && make testtap && sleep 3 && ./taskworkflow -ip $(TEST_IP)$(TEST_SUBNET) -gw $(TEST_GATEWAY)"
+		"make examples && make testtap && sleep 3 && ./taskworkflow -ip $(TEST_IP)$(TEST_SUBNET) -gw $(TEST_GATEWAY) -ss $(TEST_SS)"
 
 TEST_GATEWAY?=172.16.0.1
 TEST_IP?=172.16.0.2
 TEST_SUBNET?=/24
+TEST_SS?=naive
+TEST_POOL?=fcci--vg-fcci--thin
 testtap:
 	ip link add br0 type bridge
 	ip tuntap add tap0 mode tap

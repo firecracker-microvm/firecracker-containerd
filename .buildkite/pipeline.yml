@@ -36,6 +36,10 @@ steps:
     concurrency: 1
     concurrency_group: 'loop-device test'
 
+  - label: ":lint-roller: device mapper setup"
+    command:
+      - sudo ./.buildkite/thinpool.sh create build_${BUILDKITE_BUILD_NUMBER}
+
   - wait
 
   # Git history validation happens after the 'wait' step so it happens
@@ -86,3 +90,20 @@ steps:
     command: 'make -C examples integ-test'
     concurrency: 1
     concurrency_group: 'loop-device test'
+
+  - label: ":rotating_light: :exclamation: example tests on devmapper"
+    env:
+      DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
+      EXTRAGOARGS: "-v -count=1"
+    artifact_paths:
+      - "examples/logs/*"
+    command:
+      - make -C examples integ-test TEST_SS=devmapper TEST_POOL=build_${BUILDKITE_BUILD_NUMBER}
+
+  - wait: ~
+    continue_on_failure: true
+
+  - label: ":wastebasket: device mapper cleanup"
+    command:
+      - sudo ./.buildkite/thinpool.sh remove "build_$BUILDKITE_BUILD_NUMBER"
+

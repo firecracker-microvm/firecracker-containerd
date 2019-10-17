@@ -16,6 +16,7 @@ package internal
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os/exec"
@@ -115,7 +116,7 @@ func (l localNetworkServices) Serve(ctx context.Context) error {
 		for path, contents := range l.webpages {
 			webpage := contents
 			http.HandleFunc("/"+path, func(w http.ResponseWriter, r *http.Request) {
-				fmt.Fprintf(w, webpage)
+				io.WriteString(w, webpage)
 			})
 		}
 

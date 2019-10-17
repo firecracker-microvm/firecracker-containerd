@@ -14,9 +14,14 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDiscoverDrives(t *testing.T) {
@@ -37,5 +42,126 @@ func TestDiscoverDrives(t *testing.T) {
 			assert.True(t, ok)
 			assert.Equal(t, expected, d.DriveID)
 		})
+	}
+}
+
+func TestEvalAnySymlinks(t *testing.T) {
+	existingSymlink := "/proc/self/cwd" // will always exist and be a symlink to our cwd
+	nonExistentPath := filepath.Join(strconv.Itoa(int(time.Now().UnixNano())), "foo")
+	testPath := filepath.Join(existingSymlink, nonExistentPath)
+
+	resolvedPath, err := evalAnySymlinks(testPath)
+	require.NoError(t, err, "failed to evaluate symlinks in %q", testPath)
+
+	cwd, err := os.Getwd()
+	require.NoError(t, err, "failed to get current working dir")
+	assert.Equal(t, filepath.Join(cwd, nonExistentPath), resolvedPath)
+}
+
+func TestIsOrUnderDir(t *testing.T) {
+	type testcase struct {
+		baseDir      string
+		path         string
+		expectedTrue bool
+	}
+
+	for _, tc := range []testcase{
+		{
+			baseDir:      "/foo",
+			path:         "/foo/bar",
+			expectedTrue: true,
+		},
+		{
+			baseDir:      "/foo/bar",
+			path:         "/foo/bar/baz",
+			expectedTrue: true,
+		},
+		{
+			baseDir:      "/foo",
+			path:         "/foo",
+			expectedTrue: true,
+		},
+		{
+			baseDir:      "/foo/bar",
+			path:         "/foo/bar",
+			expectedTrue: true,
+		},
+		{
+			baseDir:      "/foo",
+			path:         "/foobar",
+			expectedTrue: false,
+		},
+		{
+			baseDir:      "/foo",
+			path:         "/bar",
+			expectedTrue: false,
+		},
+		{
+			baseDir:      "/foo/bar",
+			path:         "/bar",
+			expectedTrue: false,
+		},
+		{
+			baseDir:      "/foo/bar",
+			path:         "/foo",
+			expectedTrue: false,
+		},
+		{
+			baseDir:      "/foo/bar",
+			path:         "/bar/bar",
+			expectedTrue: false,
+		},
+		{
+			baseDir:      "/foo",
+			path:         "foo",
+			expectedTrue: false,
+		},
+		{
+			baseDir:      "/foo",
+			path:         "bar",
+			expectedTrue: false,
+		},
+		{
+			baseDir:      "/foo",
+			path:         "/foo/../foo",
+			expectedTrue: true,
+		},
+		{
+			baseDir:      "/foo/bar",
+			path:         "/foo/../foo/bar",
+			expectedTrue: true,
+		},
+		{
+			baseDir:      "/foo",
+			path:         "/foo/../bar",
+			expectedTrue: false,
+		},
+		{
+			baseDir:      "/foo",
+			path:         "/foo/..bar",
+			expectedTrue: true,
+		},
+		{
+			baseDir:      "/foo",
+			path:         "/foo/..bar/baz",
+			expectedTrue: true,
+		},
+		{
+			baseDir:      "/",
+			path:         "/",
+			expectedTrue: true,
+		},
+		{
+			baseDir:      "/foo",
+			path:         "/",
+			expectedTrue: false,
+		},
+		{
+			baseDir:      "/",
+			path:         "/foo",
+			expectedTrue: true,
+		},
+	} {
+		assert.Equalf(t, tc.expectedTrue, isOrUnderDir(tc.path, tc.baseDir), "unexpected output for isOrUnderDir case %+v", tc)
 	}
 }

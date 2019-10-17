@@ -14,18 +14,34 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/containerd/containerd/log"
+	"github.com/containerd/containerd/mount"
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
+	drivemount "github.com/firecracker-microvm/firecracker-containerd/proto/service/drivemount/ttrpc"
+	"github.com/golang/protobuf/ptypes/empty"
+	"github.com/pkg/errors"
 )
 
 const (
 	blockPath       = "/sys/block"
 	drivePath       = "/dev"
 	blockMajorMinor = "dev"
+)
+
+var (
+	bannedSystemDirs = []string{
+		"/proc",
+		"/sys",
+		"/dev",
+	}
 )
 
 type drive struct {
@@ -44,6 +60,8 @@ type driveHandler struct {
 	// DrivePath should contain the location of the drive block device nodes.
 	DrivePath string
 }
+
+var _ drivemount.DriveMounterService = &driveHandler{}
 
 func newDriveHandler(blockPath, drivePath string) (*driveHandler, error) {
 	d := &driveHandler{
@@ -145,4 +163,108 @@ func isStubDrive(d drive) bool {
 	defer f.Close()
 
 	return internal.IsStubDrive(f)
+}
+
+func (dh driveHandler) MountDrive(ctx context.Context, req *drivemount.MountDriveRequest) (*empty.Empty, error) {
+	logger := log.G(ctx)
+	logger.Debugf("%+v", req.String())
+	logger = logger.WithField("drive_id", req.DriveID)
+
+	drive, ok := dh.GetDrive(req.DriveID)
+	if !ok {
+		return nil, fmt.Errorf("drive %q could not be found", req.DriveID)
+	}
+	logger = logger.WithField("drive_path", drive.Path())
+
+	// Do a basic check that we won't be mounting over any important system directories
+	resolvedDest, err := evalAnySymlinks(req.DestinationPath)
+	if err != nil {
+		return nil, errors.Wrapf(err,
+			"failed to evaluate any symlinks in drive mount destination %q", req.DestinationPath)
+	}
+
+	for _, systemDir := range bannedSystemDirs {
+		if isOrUnderDir(resolvedDest, systemDir) {
+			return nil, errors.Errorf(
+				"drive mount destination %q resolves to path %q under banned system directory %q",
+				req.DestinationPath, resolvedDest, systemDir,
+			)
+		}
+	}
+
+	err = os.MkdirAll(req.DestinationPath, 0700)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to create drive mount destination %q", req.DestinationPath)
+	}
+
+	// Retry the mount in the case of failure a fixed number of times. This works around a rare issue
+	// where we get to this mount attempt before the guest OS has realized a drive was patched:
+	// https://github.com/firecracker-microvm/firecracker-containerd/issues/214
+	const (
+		maxRetries = 100
+		retryDelay = 10 * time.Millisecond
+	)
+
+	for i := 0; i < maxRetries; i++ {
+		err := mount.All([]mount.Mount{{
+			Source:  drive.Path(),
+			Type:    req.FilesytemType,
+			Options: req.Options,
+		}}, req.DestinationPath)
+		if err == nil {
+			return &empty.Empty{}, nil
+		}
+
+		if isRetryableMountError(err) {
+			logger.WithError(err).Warnf("retryable failure mounting drive")
+			time.Sleep(retryDelay)
+			continue
+		}
+
+		return nil, errors.Wrapf(err, "non-retryable failure mounting drive from %q to %q",
+			drive.Path(), req.DestinationPath)
+	}
+
+	return nil, errors.Errorf("exhausted retries mounting drive from %q to %q",
+		drive.Path(), req.DestinationPath)
+}
+
+// evalAnySymlinks is similar to filepath.EvalSymlinks, except it will not return an error if part of the
+// provided path does not exist. It will evaluate symlinks present in the path up to a component that doesn't
+// exist, at which point it will just append the rest of the provided path to what has been resolved so far.
+// We validate earlier that input to this function is an absolute path.
+func evalAnySymlinks(path string) (string, error) {
+	curPath := "/"
+	pathSplit := strings.Split(filepath.Clean(path), "/")
+	for len(pathSplit) > 0 {
+		curPath = filepath.Join(curPath, pathSplit[0])
+		pathSplit = pathSplit[1:]
+
+		resolvedPath, err := filepath.EvalSymlinks(curPath)
+		if os.IsNotExist(err) {
+			return filepath.Join(append([]string{curPath}, pathSplit...)...), nil
+		}
+		if err != nil {
+			return "", err
+		}
+		curPath = resolvedPath
+	}
+
+	return curPath, nil
+}
+
+// returns whether the given path is the provided baseDir or is under it
+func isOrUnderDir(path, baseDir string) bool {
+	path = filepath.Clean(path)
+	baseDir = filepath.Clean(baseDir)
+
+	if baseDir == "/" {
+		return true
+	}
+
+	if path == baseDir {
+		return true
+	}
+
+	return strings.HasPrefix(path, baseDir+"/")
 }

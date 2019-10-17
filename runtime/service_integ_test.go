@@ -44,6 +44,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	_ "github.com/firecracker-microvm/firecracker-containerd/firecracker-control"
+	fcClient "github.com/firecracker-microvm/firecracker-containerd/firecracker-control/client"
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
@@ -282,9 +283,8 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 				MachineCfg: &proto.FirecrackerMachineConfiguration{
 					MemSizeMib: 512,
 				},
-				RootDrive: &proto.FirecrackerDrive{
-					PathOnHost:   rootfsPath,
-					IsRootDevice: true,
+				RootDrive: &proto.FirecrackerRootDrive{
+					HostPath: rootfsPath,
 				},
 				NetworkInterfaces: []*proto.FirecrackerNetworkInterface{
 					{
@@ -525,11 +525,7 @@ func TestLongUnixSocketPath_Isolated(t *testing.T) {
 
 	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
 	_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
-		VMID: vmID,
-		RootDrive: &proto.FirecrackerDrive{
-			PathOnHost:   defaultVMRootfsPath,
-			IsRootDevice: true,
-		},
+		VMID:              vmID,
 		NetworkInterfaces: []*proto.FirecrackerNetworkInterface{},
 	})
 	require.NoError(t, err, "failed to create VM")
@@ -566,8 +562,6 @@ func TestStubBlockDevices_Isolated(t *testing.T) {
 	image, err := alpineImage(ctx, client, defaultSnapshotterName())
 	require.NoError(t, err, "failed to get alpine image")
 
-	rootfsPath := defaultVMRootfsPath
-
 	tapName := fmt.Sprintf("tap%d", vmID)
 	err = createTapDevice(ctx, tapName)
 	require.NoError(t, err, "failed to create tap device for vm %d", vmID)
@@ -581,10 +575,6 @@ func TestStubBlockDevices_Isolated(t *testing.T) {
 	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
 	_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
 		VMID: strconv.Itoa(vmID),
-		RootDrive: &proto.FirecrackerDrive{
-			PathOnHost:   rootfsPath,
-			IsRootDevice: true,
-		},
 		NetworkInterfaces: []*proto.FirecrackerNetworkInterface{
 			{
 				AllowMMDS: true,
@@ -716,11 +706,7 @@ func testCreateContainerWithSameName(t *testing.T, vmID string) {
 	if len(vmID) != 0 {
 		fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
 		_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
-			VMID: vmID,
-			RootDrive: &proto.FirecrackerDrive{
-				PathOnHost:   defaultRootfsPath,
-				IsRootDevice: true,
-			},
+			VMID:           vmID,
 			ContainerCount: 2,
 		})
 		require.NoError(t, err)
@@ -844,4 +830,173 @@ func TestCreateTooManyContainers_Isolated(t *testing.T) {
 	_, err = c2.NewTask(ctx, cio.NewCreator(cio.WithStreams(nil, &stdout, &stderr)))
 	assert.Equal("no remaining stub drives to be used: unavailable: unknown", err.Error())
 	require.Error(t, err)
+}
+
+func TestDriveMount_Isolated(t *testing.T) {
+	prepareIntegTest(t)
+
+	testTimeout := 120 * time.Second
+	ctx, cancel := context.WithTimeout(namespaces.WithNamespace(context.Background(), defaultNamespace), testTimeout)
+	defer cancel()
+
+	ctrdClient, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+
+	fcClient, err := fcClient.New(containerdSockPath + ".ttrpc")
+	require.NoError(t, err, "failed to create fccontrol client")
+
+	image, err := alpineImage(ctx, ctrdClient, naiveSnapshotterName)
+	require.NoError(t, err, "failed to get alpine image")
+
+	vmID := "test-drive-mount"
+
+	vmMounts := []struct {
+		VMPath         string
+		FilesystemType string
+		VMMountOptions []string
+		ContainerPath  string
+		FSImgFile      internal.FSImgFile
+	}{
+		{
+			// /systemmount meant to make sure logic doesn't ban this just because it begins with /sys
+			VMPath:         "/systemmount",
+			FilesystemType: "ext4",
+			VMMountOptions: []string{"rw", "noatime"},
+			ContainerPath:  "/foo",
+			FSImgFile: internal.FSImgFile{
+				Subpath:  "dir/foo",
+				Contents: "foo\n",
+			},
+		},
+		{
+			VMPath:         "/mnt",
+			FilesystemType: "ext3",
+			VMMountOptions: []string{"ro", "relatime"},
+			ContainerPath:  "/bar",
+			FSImgFile: internal.FSImgFile{
+				Subpath:  "dir/bar",
+				Contents: "bar\n",
+			},
+		},
+	}
+
+	vmDriveMounts := []*proto.FirecrackerDriveMount{}
+	ctrBindMounts := []specs.Mount{}
+	ctrCatCommands := []string{}
+	for _, vmMount := range vmMounts {
+		vmDriveMounts = append(vmDriveMounts, &proto.FirecrackerDriveMount{
+			HostPath:       internal.CreateFSImg(ctx, t, vmMount.FilesystemType, vmMount.FSImgFile),
+			VMPath:         vmMount.VMPath,
+			FilesystemType: vmMount.FilesystemType,
+			Options:        vmMount.VMMountOptions,
+		})
+
+		ctrBindMounts = append(ctrBindMounts, specs.Mount{
+			Source:      vmMount.VMPath,
+			Destination: vmMount.ContainerPath,
+			Options:     []string{"bind"},
+		})
+
+		ctrCatCommands = append(ctrCatCommands, fmt.Sprintf("/bin/cat %s",
+			filepath.Join(vmMount.ContainerPath, vmMount.FSImgFile.Subpath),
+		))
+	}
+
+	_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
+		VMID:        vmID,
+		DriveMounts: vmDriveMounts,
+	})
+	require.NoError(t, err, "failed to create vm")
+
+	containerName := fmt.Sprintf("%s-container", vmID)
+	snapshotName := fmt.Sprintf("%s-snapshot", vmID)
+
+	newContainer, err := ctrdClient.NewContainer(ctx,
+		containerName,
+		containerd.WithSnapshotter(naiveSnapshotterName),
+		containerd.WithNewSnapshot(snapshotName, image),
+		containerd.WithNewSpec(
+			oci.WithProcessArgs("/bin/sh", "-c", strings.Join(append(ctrCatCommands,
+				"/bin/cat /proc/mounts",
+			), " && ")),
+			oci.WithMounts(ctrBindMounts),
+			firecrackeroci.WithVMID(vmID),
+		),
+	)
+	require.NoError(t, err, "failed to create container %s", containerName)
+
+	outputLines := strings.Split(startAndWaitTask(ctx, t, newContainer), "\n")
+	if len(outputLines) < len(vmMounts) {
+		require.Fail(t, "unexpected ctr output, expected at least %d lines: %+v", len(vmMounts), outputLines)
+	}
+
+	mountInfos, err := internal.ParseProcMountLines(outputLines[len(vmMounts):]...)
+	require.NoError(t, err, "failed to parse /proc/mount")
+	// this is n^2, but it's doubtful the number of mounts will reach a point where that matters...
+	for _, vmMount := range vmMounts {
+		// Make sure that this vmMount's test file was cat'd by a container previously and output the expected
+		// file contents. This ensure the filesystem was successfully mounted in the VM and the container.
+		assert.Containsf(t, outputLines[:len(vmMounts)], strings.TrimSpace(vmMount.FSImgFile.Contents),
+			"did not find expected test file output for vm mount at %q", vmMount.ContainerPath)
+
+		// iterate over /proc/mounts entries, find this vmMount's entry in there and verify it was mounted
+		// with the correct options.
+		var foundExpectedMount bool
+		for _, actualMountInfo := range mountInfos {
+			if actualMountInfo.DestPath == vmMount.ContainerPath {
+				foundExpectedMount = true
+				assert.Equalf(t, vmMount.FilesystemType, actualMountInfo.Type,
+					"vm mount at %q did have expected filesystem type", vmMount.ContainerPath)
+				for _, vmMountOption := range vmMount.VMMountOptions {
+					assert.Containsf(t, actualMountInfo.Options, vmMountOption,
+						"vm mount at %q did not have expected option", vmMount.ContainerPath)
+				}
+				break
+			}
+		}
+		assert.Truef(t, foundExpectedMount, "did not find expected mount at container path %q", vmMount.ContainerPath)
+	}
+}
+
+func TestDriveMountFails_Isolated(t *testing.T) {
+	prepareIntegTest(t)
+
+	testTimeout := 120 * time.Second
+	ctx, cancel := context.WithTimeout(namespaces.WithNamespace(context.Background(), defaultNamespace), testTimeout)
+	defer cancel()
+
+	fcClient, err := fcClient.New(containerdSockPath + ".ttrpc")
+	require.NoError(t, err, "failed to create fccontrol client")
+
+	testImgHostPath := internal.CreateFSImg(ctx, t, "ext4", internal.FSImgFile{
+		Subpath:  "idc",
+		Contents: "doesn't matter",
+	})
+
+	for _, driveMount := range []*proto.FirecrackerDriveMount{
+		{
+			HostPath:       testImgHostPath,
+			VMPath:         "/proc/foo", // invalid due to being under /proc
+			FilesystemType: "ext4",
+		},
+		{
+			HostPath:       testImgHostPath,
+			VMPath:         "/dev/foo", // invalid due to being under /dev
+			FilesystemType: "ext4",
+		},
+		{
+			HostPath:       testImgHostPath,
+			VMPath:         "/sys/foo", // invalid due to being under /sys
+			FilesystemType: "ext4",
+		},
+	} {
+		_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
+			VMID:        "test-drive-mount-fails",
+			DriveMounts: []*proto.FirecrackerDriveMount{driveMount},
+		})
+
+		// TODO it would be good to check for more specific error types, see #294 for possible improvements:
+		// https://github.com/firecracker-microvm/firecracker-containerd/issues/294
+		assert.Error(t, err, "unexpectedly succeeded in creating a VM with a drive mount under banned path")
+	}
 }

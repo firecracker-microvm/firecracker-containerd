@@ -11,7 +11,6 @@ message ExtraData {
 	uint32 StdinPort = 3;
 	uint32 StdoutPort = 4;
 	uint32 StderrPort = 5;
-	string DriveID = 6;
 }
 
 // Message to specify network config for a Firecracker VM
@@ -107,12 +106,45 @@ message FirecrackerMachineConfiguration {
 }
 
 // Message to specify the block device config for a Firecracker VM
-message FirecrackerDrive {
-	bool IsWritable = 1; // Specifies if the drive is writable from a guest
-	bool IsRootDevice = 2; // Specifies if the drive is the root device
-	string Partuuid = 3; // Specifies the unique id of the boot partition on this device
-	string PathOnHost = 4; // Specifies the host level path for the guest drive
-	FirecrackerRateLimiter RateLimiter = 5; // Specifies a rate limiter for block IO
+message FirecrackerRootDrive {
+  // (Required) HostPath is the path on the host to the filesystem image or device
+  // that will supply the rootfs of the VM.
+  string HostPath = 1;
+
+  // (Optional) If the HostPath points to a drive or image with multiple
+  // partitions, Partuuid specifies which partition will be used to boot
+  // the VM
+  string Partuuid = 2;
+
+  // (Optional) If set to true, IsWritable results in the VM Guest's rootfs
+  // being mounted as read-write. Defaults to false, in which case the
+  // rootfs is mounted as read-only.
+  bool IsWritable = 3;
+
+  // (Optional) RateLimiter configuration that will be applied to the
+  // backing-drive for the VM's rootfs
+  FirecrackerRateLimiter RateLimiter = 4;
+}
+
+message FirecrackerDriveMount {
+  // (Required) HostPath is the path on the host to the filesystem image or device
+  // that will be mounted inside the VM.
+  string HostPath = 1;
+
+  // (Required) VMPath is the path inside the VM guest at which the filesystem
+  // image or device will be mounted.
+  string VMPath = 2;
+
+  // (Required) FilesystemType is the filesystem type (i.e. ext4, xfs, etc.), as
+  // used when mounting the filesystem image inside the VM. The VM guest kernel
+  // is expected to have support for this filesystem.
+  string FilesystemType = 3;
+
+  // (Optional) Options are fstab-style options that the mount will be performed
+  // within the VM (i.e. ["rw", "noatime"]). Defaults to none if not specified. 
+  repeated string Options = 4;
+
+  // TODO support for ratelimiters and read-only drives (issue #296)
 }
 
 // Message to specify an IO rate limiter with bytes/s and ops/s limits

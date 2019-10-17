@@ -34,6 +34,8 @@ import (
 	"github.com/firecracker-microvm/firecracker-containerd/eventbridge"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/event"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
+
+	drivemount "github.com/firecracker-microvm/firecracker-containerd/proto/service/drivemount/ttrpc"
 )
 
 const (
@@ -77,19 +79,25 @@ func main() {
 
 	log.G(shimCtx).Info("creating task service")
 
-	eventExchange := &event.ExchangeCloser{Exchange: exchange.NewExchange()}
-	taskService, err := NewTaskService(shimCtx, shimCancel, eventExchange)
-	if err != nil {
-		log.G(shimCtx).WithError(err).Fatal("failed to create task service")
-	}
-
 	server, err := ttrpc.NewServer()
 	if err != nil {
 		log.G(shimCtx).WithError(err).Fatal("failed to create ttrpc server")
 	}
 
-	taskAPI.RegisterTaskService(server, taskService)
+	eventExchange := &event.ExchangeCloser{Exchange: exchange.NewExchange()}
 	eventbridge.RegisterGetterService(server, eventbridge.NewGetterService(shimCtx, eventExchange))
+
+	taskService, err := NewTaskService(shimCtx, shimCancel, eventExchange)
+	if err != nil {
+		log.G(shimCtx).WithError(err).Fatal("failed to create task service")
+	}
+	taskAPI.RegisterTaskService(server, taskService)
+
+	dh, err := newDriveHandler(blockPath, drivePath)
+	if err != nil {
+		log.G(shimCtx).WithError(err).Fatal("failed to create drive handler")
+	}
+	drivemount.RegisterDriveMounterService(server, dh)
 
 	// Run ttrpc over vsock
 

@@ -97,7 +97,7 @@ func TestPatchStubDrive(t *testing.T) {
 	for i, path := range expectedReplacements {
 		driveID, err := handler.PatchStubDrive(ctx, client, path)
 		assert.NoError(t, err, "failed to patch stub drive")
-		assert.Equal(t, expectedDriveIDs[i], firecracker.StringValue(driveID), "drive ids are not equal")
+		assert.Equal(t, expectedDriveIDs[i], driveID, "drive ids are not equal")
 	}
 }
 

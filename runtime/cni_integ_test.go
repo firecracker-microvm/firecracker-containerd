@@ -92,10 +92,6 @@ func TestCNISupport_Isolated(t *testing.T) {
 				MachineCfg: &proto.FirecrackerMachineConfiguration{
 					MemSizeMib: 512,
 				},
-				RootDrive: &proto.FirecrackerDrive{
-					PathOnHost:   defaultVMRootfsPath,
-					IsRootDevice: true,
-				},
 				NetworkInterfaces: []*proto.FirecrackerNetworkInterface{{
 					CNIConfig: &proto.CNIConfiguration{
 						NetworkName:   cniNetworkName,
@@ -264,10 +260,6 @@ func TestCNIPlugin_Performance(t *testing.T) {
 				VMID: vmID(vmIndex),
 				MachineCfg: &proto.FirecrackerMachineConfiguration{
 					MemSizeMib: uint32(vmMemSizeMB),
-				},
-				RootDrive: &proto.FirecrackerDrive{
-					PathOnHost:   defaultVMRootfsPath,
-					IsRootDevice: true,
 				},
 				NetworkInterfaces: []*proto.FirecrackerNetworkInterface{{
 					CNIConfig: &proto.CNIConfiguration{

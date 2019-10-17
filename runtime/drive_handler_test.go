@@ -29,12 +29,12 @@ import (
 	ops "github.com/firecracker-microvm/firecracker-go-sdk/client/operations"
 	"github.com/firecracker-microvm/firecracker-go-sdk/fctesting"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestStubDriveHandler(t *testing.T) {
-	const tempPath = "test"
-	err := os.Mkdir(tempPath, os.ModePerm)
-	assert.NoError(t, err)
+	tempPath, err := ioutil.TempDir("./", "TestStubDriveHandler")
+	require.NoError(t, err)
 	defer func() {
 		os.RemoveAll(tempPath)
 	}()

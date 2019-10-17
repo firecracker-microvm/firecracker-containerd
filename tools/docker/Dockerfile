@@ -149,7 +149,6 @@ COPY _submodules/firecracker/target/$FIRECRACKER_TARGET/release/firecracker /usr
 COPY _submodules/firecracker/target/$FIRECRACKER_TARGET/release/jailer /usr/local/bin/
 COPY _submodules/runc/runc /usr/local/bin
 COPY tools/image-builder/rootfs.img /var/lib/firecracker-containerd/runtime/default-rootfs.img
-COPY tools/docker/firecracker-runtime.json /etc/containerd/firecracker-runtime.json
 
 # pull the images the tests need into the content store so we don't need internet
 # access during the tests themselves
@@ -164,8 +163,6 @@ RUN make -C /firecracker-containerd/internal test-bridged-tap && \
 	cp /firecracker-containerd/internal/test-bridged-tap /opt/cni/bin/ && \
 	chmod a+x /firecracker-containerd/internal/test-bridged-tap
 
-COPY tools/docker/firecracker-runtime.json /etc/containerd/firecracker-runtime.json
-COPY tools/docker/firecracker-runtime-defaultnetwork.json /etc/containerd/firecracker-runtime-defaultnetwork.json
 COPY tools/docker/naive-snapshotter/entrypoint.sh /entrypoint
 
 ENTRYPOINT ["/entrypoint"]

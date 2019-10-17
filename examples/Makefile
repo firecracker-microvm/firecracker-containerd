@@ -36,6 +36,7 @@ integ-test:
 		--ipc=host \
 		--volume /dev:/dev \
 		--volume /run/udev/control:/run/udev/control \
+		--volume $(CURDIR)/etc/containerd/firecracker-runtime.json:/etc/containerd/firecracker-runtime.json \
 		--volume $(CURDIR)/logs:/var/log/firecracker-containerd-test \
 		--env EXTRAGOARGS="${EXTRAGOARGS}" \
 		--workdir="/firecracker-containerd/examples" \

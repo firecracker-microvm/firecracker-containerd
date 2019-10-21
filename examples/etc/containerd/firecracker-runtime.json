@@ -5,5 +5,8 @@
   "root_drive": "/var/lib/firecracker-containerd/runtime/default-rootfs.img",
   "cpu_count": 1,
   "cpu_template": "T2",
-  "log_level": "Debug"
+  "log_level": "Debug",
+  "jailer": {
+    "runc_binary_path": "/usr/local/bin/runc"
+  }
 }

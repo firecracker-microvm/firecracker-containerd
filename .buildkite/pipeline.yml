@@ -86,11 +86,3 @@ steps:
     command: 'make -C examples integ-test'
     concurrency: 1
     concurrency_group: 'loop-device test'
-
-  - wait: ~
-    continue_on_failure: true
-
-  - label: ":wastebasket: cleanup"
-    agents:
-      queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
-    command: 'make clean'

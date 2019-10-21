@@ -14,6 +14,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -230,6 +231,7 @@ func TestBuildVMConfiguration(t *testing.T) {
 			defer os.RemoveAll(tempDir)
 
 			svc.shimDir = vm.Dir(tempDir)
+			svc.jailer = newNoopJailer(context.Background(), svc.logger, svc.shimDir)
 
 			relSockPath, err := svc.shimDir.FirecrackerSockRelPath()
 			require.NoError(t, err, "failed to get firecracker sock rel path")
@@ -321,6 +323,7 @@ func TestDebugConfig(t *testing.T) {
 		assert.NoError(t, err, "failed to create stub drive path")
 
 		c.service.shimDir = vm.Dir(stubDrivePath)
+		c.service.jailer = newNoopJailer(context.Background(), c.service.logger, c.service.shimDir)
 
 		req := proto.CreateVMRequest{}
 

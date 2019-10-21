@@ -51,7 +51,10 @@ type stubDriveHandler struct {
 	mutex          sync.Mutex
 }
 
-func newStubDriveHandler(path string, logger *logrus.Entry, count int) (*stubDriveHandler, error) {
+// stubDrivesOpt is used to make and modify changes to the stub drives.
+type stubDrivesOpt func(stubDrives []models.Drive) error
+
+func newStubDriveHandler(path string, logger *logrus.Entry, count int, opts ...stubDrivesOpt) (*stubDriveHandler, error) {
 	h := stubDriveHandler{
 		RootPath: path,
 		logger:   logger,
@@ -59,6 +62,13 @@ func newStubDriveHandler(path string, logger *logrus.Entry, count int) (*stubDri
 	drives, err := h.createStubDrives(count)
 	if err != nil {
 		return nil, err
+	}
+
+	for _, opt := range opts {
+		if err := opt(drives); err != nil {
+			h.logger.WithError(err).Debug("failed to apply option to stub drives")
+			return nil, err
+		}
 	}
 	h.drives = drives
 	return &h, nil

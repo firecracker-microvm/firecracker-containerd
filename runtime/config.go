@@ -47,11 +47,17 @@ type Config struct {
 	LogLevel              string `json:"log_level"`
 	HtEnabled             bool   `json:"ht_enabled"`
 	Debug                 bool   `json:"debug"`
-
 	// If a CreateVM call specifies no network interfaces and DefaultNetworkInterfaces is non-empty,
 	// the VM will default to using the network interfaces as specified here. This is especially
 	// useful when a CNI-based network interface is provided in DefaultNetworkInterfaces.
 	DefaultNetworkInterfaces []proto.FirecrackerNetworkInterface `json:"default_network_interfaces"`
+	JailerConfig             JailerConfig                        `json:"jailer"`
+}
+
+// JailerConfig houses a set of configurable values for jailing
+// TODO: Add netns field
+type JailerConfig struct {
+	RuncBinaryPath string `json:"runc_binary_path"`
 }
 
 // LoadConfig loads configuration from JSON file at 'path'
@@ -76,6 +82,7 @@ func LoadConfig(path string) (*Config, error) {
 		CPUCount:        defaultCPUCount,
 		CPUTemplate:     string(defaultCPUTemplate),
 	}
+
 	if err := json.Unmarshal(data, cfg); err != nil {
 		return nil, errors.Wrapf(err, "failed to unmarshal config from %q", path)
 	}

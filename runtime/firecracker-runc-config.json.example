@@ -1,0 +1,130 @@
+{
+    "ociVersion": "1.0.1",
+    "process": {
+        "terminal": false,
+        "user": {
+            "uid": 0,
+            "gid": 0
+        },
+        "args": [
+            "/firecracker",
+            "--api-sock",
+            "api.socket"
+        ],
+        "env": [
+            "PATH=/"
+        ],
+        "cwd": "/",
+        "capabilities": {
+            "effective": [
+            ],
+            "bounding": [
+            ],
+            "inheritable": [
+            ],
+            "permitted": [
+            ],
+            "ambient": [
+            ]
+        },
+        "rlimits": [
+            {
+                "type": "RLIMIT_NOFILE",
+                "hard": 1024,
+                "soft": 1024
+            }
+        ],
+        "noNewPrivileges": true
+    },
+    "root": {
+        "path": "rootfs",
+        "readonly": false
+    },
+    "hostname": "runc",
+    "mounts": [
+        {
+            "destination": "/proc",
+            "type": "proc",
+            "source": "proc"
+        }
+    ],
+    "linux": {
+        "devices": [
+            {
+               "path": "/dev/kvm",
+               "type": "c",
+               "major": 10,
+               "minor": 232,
+               "fileMode": 438,
+               "uid": 0,
+               "gid": 0
+            },
+            {
+               "path": "/dev/net/tun",
+               "type": "c",
+               "major": 10,
+               "minor": 200,
+               "fileMode": 438,
+               "uid": 0,
+               "gid": 0
+            }
+        ],
+        "resources": {
+            "devices": [
+                {
+                    "allow": false,
+                    "access": "rwm"
+                },
+                {
+                    "allow": true,
+                    "major": 10,
+                    "minor": 232,
+                    "access": "rwm"
+                },
+                {
+                    "allow": true,
+                    "major": 10,
+                    "minor": 200,
+                    "access": "rwm"
+                }
+            ]
+        },
+        "namespaces": [
+            {
+                "type": "cgroup"
+            },
+            {
+                "type": "pid"
+            },
+            {
+                "type": "network"
+            },
+            {
+                "type": "ipc"
+            },
+            {
+                "type": "uts"
+            },
+            {
+                "type": "mount"
+            }
+        ],
+        "maskedPaths": [
+            "/proc/asound",
+            "/proc/kcore",
+            "/proc/latency_stats",
+            "/proc/timer_list",
+            "/proc/timer_stats",
+            "/proc/sched_debug",
+            "/sys/firmware",
+            "/proc/scsi"
+        ],
+        "readonlyPaths": [
+            "/proc/bus",
+            "/proc/fs",
+            "/proc/irq",
+            "/proc/sys",
+            "/proc/sysrq-trigger"
+        ]
+    }
+}

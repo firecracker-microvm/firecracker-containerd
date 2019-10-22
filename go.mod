@@ -5,7 +5,7 @@ require (
 	github.com/StackExchange/wmi v0.0.0-20181212234831-e0a55b97c705 // indirect
 	github.com/containerd/cgroups v0.0.0-20181105182409-82cb49fc1779 // indirect
 	github.com/containerd/console v0.0.0-20181022165439-0650fd9eeb50 // indirect
-	github.com/containerd/containerd v1.3.0-beta.2
+	github.com/containerd/containerd v1.3.0
 	github.com/containerd/continuity v0.0.0-20181027224239-bea7585dbfac
 	github.com/containerd/fifo v0.0.0-20190816180239-bda0ff6ed73c
 	github.com/containerd/go-runc v0.0.0-20190226155025-7d11b49dc076 // indirect
@@ -27,6 +27,7 @@ require (
 	github.com/golang/protobuf v1.3.1
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0 // indirect
 	github.com/hashicorp/go-multierror v1.0.0
+	github.com/imdario/mergo v0.3.8 // indirect
 	github.com/mdlayher/vsock v0.0.0-20190329173812-a92c53d5dcab
 	github.com/miekg/dns v1.1.16
 	github.com/opencontainers/go-digest v1.0.0-rc1 // indirect

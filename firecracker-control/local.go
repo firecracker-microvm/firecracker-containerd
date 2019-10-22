@@ -44,7 +44,8 @@ import (
 )
 
 var (
-	_ fccontrolTtrpc.FirecrackerService = (*local)(nil)
+	_               fccontrolTtrpc.FirecrackerService = (*local)(nil)
+	ttrpcAddressEnv                                   = "TTRPC_ADDRESS"
 )
 
 func init() {
@@ -305,7 +306,9 @@ func (s *local) newShim(ns, vmID, containerdAddress string, shimSocket *net.Unix
 	cmd.ExtraFiles = append(cmd.ExtraFiles, shimSocketFile, fcSocketFile)
 	fcSocketFDNum := 2 + len(cmd.ExtraFiles) // "2 +" because ExtraFiles come after stderr (fd #2)
 
+	ttrpc := containerdAddress + ".ttrpc"
 	cmd.Env = append(os.Environ(),
+		fmt.Sprintf("%s=%s", ttrpcAddressEnv, ttrpc),
 		fmt.Sprintf("%s=%s", internal.VMIDEnvVarKey, vmID),
 		fmt.Sprintf("%s=%s", internal.FCSocketFDEnvKey, strconv.Itoa(fcSocketFDNum))) // TODO remove after containerd is updated to expose ttrpc server to shim
 
@@ -317,6 +320,8 @@ func (s *local) newShim(ns, vmID, containerdAddress string, shimSocket *net.Unix
 	cmd.Stderr = logger.WithField("shim_stream", "stderr").WriterLevel(logrus.ErrorLevel)
 	// shim stdout on the other hand is already formatted by logrus, so pass that transparently through to containerd logs
 	cmd.Stdout = logger.Logger.Out
+
+	logger.Debugf("starting %s", internal.ShimBinaryName)
 
 	err = cmd.Start()
 	if err != nil {

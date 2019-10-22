@@ -268,7 +268,7 @@ func (s *service) serveFCControl() error {
 	return nil
 }
 
-func (s *service) StartShim(shimCtx context.Context, containerID, containerdBinary, containerdAddress string) (string, error) {
+func (s *service) StartShim(shimCtx context.Context, containerID, containerdBinary, containerdAddress, containerdTTRPCAddress string) (string, error) {
 	// In the shim start routine, we can assume that containerd provided a "log" FIFO in the current working dir.
 	// We have to use that instead of stdout/stderr because containerd reads the stdio pipes of shim start to get
 	// either the shim address or the error returned here.
@@ -325,7 +325,7 @@ func (s *service) StartShim(shimCtx context.Context, containerID, containerdBina
 		log.Info("will start a persistent VM")
 	}
 
-	client, err := ttrpcutil.NewClient(containerdAddress + ".ttrpc")
+	client, err := ttrpcutil.NewClient(containerdTTRPCAddress)
 	if err != nil {
 		return "", err
 	}

@@ -50,6 +50,7 @@ integ-test:
 			--volume /dev:/dev \
 			--volume /run/udev/control:/run/udev/control \
 			--volume $(CURDIR)/logs:/var/log/firecracker-containerd-test \
+			--volume $(CURDIR)/naive.toml:/etc/containerd/snapshotter/naive.toml \
 			--env ENABLE_ISOLATED_TESTS=1 \
 			--workdir="/firecracker-containerd/runtime" \
 			--init \
@@ -80,6 +81,7 @@ perf-test:
 		--volume /dev:/dev \
 		--volume /run/udev/control:/run/udev/control \
 		--volume $(CURDIR)/logs:/var/log/firecracker-containerd-test \
+		--volume $(CURDIR)/naive.toml:/etc/containerd/snapshotter/naive.toml \
 		--env ENABLE_ISOLATED_TESTS=1 \
 		--env PERF_PLUGIN_NAME=$(PERF_PLUGIN_NAME) \
 		--env PERF_VMCOUNT=$(PERF_VMCOUNT) \

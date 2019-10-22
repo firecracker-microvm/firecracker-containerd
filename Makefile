@@ -62,7 +62,7 @@ distclean: clean
 	$(call rmi-if-exists,localhost/$(RUNC_BUILDER_NAME):$(DOCKER_IMAGE_TAG))
 	$(call rmi-if-exists,localhost/$(FIRECRACKER_BUILDER_NAME):$(DOCKER_IMAGE_TAG))
 	docker volume rm -f $(CARGO_CACHE_VOLUME_NAME)
-	$(call rmi-if-exists,localhost/firecracker-containerd-naive-integ-test:$(DOCKER_IMAGE_TAG))
+	$(call rmi-if-exists,localhost/firecracker-containerd-integ-test:$(DOCKER_IMAGE_TAG))
 	$(call rmi-if-exists,localhost/firecracker-containerd-test:$(DOCKER_IMAGE_TAG))
 
 lint:
@@ -111,7 +111,7 @@ image: $(RUNC_BIN) agent
 
 test-images: test-images-stamp
 
-test-images-stamp: | image firecracker-containerd-naive-integ-test-image firecracker-containerd-test-image
+test-images-stamp: | image firecracker-containerd-integ-test-image firecracker-containerd-test-image
 	touch $@
 
 firecracker-containerd-test-image:
@@ -121,15 +121,15 @@ firecracker-containerd-test-image:
 		--target firecracker-containerd-test \
 		--tag localhost/firecracker-containerd-test:${DOCKER_IMAGE_TAG} .
 
-firecracker-containerd-naive-integ-test-image: $(RUNC_BIN) $(FIRECRACKER_BIN) $(JAILER_BIN)
+firecracker-containerd-integ-test-image: $(RUNC_BIN) $(FIRECRACKER_BIN) $(JAILER_BIN)
 	DOCKER_BUILDKIT=1 docker build \
 		--progress=plain \
 		--file tools/docker/Dockerfile \
-		--target firecracker-containerd-naive-integ-test \
+		--target firecracker-containerd-integ-test \
 		--build-arg FIRECRACKER_TARGET=$(FIRECRACKER_TARGET) \
-		--tag localhost/firecracker-containerd-naive-integ-test:${DOCKER_IMAGE_TAG} .
+		--tag localhost/firecracker-containerd-integ-test:${DOCKER_IMAGE_TAG} .
 
-.PHONY: all $(SUBDIRS) clean proto deps lint install image test-images firecracker-container-test-image firecracker-containerd-naive-integ-test-image test test-in-docker $(TEST_SUBDIRS) integ-test $(INTEG_TEST_SUBDIRS)
+.PHONY: all $(SUBDIRS) clean proto deps lint install image test-images firecracker-container-test-image firecracker-containerd-integ-test-image test test-in-docker $(TEST_SUBDIRS) integ-test $(INTEG_TEST_SUBDIRS)
 
 ##########################
 # CNI Network

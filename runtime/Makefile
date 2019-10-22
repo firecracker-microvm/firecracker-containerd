@@ -53,7 +53,7 @@ integ-test:
 			--env ENABLE_ISOLATED_TESTS=1 \
 			--workdir="/firecracker-containerd/runtime" \
 			--init \
-			localhost/firecracker-containerd-naive-integ-test:$(DOCKER_IMAGE_TAG) \
+			localhost/firecracker-containerd-integ-test:$(DOCKER_IMAGE_TAG) \
 			"go test $(EXTRAGOARGS) -run \"^$(TESTNAME)$$\"" || exit 1; \
 	)
 
@@ -88,7 +88,7 @@ perf-test:
 		--env PERF_TARGET_BANDWIDTH=$(PERF_TARGET_BANDWIDTH) \
 		--workdir="/firecracker-containerd/runtime" \
 		--init \
-		localhost/firecracker-containerd-naive-integ-test:$(DOCKER_IMAGE_TAG) \
+		localhost/firecracker-containerd-integ-test:$(DOCKER_IMAGE_TAG) \
 		"go test -timeout 0 -v -count=1 -run \"^$(PERF_TESTNAME)$$\""
 
 clean:

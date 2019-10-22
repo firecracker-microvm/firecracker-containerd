@@ -92,7 +92,8 @@ FROM base as firecracker-containerd-test
 ENV PATH="/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin:/usr/local/sbin:/usr/local/go/bin" \
 	DEBIAN_FRONTEND="noninteractive" \
 	FICD_LOG_DIR="/var/log/firecracker-containerd-test"
-ENV FICD_SNAPSHOTTER_OUTFILE="${FICD_LOG_DIR}/snapshotter.out" \
+ENV FICD_SNAPSHOTTER="naive" \
+	FICD_SNAPSHOTTER_OUTFILE="${FICD_LOG_DIR}/snapshotter.out" \
 	FICD_CONTAINERD_OUTFILE="${FICD_LOG_DIR}/containerd.out"
 RUN apt-get update && apt-get install --yes --no-install-recommends \
 		build-essential \
@@ -142,7 +143,7 @@ ENTRYPOINT ["/bin/bash", "-c"]
 
 # Test image that starts up containerd and the naive snapshotter. The default CMD will drop to a bash shell. Overrides
 # to CMD will be provided appended to /bin/bash -c
-FROM firecracker-containerd-test as firecracker-containerd-naive-integ-test
+FROM firecracker-containerd-test as firecracker-containerd-integ-test
 ARG FIRECRACKER_TARGET=x86_64-unknown-linux-musl
 
 COPY _submodules/firecracker/target/$FIRECRACKER_TARGET/release/firecracker /usr/local/bin/
@@ -152,7 +153,7 @@ COPY tools/image-builder/rootfs.img /var/lib/firecracker-containerd/runtime/defa
 
 # pull the images the tests need into the content store so we don't need internet
 # access during the tests themselves
-COPY tools/docker/naive-snapshotter/config.toml /etc/containerd/config.toml
+COPY tools/docker/config.toml /etc/containerd/config.toml
 RUN containerd 2>/dev/null & \
 	ctr content fetch docker.io/library/alpine:3.10.1 >/dev/null && \
 	ctr content fetch docker.io/mlabbe/iperf3:3.6-r0 >/dev/null
@@ -163,7 +164,7 @@ RUN make -C /firecracker-containerd/internal test-bridged-tap && \
 	cp /firecracker-containerd/internal/test-bridged-tap /opt/cni/bin/ && \
 	chmod a+x /firecracker-containerd/internal/test-bridged-tap
 
-COPY tools/docker/naive-snapshotter/entrypoint.sh /entrypoint
+COPY tools/docker/entrypoint.sh /entrypoint
 
 ENTRYPOINT ["/entrypoint"]
 CMD ["exec /bin/bash"]
@@ -178,7 +179,7 @@ CMD ["exec /bin/bash"]
 
 # Debugging image that starts up containerd and the naive snapshotter and includes some additional basic debugging tools.
 # TODO add firectl here
-FROM firecracker-containerd-naive-integ-test as firecracker-containerd-dev
+FROM firecracker-containerd-integ-test as firecracker-containerd-dev
 RUN apt-get update \
 	&& apt-get install -y \
 		strace \

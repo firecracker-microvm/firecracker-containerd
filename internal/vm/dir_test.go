@@ -14,15 +14,23 @@
 package vm
 
 import (
+	"io/ioutil"
+	"os"
+	"path"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var invalidContainerIDs = []string{"", "id?", "*", "id/1", "id\\"}
 
 func TestShimDir(t *testing.T) {
+	runDir, err := ioutil.TempDir("", "run")
+	require.NoError(t, err)
+	defer os.RemoveAll(runDir)
+
 	tests := []struct {
 		name   string
 		ns     string
@@ -40,22 +48,22 @@ func TestShimDir(t *testing.T) {
 		{name: "id with ?", ns: "test", id: "?", outErr: `invalid vm id: identifier "?" must match`},
 		{name: "id with *", ns: "test", id: "*", outErr: `invalid vm id: identifier "*" must match`},
 		{name: "id with ,", ns: "test", id: ",", outErr: `invalid vm id: identifier "," must match`},
-		{name: "valid", ns: "ns", id: "1", outDir: "/run/firecracker-containerd/ns/1"},
-		{name: "valid with dashes", ns: "test-123", id: "123-456", outDir: "/run/firecracker-containerd/test-123/123-456"},
-		{name: "valid with dots", ns: "test.123", id: "123.456", outDir: "/run/firecracker-containerd/test.123/123.456"},
+		{name: "valid", ns: "ns", id: "1", outDir: "ns/1"},
+		{name: "valid with dashes", ns: "test-123", id: "123-456", outDir: "test-123/123-456"},
+		{name: "valid with dots", ns: "test.123", id: "123.456", outDir: "test.123/123.456"},
 	}
 
 	for _, tc := range tests {
 		test := tc
 		t.Run(test.name, func(t *testing.T) {
-			dir, err := ShimDir(test.ns, test.id)
+			dir, err := shimDir(runDir, test.ns, test.id)
 
 			if test.outErr != "" {
 				assert.Error(t, err)
 				assert.True(t, strings.Contains(err.Error(), test.outErr), err.Error())
 			} else {
 				assert.NoError(t, err)
-				assert.EqualValues(t, dir, test.outDir)
+				assert.EqualValues(t, dir, path.Join(runDir, test.outDir))
 			}
 		})
 	}

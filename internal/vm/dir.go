@@ -28,13 +28,13 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-const (
-	varRunDir = "/var/run/firecracker-containerd/"
-)
-
 // ShimDir holds files, sockets and FIFOs scoped to a single shim managing the
 // VM with the given VMID. It is unique per-VM and containerd namespace.
 func ShimDir(namespace, vmID string) (Dir, error) {
+	return shimDir("/var/run/firecracker-containerd/", namespace, vmID)
+}
+
+func shimDir(varRunDir, namespace, vmID string) (Dir, error) {
 	if err := identifiers.Validate(namespace); err != nil {
 		return "", errors.Wrap(err, "invalid namespace")
 	}

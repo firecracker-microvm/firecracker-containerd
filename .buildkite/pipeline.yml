@@ -72,9 +72,7 @@ steps:
     artifact_paths:
       - "runtime/logs/*"
     command:
-      - make -C runtime integ-test FICD_SNAPSHOTTER=devmapper FICD_DM_POOL=build_${BUILDKITE_BUILD_NUMBER}
-    concurrency: 1
-    concurrency_group: 'devmapper'
+      - make -C runtime integ-test FICD_SNAPSHOTTER=devmapper FICD_DM_POOL=build_${BUILDKITE_BUILD_NUMBER}_runtime
 
   - label: ":rotating_light: :exclamation: example tests (naive)"
     agents:
@@ -97,6 +95,4 @@ steps:
     artifact_paths:
       - "examples/logs/*"
     command:
-      - make -C examples integ-test TEST_SS=devmapper TEST_POOL=build_${BUILDKITE_BUILD_NUMBER}
-    concurrency: 1
-    concurrency_group: 'devmapper'
+      - make -C examples integ-test TEST_SS=devmapper TEST_POOL=build_${BUILDKITE_BUILD_NUMBER}_example

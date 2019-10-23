@@ -43,6 +43,7 @@ integ-test:
 	mkdir -p $(CURDIR)/logs
 
 	$(foreach TESTNAME,$(INTEG_TESTNAMES),\
+		$(CURDIR)/../tools/thinpool.sh reset "$(FICD_DM_POOL)"; \
 		docker run --rm -it \
 			--privileged \
 			--ipc=host \
@@ -50,8 +51,9 @@ integ-test:
 			--volume /dev:/dev \
 			--volume /run/udev/control:/run/udev/control \
 			--volume $(CURDIR)/logs:/var/log/firecracker-containerd-test \
-			--volume $(CURDIR)/naive.toml:/etc/containerd/snapshotter/naive.toml \
 			--env ENABLE_ISOLATED_TESTS=1 \
+			--env FICD_SNAPSHOTTER=$(FICD_SNAPSHOTTER) \
+			--env FICD_DM_POOL=$(FICD_DM_POOL) \
 			--workdir="/firecracker-containerd/runtime" \
 			--init \
 			localhost/firecracker-containerd-integ-test:$(DOCKER_IMAGE_TAG) \
@@ -63,6 +65,9 @@ PERF_VMCOUNT?=25
 PERF_RUNTIME_SECONDS?=600
 PERF_VM_MEMSIZE_MB?=1024
 PERF_TARGET_BANDWIDTH?=1G
+
+FICD_SNAPSHOTTER?=naive
+FICD_DM_POOL?=
 
 tc-redirect-tap-perf:
 	$(MAKE) PERF_PLUGIN_NAME=tc-redirect-tap perf-test
@@ -81,13 +86,14 @@ perf-test:
 		--volume /dev:/dev \
 		--volume /run/udev/control:/run/udev/control \
 		--volume $(CURDIR)/logs:/var/log/firecracker-containerd-test \
-		--volume $(CURDIR)/naive.toml:/etc/containerd/snapshotter/naive.toml \
 		--env ENABLE_ISOLATED_TESTS=1 \
 		--env PERF_PLUGIN_NAME=$(PERF_PLUGIN_NAME) \
 		--env PERF_VMCOUNT=$(PERF_VMCOUNT) \
 		--env PERF_RUNTIME_SECONDS=$(PERF_RUNTIME_SECONDS) \
 		--env PERF_VM_MEMSIZE_MB=$(PERF_VM_MEMSIZE_MB) \
 		--env PERF_TARGET_BANDWIDTH=$(PERF_TARGET_BANDWIDTH) \
+		--env FICD_SNAPSHOTTER=$(FICD_SNAPSHOTTER) \
+		--env FICD_DM_POOL=$(FICD_DM_POOL) \
 		--workdir="/firecracker-containerd/runtime" \
 		--init \
 		localhost/firecracker-containerd-integ-test:$(DOCKER_IMAGE_TAG) \

@@ -31,6 +31,7 @@ test:
 
 integ-test:
 	mkdir -p $(CURDIR)/logs
+	$(CURDIR)/../tools/thinpool.sh reset "$(TEST_POOL)"
 	docker run --rm -it \
 		--privileged \
 		--ipc=host \
@@ -38,8 +39,8 @@ integ-test:
 		--volume /run/udev/control:/run/udev/control \
 		--volume $(CURDIR)/etc/containerd/firecracker-runtime.json:/etc/containerd/firecracker-runtime.json \
 		--volume $(CURDIR)/logs:/var/log/firecracker-containerd-test \
-		--volume $(shell ./prepare-config-toml.sh $(TEST_SS) $(TEST_POOL)):/etc/containerd/snapshotter/config.toml \
 		--env FICD_SNAPSHOTTER=$(TEST_SS) \
+		--env FICD_DM_POOL=$(TEST_POOL) \
 		--env EXTRAGOARGS="${EXTRAGOARGS}" \
 		--workdir="/firecracker-containerd/examples" \
 		localhost/firecracker-containerd-integ-test:${DOCKER_IMAGE_TAG} \
@@ -49,7 +50,7 @@ TEST_GATEWAY?=172.16.0.1
 TEST_IP?=172.16.0.2
 TEST_SUBNET?=/24
 TEST_SS?=naive
-TEST_POOL?=fcci--vg-fcci--thin
+TEST_POOL?=
 testtap:
 	ip link add br0 type bridge
 	ip tuntap add tap0 mode tap

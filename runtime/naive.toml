@@ -1,4 +1,0 @@
-[proxy_plugins]
-  [proxy_plugins.firecracker-naive]
-    type = "snapshot"
-    address = "/var/run/firecracker-containerd/naive-snapshotter.sock"

@@ -32,6 +32,15 @@ var defaultRuntimeConfig = Config{
 	LogLevel:              "Debug",
 }
 
+func defaultSnapshotterName() string {
+	name := os.Getenv("FICD_SNAPSHOTTER")
+	if name == "" || name == "naive" {
+		return "firecracker-naive"
+	}
+
+	return name
+}
+
 func prepareIntegTest(t *testing.T, options ...func(*Config)) {
 	t.Helper()
 

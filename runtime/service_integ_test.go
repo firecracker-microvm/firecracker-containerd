@@ -221,12 +221,32 @@ func createTapDevice(ctx context.Context, tapName string) error {
 }
 
 func TestMultipleVMs_Isolated(t *testing.T) {
-	prepareIntegTest(t)
+	prepareIntegTest(t, func(cfg *Config) {
+		cfg.JailerConfig.RuncBinaryPath = "/usr/local/bin/runc"
+	})
 
-	const (
-		numVMs          = 3
-		containersPerVM = 5
-	)
+	cases := []struct {
+		MaxContainers int32
+		JailerConfig  *proto.JailerConfig
+	}{
+		{
+			MaxContainers: 5,
+		},
+		{
+			MaxContainers: 5,
+		},
+		{
+			MaxContainers: 5,
+		},
+		{
+			MaxContainers: 3,
+			JailerConfig:  &proto.JailerConfig{},
+		},
+		{
+			MaxContainers: 3,
+			JailerConfig:  &proto.JailerConfig{},
+		},
+	}
 
 	testTimeout := 600 * time.Second
 	ctx, cancel := context.WithTimeout(namespaces.WithNamespace(context.Background(), defaultNamespace), testTimeout)
@@ -246,9 +266,9 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 	// container ends up in the right VM by assigning each VM a network device with a unique mac address and having each container
 	// print the mac address it sees inside its VM.
 	var vmWg sync.WaitGroup
-	for vmID := 0; vmID < numVMs; vmID++ {
+	for vmID, c := range cases {
 		vmWg.Add(1)
-		go func(vmID int) {
+		go func(vmID int, containerCount int32, jailerConfig *proto.JailerConfig) {
 			defer vmWg.Done()
 
 			tapName := fmt.Sprintf("tap%d", vmID)
@@ -258,7 +278,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 			rootfsPath := defaultVMRootfsPath
 
 			fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
-			_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
+			req := &proto.CreateVMRequest{
 				VMID: strconv.Itoa(vmID),
 				MachineCfg: &proto.FirecrackerMachineConfiguration{
 					MemSizeMib: 512,
@@ -276,17 +296,36 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 						},
 					},
 				},
-				ContainerCount: containersPerVM,
-			})
+				ContainerCount: containerCount,
+				JailerConfig:   jailerConfig,
+			}
+
+			if jailerConfig != nil {
+				req.NetworkInterfaces = nil
+			}
+
+			_, err = fcClient.CreateVM(ctx, req)
 			require.NoError(t, err, "failed to create vm")
 
 			var containerWg sync.WaitGroup
-			for containerID := 0; containerID < containersPerVM; containerID++ {
+			for containerID := 0; containerID < int(containerCount); containerID++ {
 				containerWg.Add(1)
 				go func(containerID int) {
 					defer containerWg.Done()
 					containerName := fmt.Sprintf("container-%d-%d", vmID, containerID)
 					snapshotName := fmt.Sprintf("snapshot-%d-%d", vmID, containerID)
+					processArgs := oci.WithProcessArgs("/bin/sh", "-c", strings.Join([]string{
+						fmt.Sprintf("/bin/cat /sys/class/net/%s/address", defaultVMNetDevName),
+						"/usr/bin/readlink /proc/self/ns/mnt",
+						fmt.Sprintf("/bin/sleep %d", testTimeout/time.Second),
+					}, " && "))
+
+					if jailerConfig != nil {
+						// TODO: this if statement block can go away once we add netns
+						processArgs = oci.WithProcessArgs("/bin/sh", "-c", strings.Join([]string{
+							fmt.Sprintf("/bin/sleep %d", testTimeout/time.Second),
+						}, " && "))
+					}
 
 					// spawn a container that just prints the VM's eth0 mac address (which we have set uniquely per VM)
 					newContainer, err := client.NewContainer(ctx,
@@ -294,11 +333,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 						containerd.WithSnapshotter(naiveSnapshotterName),
 						containerd.WithNewSnapshot(snapshotName, image),
 						containerd.WithNewSpec(
-							oci.WithProcessArgs("/bin/sh", "-c", strings.Join([]string{
-								fmt.Sprintf("/bin/cat /sys/class/net/%s/address", defaultVMNetDevName),
-								"/usr/bin/readlink /proc/self/ns/mnt",
-								fmt.Sprintf("/bin/sleep %d", testTimeout/time.Second),
-							}, " && ")),
+							processArgs,
 							oci.WithHostNamespace(specs.NetworkNamespace),
 							firecrackeroci.WithVMID(strconv.Itoa(vmID)),
 						),
@@ -377,6 +412,17 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 					execWg.Wait()
 					close(execStdouts)
 
+					if jailerConfig != nil {
+						shimDir, err := vm.ShimDir("default", strconv.Itoa(vmID))
+						require.NoError(t, err, "failed to get shim dir")
+
+						jailer := &runcJailer{
+							ociBundlePath: string(shimDir),
+						}
+						_, err = os.Stat(jailer.RootPath())
+						require.NoError(t, err, "failed to stat root path of jailer")
+					}
+
 					// Verify each exec had the same stdout and use that value as the mount namespace that will be compared
 					// against that of the task below.
 					var execMntNS string
@@ -408,13 +454,21 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 						}
 
 						stdoutLines := strings.Split(strings.TrimSpace(taskStdout.String()), "\n")
-						require.Len(t, stdoutLines, 2)
+						lines := 2
+						if jailerConfig != nil {
+							lines = 1
+						}
+						require.Len(t, stdoutLines, lines)
 
 						printedVMID := strings.TrimSpace(stdoutLines[0])
-						require.Equal(t, vmIDtoMacAddr(uint(vmID)), printedVMID, "unexpected VMID output from container %q", containerName)
+						// TODO: Remove this if statement once we can add a netns which
+						// will allow firecracker to have visibility of the tap devices.
+						if jailerConfig == nil {
+							require.Equal(t, vmIDtoMacAddr(uint(vmID)), printedVMID, "unexpected VMID output from container %q", containerName)
 
-						taskMntNS := strings.TrimSpace(stdoutLines[1])
-						require.Equal(t, execMntNS, taskMntNS, "unexpected mnt NS output from container %q", containerName)
+							taskMntNS := strings.TrimSpace(stdoutLines[1])
+							require.Equal(t, execMntNS, taskMntNS, "unexpected mnt NS output from container %q", containerName)
+						}
 
 					case <-ctx.Done():
 						require.Fail(t, "context cancelled",
@@ -447,7 +501,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 
 			_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: strconv.Itoa(vmID), TimeoutSeconds: 5})
 			require.NoError(t, err, "failed to stop VM %d", vmID)
-		}(vmID)
+		}(vmID, c.MaxContainers, c.JailerConfig)
 	}
 
 	vmWg.Wait()

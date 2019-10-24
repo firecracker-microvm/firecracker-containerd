@@ -109,6 +109,7 @@ RUN mkdir -p /var/lib/firecracker-containerd/runtime \
         && curl --silent --show-error --retry 3 --max-time 30 --output default-vmlinux.bin \
 	"https://s3.amazonaws.com/spec.ccfc.min/img/hello/kernel/hello-vmlinux.bin" \
 	&& echo "882fa465c43ab7d92e31bd4167da3ad6a82cb9230f9b0016176df597c6014cef default-vmlinux.bin" | sha256sum -c - \
+	&& chmod 0444 default-vmlinux.bin \
 	&& mv default-vmlinux.bin /var/lib/firecracker-containerd/runtime/default-vmlinux.bin
 
 COPY --from=firecracker-containerd-build /home/builder/firecracker-containerd /firecracker-containerd
@@ -150,6 +151,7 @@ COPY _submodules/firecracker/target/$FIRECRACKER_TARGET/release/firecracker /usr
 COPY _submodules/firecracker/target/$FIRECRACKER_TARGET/release/jailer /usr/local/bin/
 COPY _submodules/runc/runc /usr/local/bin
 COPY tools/image-builder/rootfs.img /var/lib/firecracker-containerd/runtime/default-rootfs.img
+COPY runtime/firecracker-runc-config.json.example /etc/containerd/firecracker-runc-config.json
 
 # pull the images the tests need into the content store so we don't need internet
 # access during the tests themselves
@@ -158,7 +160,9 @@ RUN containerd 2>/dev/null & \
 	ctr content fetch docker.io/library/alpine:3.10.1 >/dev/null && \
 	ctr content fetch docker.io/mlabbe/iperf3:3.6-r0 >/dev/null
 
-RUN mkdir -p /var/lib/firecracker-containerd/naive
+COPY tools/docker/naive-snapshotter/entrypoint.sh /entrypoint
+RUN chmod 0444 /var/lib/firecracker-containerd/runtime/default-rootfs.img \
+  && mkdir -p /var/lib/firecracker-containerd/naive
 RUN make -C /firecracker-containerd demo-network
 RUN make -C /firecracker-containerd/internal test-bridged-tap && \
 	cp /firecracker-containerd/internal/test-bridged-tap /opt/cni/bin/ && \

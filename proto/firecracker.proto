@@ -32,6 +32,8 @@ message CreateVMRequest {
 
     // Whether the VM should exit after all tasks running in it have been deleted.
     bool ExitAfterAllTasksDeleted = 9;
+
+    JailerConfig JailerConfig = 10;
 }
 
 message StopVMRequest {
@@ -54,4 +56,7 @@ message GetVMInfoResponse {
 message SetVMMetadataRequest {
     string VMID = 1;
     string Metadata = 2;
+}
+
+message JailerConfig {
 }

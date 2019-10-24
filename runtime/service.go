@@ -127,6 +127,8 @@ type service struct {
 	machineConfig    *firecracker.Config
 	vsockIOPortCount uint32
 	vsockPortMu      sync.Mutex
+
+	jailer jailer
 }
 
 func shimOpts(shimCtx context.Context) (*shim.Opts, error) {
@@ -191,6 +193,7 @@ func NewService(shimCtx context.Context, id string, remotePublisher shim.Publish
 		config: config,
 
 		vmReady: make(chan struct{}),
+		jailer:  newNoopJailer(shimCtx, logger, shimDir),
 	}
 
 	s.startEventForwarders(remotePublisher)
@@ -459,30 +462,36 @@ func (s *service) createVM(requestCtx context.Context, request *proto.CreateVMRe
 	}()
 
 	s.logger.Info("creating new VM")
+	s.jailer, err = newJailer(s.shimCtx, s.logger, string(s.shimDir), s, request)
+	if err != nil {
+		return errors.Wrap(err, "failed to create jailer")
+	}
 
 	s.machineConfig, err = s.buildVMConfiguration(request)
 	if err != nil {
 		return errors.Wrapf(err, "failed to build VM configuration")
 	}
 
-	relSockPath, err := s.shimDir.FirecrackerSockRelPath()
-	if err != nil {
-		return errors.Wrapf(err, "failed to get relative path to firecracker api socket")
+	opts := []firecracker.Opt{
+		firecracker.WithLogger(s.logger),
 	}
 
-	relVSockPath, err := s.shimDir.FirecrackerVSockRelPath()
+	relVSockPath, err := s.jailer.JailPath().FirecrackerVSockRelPath()
 	if err != nil {
 		return errors.Wrapf(err, "failed to get relative path to firecracker vsock")
 	}
 
-	cmd := firecracker.VMCommandBuilder{}.
-		WithBin(s.config.FirecrackerBinaryPath).
-		WithSocketPath(relSockPath).
-		Build(s.shimCtx) // shimCtx so the VM process is only killed when the shim shuts down
+	jailedOpts, err := s.jailer.BuildJailedMachine(s.config, s.machineConfig, s.vmID)
+	if err != nil {
+		return errors.Wrap(err, "failed to build jailed machine options")
+	}
+	opts = append(opts, jailedOpts...)
 
-	// use shimCtx so the VM is killed when the shim shuts down
-	s.machine, err = firecracker.NewMachine(s.shimCtx, *s.machineConfig,
-		firecracker.WithLogger(s.logger), firecracker.WithProcessRunner(cmd))
+	// In the event that a noop jailer is used, we will pass in the shim context
+	// and have the SDK construct a new machine using that context. Otherwise, a
+	// custom process runner will be provided via options which will stomp over
+	// the shim context that was provided here.
+	s.machine, err = firecracker.NewMachine(s.shimCtx, *s.machineConfig, opts...)
 	if err != nil {
 		return errors.Wrapf(err, "failed to create new machine instance")
 	}
@@ -595,7 +604,7 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 		return nil, errors.Wrapf(err, "failed to get relative path to firecracker api socket")
 	}
 
-	relVSockPath, err := s.shimDir.FirecrackerVSockRelPath()
+	relVSockPath, err := s.jailer.JailPath().FirecrackerVSockRelPath()
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to get relative path to firecracker vsock")
 	}
@@ -639,7 +648,12 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 		containerCount = 1
 	}
 
-	stubDriveHandler, err := newStubDriveHandler(s.shimDir.RootPath(), s.logger, containerCount)
+	// Create stub drives first and let stub driver handler manage the drives
+	stubDriveHandler, err := newStubDriveHandler(
+		string(s.jailer.JailPath()),
+		s.logger, containerCount,
+		s.jailer.StubDrivesOptions()...,
+	)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create stub drives")
 	}
@@ -721,6 +735,12 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 		return nil, err
 	}
 
+	for _, mnt := range request.Rootfs {
+		if err := s.jailer.ExposeDeviceToJail(mnt.Source); err != nil {
+			return nil, errors.Wrapf(err, "failed to expose mount to jail %v", mnt.Source)
+		}
+	}
+
 	var driveID *string
 	for _, mnt := range request.Rootfs {
 		driveID, err = s.stubDriveHandler.PatchStubDrive(requestCtx, s.machine, mnt.Source)
@@ -751,7 +771,7 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 		return nil, err
 	}
 
-	relVSockPath, err := s.shimDir.FirecrackerVSockRelPath()
+	relVSockPath, err := s.jailer.JailPath().FirecrackerVSockRelPath()
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to get relative path to firecracker vsock")
 	}
@@ -866,7 +886,7 @@ func (s *service) Exec(requestCtx context.Context, req *taskAPI.ExecProcessReque
 		return nil, err
 	}
 
-	relVSockPath, err := s.shimDir.FirecrackerVSockRelPath()
+	relVSockPath, err := s.jailer.JailPath().FirecrackerVSockRelPath()
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to get relative path to firecracker vsock")
 	}

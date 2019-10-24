@@ -160,7 +160,6 @@ RUN containerd 2>/dev/null & \
 	ctr content fetch docker.io/library/alpine:3.10.1 >/dev/null && \
 	ctr content fetch docker.io/mlabbe/iperf3:3.6-r0 >/dev/null
 
-COPY tools/docker/naive-snapshotter/entrypoint.sh /entrypoint
 RUN chmod 0444 /var/lib/firecracker-containerd/runtime/default-rootfs.img \
   && mkdir -p /var/lib/firecracker-containerd/naive
 RUN make -C /firecracker-containerd demo-network

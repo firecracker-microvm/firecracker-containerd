@@ -29,7 +29,7 @@ dm_device="/dev/mapper/$(echo ${VOLUME_GROUP} | sed -e s/-/--/g)-$name"
 pool_create() {
     sudo lvcreate --type thin-pool \
          --poolmetadatasize 16GiB \
-         --extents '50%FREE' \
+         --size 1G \
          -n "$name" "$VOLUME_GROUP"
 }
 

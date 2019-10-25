@@ -18,6 +18,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 
 	"github.com/firecracker-microvm/firecracker-go-sdk"
@@ -90,4 +91,36 @@ func TestBuildJailedRootHandler_Isolated(t *testing.T) {
 
 	_, err = os.Stat(filepath.Join(dir, "rootfs", filepath.Base(rootDrivePath)))
 	assert.NoError(t, err, "failed to create root drive")
+}
+
+func TestMkdirAllWithPermissions_Isolated(t *testing.T) {
+	// requires isolation so we can change uid/gid of files
+	internal.RequiresIsolation(t)
+
+	tmpdir, err := ioutil.TempDir("./", "TestMkdirAllWithPermissions")
+	require.NoError(t, err, "failed to create temporary directory")
+
+	existingPath := filepath.Join(tmpdir, "exists")
+	existingMode := os.FileMode(0700)
+	err = os.Mkdir(existingPath, existingMode)
+	require.NoError(t, err, "failed to create existing part of test directory")
+
+	nonExistingPath := filepath.Join(existingPath, "nonexistent")
+	newMode := os.FileMode(0755)
+	newuid := uint32(123)
+	newgid := uint32(456)
+	err = mkdirAllWithPermissions(nonExistingPath, newMode, newuid, newgid)
+	require.NoError(t, err, "failed to mkdirAllWithPermissions")
+
+	existingPathStat, err := os.Stat(existingPath)
+	require.NoError(t, err, "failed to stat pre-existing path")
+	assert.Equal(t, existingMode, existingPathStat.Mode().Perm())
+	assert.Equal(t, uint32(os.Getuid()), existingPathStat.Sys().(*syscall.Stat_t).Uid)
+	assert.Equal(t, uint32(os.Getgid()), existingPathStat.Sys().(*syscall.Stat_t).Gid)
+
+	newlyCreatedPathStat, err := os.Stat(nonExistingPath)
+	require.NoError(t, err, "failed to stat newly created path")
+	assert.Equal(t, newMode, newlyCreatedPathStat.Mode().Perm())
+	assert.Equal(t, newuid, newlyCreatedPathStat.Sys().(*syscall.Stat_t).Uid)
+	assert.Equal(t, newgid, newlyCreatedPathStat.Sys().(*syscall.Stat_t).Gid)
 }

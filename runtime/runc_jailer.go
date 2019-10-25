@@ -22,6 +22,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/firecracker-microvm/firecracker-go-sdk"
@@ -270,7 +271,7 @@ func (j runcJailer) ExposeDeviceToJail(srcDevicePath string) error {
 	// we will manually call mknod and create that device.
 	if (stat.Mode & syscall.S_IFMT) == syscall.S_IFBLK {
 		path := filepath.Join(j.RootPath(), filepath.Dir(srcDevicePath))
-		if err := os.MkdirAll(path, 0700); err != nil {
+		if err := mkdirAllWithPermissions(path, 0700, uid, gid); err != nil {
 			return err
 		}
 
@@ -399,6 +400,28 @@ func mkdirAndChown(path string, mode os.FileMode, uid, gid uint32) error {
 
 	if err := os.Chown(path, int(uid), int(gid)); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+// mkdirAllWithPermissions will create any directories in the provided path that
+// don't exist (similar to os.MkdirAll) and will chmod/chown newly created
+// directories using the provided mode, uid and gid. If a directory in the path
+// already exists, its mode and ownership are left unmodified.
+func mkdirAllWithPermissions(path string, mode os.FileMode, uid, gid uint32) error {
+	var workingPath string
+	if strings.HasPrefix(path, "/") {
+		workingPath = "/"
+	}
+
+	for _, pathPart := range strings.Split(filepath.Clean(path), "/") {
+		workingPath = filepath.Join(workingPath, pathPart)
+
+		err := mkdirAndChown(workingPath, mode, uid, gid)
+		if err != nil && !os.IsExist(err) {
+			return err
+		}
 	}
 
 	return nil

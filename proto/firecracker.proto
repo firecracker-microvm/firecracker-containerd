@@ -58,5 +58,19 @@ message SetVMMetadataRequest {
     string Metadata = 2;
 }
 
+message UpdateVMMetadataRequest {
+    string VMID = 1;
+    string Metadata = 2;
+}
+
+message GetVMMetadataRequest {
+	string VMID = 1;
+}
+
+message GetVMMetadataResponse {
+	string Metadata = 1;
+}
+
 message JailerConfig {
 }
+

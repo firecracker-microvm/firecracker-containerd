@@ -86,3 +86,13 @@ func (s *service) SetVMMetadata(ctx context.Context, req *proto.SetVMMetadataReq
 	log.G(ctx).Debugf("set vm metadata: %+v", req)
 	return s.local.SetVMMetadata(ctx, req)
 }
+
+func (s *service) UpdateVMMetadata(ctx context.Context, req *proto.UpdateVMMetadataRequest) (*empty.Empty, error) {
+	log.G(ctx).Debugf("update vm metadata: %+v", req)
+	return s.local.UpdateVMMetadata(ctx, req)
+}
+
+func (s *service) GetVMMetadata(ctx context.Context, req *proto.GetVMMetadataRequest) (*proto.GetVMMetadataResponse, error) {
+	log.G(ctx).Debugf("get vm metadata: %+v", req)
+	return s.local.GetVMMetadata(ctx, req)
+}

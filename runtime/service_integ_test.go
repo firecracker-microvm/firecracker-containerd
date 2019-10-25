@@ -1003,3 +1003,87 @@ func TestDriveMountFails_Isolated(t *testing.T) {
 		assert.Error(t, err, "unexpectedly succeeded in creating a VM with a drive mount under banned path")
 	}
 }
+
+func TestUpdateVMMetadata_Isolated(t *testing.T) {
+	prepareIntegTest(t)
+
+	testTimeout := 60 * time.Second
+	ctx, cancel := context.WithTimeout(namespaces.WithNamespace(context.Background(), defaultNamespace), testTimeout)
+	defer cancel()
+
+	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	defer client.Close()
+
+	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
+	require.NoError(t, err, "failed to create ttrpc client")
+	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
+
+	cniNetworkName := "fcnet-test"
+	err = writeCNIConf("/etc/cni/conf.d/fcnet-test.conflist",
+		"tc-redirect-tap", cniNetworkName, "")
+	require.NoError(t, err, "failed to write test cni conf")
+
+	_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
+		VMID: "1",
+		NetworkInterfaces: []*proto.FirecrackerNetworkInterface{{
+			AllowMMDS: true,
+			CNIConfig: &proto.CNIConfiguration{
+				NetworkName:   cniNetworkName,
+				InterfaceName: "veth0",
+			},
+		}},
+		ContainerCount: 1,
+	})
+	require.NoError(t, err)
+	metadata := "{\"thing\":\"42\",\"ThreeThing\":\"wow\"}"
+	// Update VMM metadata
+	_, err = fcClient.SetVMMetadata(ctx, &proto.SetVMMetadataRequest{
+		VMID:     "1",
+		Metadata: metadata,
+	})
+	require.NoError(t, err)
+	resp, err := fcClient.GetVMMetadata(ctx, &proto.GetVMMetadataRequest{
+		VMID: "1",
+	})
+	require.NoError(t, err)
+	expected := "{\"ThreeThing\":\"wow\",\"thing\":\"42\"}"
+	assert.Equal(t, expected, resp.Metadata)
+	// Update again to ensure patching works
+	_, err = fcClient.UpdateVMMetadata(ctx, &proto.UpdateVMMetadataRequest{
+		VMID:     "1",
+		Metadata: "{\"TwoThing\":\"6*9\",\"thing\":\"45\"}",
+	})
+	require.NoError(t, err)
+
+	resp, err = fcClient.GetVMMetadata(ctx, &proto.GetVMMetadataRequest{
+		VMID: "1",
+	})
+	require.NoError(t, err)
+	expected = "{\"ThreeThing\":\"wow\",\"TwoThing\":\"6*9\",\"thing\":\"45\"}"
+	assert.Equal(t, expected, resp.Metadata)
+
+	// Check inside the vm
+	image, err := alpineImage(ctx, client, defaultSnapshotterName())
+	require.NoError(t, err, "failed to get alpine image")
+	containerName := "mmds-test"
+
+	newContainer, err := client.NewContainer(ctx,
+		containerName,
+		containerd.WithSnapshotter(defaultSnapshotterName()),
+		containerd.WithNewSnapshot("mmds-test", image),
+		containerd.WithNewSpec(
+			oci.WithProcessArgs("/usr/bin/wget",
+				"-q",      // don't print to stderr unless an error occurs
+				"-O", "-", // write to stdout
+				"http://169.254.169.254"),
+			firecrackeroci.WithVMID("1"),
+			firecrackeroci.WithVMNetwork,
+		),
+	)
+	require.NoError(t, err, "failed to create container %s", containerName)
+
+	stdout := startAndWaitTask(ctx, t, newContainer)
+	t.Logf("stdout output from task %q: %s", containerName, stdout)
+	assert.Equalf(t, "ThreeThing\nTwoThing\nthing", stdout, "container %q did not emit expected stdout", containerName)
+}

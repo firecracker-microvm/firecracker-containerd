@@ -112,11 +112,7 @@ RUN mkdir -p /var/lib/firecracker-containerd/runtime \
 	&& chmod 0444 default-vmlinux.bin \
 	&& mv default-vmlinux.bin /var/lib/firecracker-containerd/runtime/default-vmlinux.bin
 
-COPY --from=firecracker-containerd-build /home/builder/firecracker-containerd /firecracker-containerd
-COPY tools/image-builder/rootfs.img /var/lib/firecracker-containerd/runtime/default-rootfs.img
-COPY --from=firecracker-containerd-build /output/* /usr/local/bin/
-
-RUN --mount=type=cache,from=build-base,source=/home/builder/go/pkg/mod,target=/tmp/go/pkg/mod,readonly \
+RUN --mount=type=cache,from=build-base,source=/home/builder/go/pkg/mod,target=/tmp/go/pkg/mod \
 	mkdir -p ${GOPATH}/pkg/mod \
 	&& cp -R /tmp/go/pkg/mod/* ${GOPATH}/pkg/mod \
 	&& cp -R /tmp/go/pkg/mod/* /home/builder/go/pkg/mod \
@@ -148,7 +144,6 @@ FROM firecracker-containerd-test as firecracker-containerd-integ-test
 ARG FIRECRACKER_TARGET=x86_64-unknown-linux-musl
 
 COPY _submodules/firecracker/target/$FIRECRACKER_TARGET/release/firecracker /usr/local/bin/
-COPY _submodules/firecracker/target/$FIRECRACKER_TARGET/release/jailer /usr/local/bin/
 COPY _submodules/runc/runc /usr/local/bin
 COPY tools/image-builder/rootfs.img /var/lib/firecracker-containerd/runtime/default-rootfs.img
 COPY runtime/firecracker-runc-config.json.example /etc/containerd/firecracker-runc-config.json

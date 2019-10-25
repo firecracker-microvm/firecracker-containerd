@@ -46,17 +46,24 @@ const (
 func main() {
 	var containerCIDR = flag.String("ip", "", "ip address and subnet assigned to the container in CIDR notation. Example: -ip 172.16.0.2/24")
 	var gatewayIP = flag.String("gw", "", "gateway ip address. Example: -gw 172.16.0.1")
+	var snapshotter = flag.String("ss", "", "snapshotter")
+
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
 	flag.Parse()
+
+	if *snapshotter == "naive" {
+		*snapshotter = "firecracker-naive"
+	}
+
 	if *containerCIDR != "" && *gatewayIP == "" {
 		log.Fatal("Incorrect usage. 'gw' needs to be specified when 'ip' is specified")
 	}
-	if err := taskWorkflow(*containerCIDR, *gatewayIP); err != nil {
+	if err := taskWorkflow(*containerCIDR, *gatewayIP, *snapshotter); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func taskWorkflow(containerCIDR string, gateway string) (err error) {
+func taskWorkflow(containerCIDR, gateway, snapshotter string) (err error) {
 	log.Println("Creating containerd client")
 	client, err := containerd.New(containerdAddress)
 	if err != nil {
@@ -69,7 +76,7 @@ func taskWorkflow(containerCIDR string, gateway string) (err error) {
 	ctx := namespaces.WithNamespace(context.Background(), namespaceName)
 	image, err := client.Pull(ctx, "docker.io/library/nginx:1.17-alpine",
 		containerd.WithPullUnpack,
-		containerd.WithPullSnapshotter("firecracker-naive"),
+		containerd.WithPullSnapshotter(snapshotter),
 	)
 	if err != nil {
 		return errors.Wrapf(err, "creating container")
@@ -115,11 +122,11 @@ func taskWorkflow(containerCIDR string, gateway string) (err error) {
 		}
 	}()
 
-	log.Printf("Successfully pulled %s image\n", image.Name())
+	log.Printf("Successfully pulled %s image with %s\n", image.Name(), snapshotter)
 	container, err := client.NewContainer(
 		ctx,
 		"demo",
-		containerd.WithSnapshotter("firecracker-naive"),
+		containerd.WithSnapshotter(snapshotter),
 		containerd.WithNewSnapshot("demo-snapshot", image),
 		containerd.WithNewSpec(
 			oci.WithImageConfig(image),

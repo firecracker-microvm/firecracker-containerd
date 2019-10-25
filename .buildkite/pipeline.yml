@@ -71,11 +71,10 @@ steps:
       EXTRAGOARGS: "-v -count=1"
     artifact_paths:
       - "runtime/logs/*"
-    command: 'make -C runtime integ-test'
-    concurrency: 1
-    concurrency_group: 'loop-device test'
+    command:
+      - make -C runtime integ-test FICD_SNAPSHOTTER=devmapper FICD_DM_POOL=build_${BUILDKITE_BUILD_NUMBER}_runtime
 
-  - label: ":rotating_light: :exclamation: example tests"
+  - label: ":rotating_light: :exclamation: example tests (naive)"
     agents:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
     env:
@@ -86,3 +85,14 @@ steps:
     command: 'make -C examples integ-test'
     concurrency: 1
     concurrency_group: 'loop-device test'
+
+  - label: ":rotating_light: :exclamation: example tests (devmapper)"
+    agents:
+      queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
+    env:
+      DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
+      EXTRAGOARGS: "-v -count=1"
+    artifact_paths:
+      - "examples/logs/*"
+    command:
+      - make -C examples integ-test TEST_SS=devmapper TEST_POOL=build_${BUILDKITE_BUILD_NUMBER}_example

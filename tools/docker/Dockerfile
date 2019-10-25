@@ -172,14 +172,6 @@ COPY tools/docker/entrypoint.sh /entrypoint
 ENTRYPOINT ["/entrypoint"]
 CMD ["exec /bin/bash"]
 
-
-
-
-# TODO Add a stage for the devmapper snapshotter implementation (as opposed to naive implementation)
-
-
-
-
 # Debugging image that starts up containerd and the naive snapshotter and includes some additional basic debugging tools.
 # TODO add firectl here
 FROM firecracker-containerd-integ-test as firecracker-containerd-dev

@@ -524,6 +524,11 @@ func (s *service) createVM(requestCtx context.Context, request *proto.CreateVMRe
 
 func (s *service) mountDrives(requestCtx context.Context, driveMounts []*proto.FirecrackerDriveMount) error {
 	for _, driveMount := range driveMounts {
+		err := s.jailer.ExposeFileToJail(driveMount.HostPath)
+		if err != nil {
+			return errors.Wrapf(err, "failed to expose drive mount host path to jail %s", driveMount.HostPath)
+		}
+
 		driveID, err := s.stubDriveHandler.PatchStubDrive(requestCtx, s.machine, driveMount.HostPath)
 		if err != nil {
 			return errors.Wrapf(err, "failed to patch drive mount stub")
@@ -768,7 +773,7 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 	}
 
 	for _, mnt := range request.Rootfs {
-		if err := s.jailer.ExposeDeviceToJail(mnt.Source); err != nil {
+		if err := s.jailer.ExposeFileToJail(mnt.Source); err != nil {
 			return nil, errors.Wrapf(err, "failed to expose mount to jail %v", mnt.Source)
 		}
 

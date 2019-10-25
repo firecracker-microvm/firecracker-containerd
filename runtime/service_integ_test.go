@@ -833,7 +833,9 @@ func TestCreateTooManyContainers_Isolated(t *testing.T) {
 }
 
 func TestDriveMount_Isolated(t *testing.T) {
-	prepareIntegTest(t)
+	prepareIntegTest(t, func(cfg *Config) {
+		cfg.JailerConfig.RuncBinaryPath = "/usr/local/bin/runc"
+	})
 
 	testTimeout := 120 * time.Second
 	ctx, cancel := context.WithTimeout(namespaces.WithNamespace(context.Background(), defaultNamespace), testTimeout)
@@ -845,7 +847,7 @@ func TestDriveMount_Isolated(t *testing.T) {
 	fcClient, err := fcClient.New(containerdSockPath + ".ttrpc")
 	require.NoError(t, err, "failed to create fccontrol client")
 
-	image, err := alpineImage(ctx, ctrdClient, naiveSnapshotterName)
+	image, err := alpineImage(ctx, ctrdClient, defaultSnapshotterName())
 	require.NoError(t, err, "failed to get alpine image")
 
 	vmID := "test-drive-mount"
@@ -903,8 +905,9 @@ func TestDriveMount_Isolated(t *testing.T) {
 	}
 
 	_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
-		VMID:        vmID,
-		DriveMounts: vmDriveMounts,
+		VMID:         vmID,
+		DriveMounts:  vmDriveMounts,
+		JailerConfig: &proto.JailerConfig{},
 	})
 	require.NoError(t, err, "failed to create vm")
 
@@ -913,7 +916,7 @@ func TestDriveMount_Isolated(t *testing.T) {
 
 	newContainer, err := ctrdClient.NewContainer(ctx,
 		containerName,
-		containerd.WithSnapshotter(naiveSnapshotterName),
+		containerd.WithSnapshotter(defaultSnapshotterName()),
 		containerd.WithNewSnapshot(snapshotName, image),
 		containerd.WithNewSpec(
 			oci.WithProcessArgs("/bin/sh", "-c", strings.Join(append(ctrCatCommands,

@@ -15,6 +15,7 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
@@ -75,4 +76,16 @@ func writeRuntimeConfig(options ...func(*Config)) error {
 	}
 
 	return nil
+}
+
+func withJailer() func(*Config) {
+	return func(c *Config) {
+		c.JailerConfig.RuncBinaryPath = "/usr/local/bin/runc"
+	}
+}
+
+var testNameToVMIDReplacer = strings.NewReplacer("/", "_")
+
+func testNameToVMID(s string) string {
+	return testNameToVMIDReplacer.Replace(s)
 }

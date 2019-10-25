@@ -220,9 +220,7 @@ func createTapDevice(ctx context.Context, tapName string) error {
 }
 
 func TestMultipleVMs_Isolated(t *testing.T) {
-	prepareIntegTest(t, func(cfg *Config) {
-		cfg.JailerConfig.RuncBinaryPath = "/usr/local/bin/runc"
-	})
+	prepareIntegTest(t, withJailer())
 
 	cases := []struct {
 		MaxContainers int32

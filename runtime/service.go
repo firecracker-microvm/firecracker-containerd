@@ -748,7 +748,7 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 			if err == ErrDrivesExhausted {
 				return nil, errors.Wrapf(errdefs.ErrUnavailable, "no remaining stub drives to be used")
 			}
-			return nil, errors.Wrapf(err, "failed to patch stub drive")
+			return nil, errors.Wrapf(err, "failed to mount %v", mnt.Source)
 		}
 	}
 

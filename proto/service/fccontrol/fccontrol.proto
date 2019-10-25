@@ -8,7 +8,7 @@ option go_package = "fccontrol";
 
 service Firecracker {
     // Runs new Firecracker VM instance
-    rpc CreateVM(CreateVMRequest) returns (google.protobuf.Empty);
+    rpc CreateVM(CreateVMRequest) returns (CreateVMResponse);
 
     // Stops existing Firecracker instance by VM ID
     rpc StopVM(StopVMRequest) returns (google.protobuf.Empty);

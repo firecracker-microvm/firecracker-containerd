@@ -78,7 +78,7 @@ func newLocal(ic *plugin.InitContext) (*local, error) {
 // CreateVM creates new Firecracker VM instance. It creates a runtime shim for the VM and the forwards
 // the CreateVM request to that shim. If there is already a VM created with the provided VMID, then
 // AlreadyExists is returned.
-func (s *local) CreateVM(requestCtx context.Context, req *proto.CreateVMRequest) (*empty.Empty, error) {
+func (s *local) CreateVM(requestCtx context.Context, req *proto.CreateVMRequest) (*proto.CreateVMResponse, error) {
 	var err error
 
 	id := req.GetVMID()

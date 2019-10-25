@@ -36,6 +36,14 @@ message CreateVMRequest {
     JailerConfig JailerConfig = 10;
 }
 
+message CreateVMResponse {
+    string VMID = 1;
+    string SocketPath = 2;
+    string LogFifoPath = 3;
+    string MetricsFifoPath = 4;
+    string CgroupPath = 5;
+}
+
 message StopVMRequest {
     string VMID = 1;
     uint32 TimeoutSeconds = 2;
@@ -47,10 +55,10 @@ message GetVMInfoRequest {
 
 message GetVMInfoResponse {
     string VMID = 1;
-    uint32 ContextID = 2;
-    string SocketPath = 3;
-    string LogFifoPath = 4;
-    string MetricsFifoPath = 5;
+    string SocketPath = 2;
+    string LogFifoPath = 3;
+    string MetricsFifoPath = 4;
+    string CgroupPath = 5;
 }
 
 message SetVMMetadataRequest {

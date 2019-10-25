@@ -58,6 +58,10 @@ type jailer interface {
 	StubDrivesOptions() []stubDrivesOpt
 }
 
+type cgroupPather interface {
+	CgroupPath() string
+}
+
 // newJailer is used to construct a jailer from the CreateVM request. If no
 // request or jailer config was provided, then the noopJailer will be returned.
 func newJailer(
@@ -73,5 +77,13 @@ func newJailer(
 	}
 
 	l := logger.WithField("jailer", "runc")
-	return newRuncJailer(ctx, l, ociBundlePath, service.config.JailerConfig.RuncBinaryPath, jailerUID, jailerGID)
+	return newRuncJailer(
+		ctx,
+		l,
+		service.vmID,
+		ociBundlePath,
+		service.config.JailerConfig.RuncBinaryPath,
+		jailerUID,
+		jailerGID,
+	)
 }

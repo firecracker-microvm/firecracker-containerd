@@ -67,7 +67,7 @@ func (s *service) RegisterTTRPC(server *ttrpc.Server) error {
 	return nil
 }
 
-func (s *service) CreateVM(ctx context.Context, req *proto.CreateVMRequest) (*empty.Empty, error) {
+func (s *service) CreateVM(ctx context.Context, req *proto.CreateVMRequest) (*proto.CreateVMResponse, error) {
 	log.G(ctx).Debugf("create VM request: %+v", req)
 	return s.local.CreateVM(ctx, req)
 }

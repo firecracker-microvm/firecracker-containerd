@@ -256,7 +256,44 @@ func (s *local) SetVMMetadata(requestCtx context.Context, req *proto.SetVMMetada
 
 	resp, err := client.SetVMMetadata(requestCtx, req)
 	if err != nil {
-		err = errors.Wrap(err, "shim client failed to set vm info")
+		err = errors.Wrap(err, "shim client failed to set vm metadata")
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+// UpdateVMMetadata updates Firecracker instance metadata for the VM with the given VMID.
+func (s *local) UpdateVMMetadata(requestCtx context.Context, req *proto.UpdateVMMetadataRequest) (*empty.Empty, error) {
+	client, err := s.shimFirecrackerClient(requestCtx, req.VMID)
+	if err != nil {
+		return nil, err
+	}
+
+	defer client.Close()
+
+	resp, err := client.UpdateVMMetadata(requestCtx, req)
+	if err != nil {
+		err = errors.Wrap(err, "shim client failed to update vm metadata")
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+// GetVMMetadata returns the Firecracker instance metadata for the VM with the given VMID.
+func (s *local) GetVMMetadata(requestCtx context.Context, req *proto.GetVMMetadataRequest) (*proto.GetVMMetadataResponse, error) {
+	client, err := s.shimFirecrackerClient(requestCtx, req.VMID)
+	if err != nil {
+		return nil, err
+	}
+
+	defer client.Close()
+	resp, err := client.GetVMMetadata(requestCtx, req)
+	if err != nil {
+		err = errors.Wrap(err, "shim client failed to get vm metadata")
 		s.logger.WithError(err).Error()
 		return nil, err
 	}

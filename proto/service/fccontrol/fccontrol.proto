@@ -18,4 +18,10 @@ service Firecracker {
 
     // Sets VM's instance metadata
     rpc SetVMMetadata(SetVMMetadataRequest) returns (google.protobuf.Empty);
+
+    // Update Vm's instance metadata
+    rpc UpdateVMMetadata(UpdateVMMetadataRequest) returns (google.protobuf.Empty);
+
+    // Get Vm's instance metadata
+    rpc GetVMMetadata(GetVMMetadataRequest) returns (GetVMMetadataResponse);
 }

@@ -15,6 +15,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"math"
 	"net"
 	"os"
@@ -619,14 +620,63 @@ func (s *service) SetVMMetadata(requestCtx context.Context, request *proto.SetVM
 		return nil, err
 	}
 
-	s.logger.Info("updating VM metadata")
-	if err := s.machine.SetMetadata(requestCtx, request.Metadata); err != nil {
+	s.logger.Info("setting VM metadata")
+	jayson := json.RawMessage(request.Metadata)
+	if err := s.machine.SetMetadata(requestCtx, jayson); err != nil {
 		err = errors.Wrap(err, "failed to set VM metadata")
 		s.logger.WithError(err).Error()
 		return nil, err
 	}
 
 	return &empty.Empty{}, nil
+}
+
+// UpdateVMMetadata updates the VM being managed by this shim with the provided metadata patch.
+// If the vm has not been created yet, this method will wait for up to the hardcoded timeout for it
+// to exist, returning an error if the timeout is reached.
+func (s *service) UpdateVMMetadata(requestCtx context.Context, request *proto.UpdateVMMetadataRequest) (*empty.Empty, error) {
+
+	defer logPanicAndDie(s.logger)
+
+	err := s.waitVMReady()
+	if err != nil {
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	s.logger.Info("updating VM metadata")
+	jayson := json.RawMessage(request.Metadata)
+	if err := s.machine.UpdateMetadata(requestCtx, jayson); err != nil {
+		err = errors.Wrap(err, "failed to update VM metadata")
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	return &empty.Empty{}, nil
+}
+
+// GetVMMetadata returns the metadata for the vm managed by this shim..
+// If the vm has not been created yet, this method will wait for up to the hardcoded timeout for it
+// to exist, returning an error if the timeout is reached.
+func (s *service) GetVMMetadata(requestCtx context.Context, request *proto.GetVMMetadataRequest) (*proto.GetVMMetadataResponse, error) {
+
+	defer logPanicAndDie(s.logger)
+
+	err := s.waitVMReady()
+	if err != nil {
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	s.logger.Info("Get VM metadata")
+	var metadata json.RawMessage
+	if err := s.machine.GetMetadata(requestCtx, &metadata); err != nil {
+		err = errors.Wrap(err, "failed to get VM metadata")
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	return &proto.GetVMMetadataResponse{Metadata: string(metadata)}, nil
 }
 
 func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker.Config, error) {

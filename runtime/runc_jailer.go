@@ -253,33 +253,49 @@ func (j runcJailer) StubDrivesOptions() []stubDrivesOpt {
 	}
 }
 
-// ExposeDeviceToJail will inspect the given file, srcDevicePath, and based on the
+// ExposeFileToJail will inspect the given file, srcPath, and based on the
 // file type, proper handling will occur to ensure that the file is visible in
 // the jail. For block devices we will use mknod to create the device and then
-// set the correct permissions to ensure visibility in the jail.
-func (j runcJailer) ExposeDeviceToJail(srcDevicePath string) error {
+// set the correct permissions to ensure visibility in the jail. Regular files
+// will be copied into the jail.
+func (j runcJailer) ExposeFileToJail(srcPath string) error {
 	uid := j.uid
 	gid := j.gid
 
 	stat := syscall.Stat_t{}
-	if err := syscall.Stat(srcDevicePath, &stat); err != nil {
+	if err := syscall.Stat(srcPath, &stat); err != nil {
 		return err
 	}
 
 	// Checks file type using S_IFMT which is the bit mask for the file type.
-	// Here we only care about block devices, ie S_IFBLK.  If it is a block type
-	// we will manually call mknod and create that device.
-	if (stat.Mode & syscall.S_IFMT) == syscall.S_IFBLK {
-		path := filepath.Join(j.RootPath(), filepath.Dir(srcDevicePath))
-		if err := mkdirAllWithPermissions(path, 0700, uid, gid); err != nil {
+	switch stat.Mode & syscall.S_IFMT {
+	case syscall.S_IFBLK:
+		parentDir := filepath.Join(j.RootPath(), filepath.Dir(srcPath))
+		if err := mkdirAllWithPermissions(parentDir, 0700, uid, gid); err != nil {
 			return err
 		}
 
-		dst := filepath.Join(path, filepath.Base(srcDevicePath))
+		dst := filepath.Join(parentDir, filepath.Base(srcPath))
 		if err := exposeBlockDeviceToJail(dst, int(stat.Rdev), int(uid), int(gid)); err != nil {
 			return err
 		}
-	} else {
+
+	case syscall.S_IFREG:
+		parentDir := filepath.Join(j.RootPath(), filepath.Dir(srcPath))
+		if err := mkdirAllWithPermissions(parentDir, 0700, uid, gid); err != nil {
+			return err
+		}
+
+		dst := filepath.Join(parentDir, filepath.Base(srcPath))
+		if err := copyFile(srcPath, dst, os.FileMode(stat.Mode)); err != nil {
+			return err
+		}
+
+		if err := os.Chown(dst, int(uid), int(gid)); err != nil {
+			return err
+		}
+
+	default:
 		return fmt.Errorf("unsupported mode: %v", stat.Mode)
 	}
 

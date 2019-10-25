@@ -13,19 +13,17 @@
 
 PROTO_SRC := $(wildcard *.proto)
 PROTO_GEN_SRC := $(PROTO_SRC:.proto=.pb.go)
+PROTO_GEN_SRC_TTRPC := $(addprefix ttrpc/,$(PROTO_GEN_SRC))
 
-$(PROTO_GEN_SRC): $(PROTO_SRC)
-	protoc \
-		--gogo_out=Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types:. \
+$(PROTO_GEN_SRC_TTRPC): $(PROTO_SRC)
+	protoc -I. -I$(PROTOPATH)\
+		--gogottrpc_out=plugins=ttrpc:ttrpc \
 		$^
 
-proto: $(PROTO_GEN_SRC)
-	PROTOPATH=$(CURDIR) $(MAKE) -C service/fccontrol proto
-	PROTOPATH=$(CURDIR) $(MAKE) -C service/drivemount proto
+
+proto: $(PROTO_GEN_SRC_TTRPC)
 
 clean:
-	- rm -f $(PROTO_GEN_SRC)
-	- $(MAKE) -C service/fccontrol clean
-	- $(MAKE) -C service/drivemount clean
+	- rm -f $(PROTO_GEN_SRC_TTRPC)
 
 .PHONY: clean proto

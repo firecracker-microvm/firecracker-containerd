@@ -178,13 +178,13 @@ func (h *stubDriveHandler) InDriveSet(path string) bool {
 }
 
 // PatchStubDrive will replace the next available stub drive with the provided drive
-func (h *stubDriveHandler) PatchStubDrive(ctx context.Context, client firecracker.MachineIface, pathOnHost string) (*string, error) {
+func (h *stubDriveHandler) PatchStubDrive(ctx context.Context, client firecracker.MachineIface, pathOnHost string) (string, error) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
 	// Check to see if stubDriveIndex has increased more than the drive amount.
 	if h.stubDriveIndex >= int64(len(h.drives)) {
-		return nil, ErrDrivesExhausted
+		return "", ErrDrivesExhausted
 	}
 
 	d := h.drives[h.stubDriveIndex]
@@ -193,16 +193,16 @@ func (h *stubDriveHandler) PatchStubDrive(ctx context.Context, client firecracke
 	if d.DriveID == nil {
 		// this should never happen, but we want to ensure that we never nil
 		// dereference
-		return nil, ErrDriveIDNil
+		return "", ErrDriveIDNil
 	}
 
 	h.drives[h.stubDriveIndex] = d
 
 	err := client.UpdateGuestDrive(ctx, firecracker.StringValue(d.DriveID), pathOnHost)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	h.stubDriveIndex++
-	return d.DriveID, nil
+	return firecracker.StringValue(d.DriveID), nil
 }

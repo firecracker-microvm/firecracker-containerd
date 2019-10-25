@@ -18,11 +18,11 @@ message CreateVMRequest {
     // Specifies the commandline arguments that should be passed to the kernel
     string KernelArgs = 4;
 
-    // Specifies the root block device for the VM
-    FirecrackerDrive RootDrive = 5;
+    // Specifies drive containing the rootfs of the VM
+    FirecrackerRootDrive RootDrive = 5;
 
-    // Specifies the additional block device config for the VM.
-    repeated FirecrackerDrive AdditionalDrives = 6;
+    // Specifies additional drives whose contents will be mounted inside the VM on boot.
+    repeated FirecrackerDriveMount DriveMounts = 6;
 
     // Specifies the networking configuration for a VM
     repeated FirecrackerNetworkInterface NetworkInterfaces = 7;

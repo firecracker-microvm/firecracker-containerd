@@ -47,9 +47,10 @@ type jailer interface {
 	// firecracker.Opt to be passed into firecracker.NewMachine which will allow
 	// for the VM to be jailed.
 	BuildJailedMachine(cfg *Config, machineCfg *firecracker.Config, vmID string) ([]firecracker.Opt, error)
-	// ExposeDeviceToJail will expose the given device provided by the snapshotter
-	// to the jailed filesystem
-	ExposeDeviceToJail(path string) error
+	// ExposeFileToJail will expose the given file to the jailed filesystem, including
+	// regular files and block devices. An error is returned if provided a path to a file
+	// with type that is not supported.
+	ExposeFileToJail(path string) error
 	// JailPath is used to return the directory we are supposed to be working in.
 	JailPath() vm.Dir
 	// StubDrivesOptions will return a set of options used to create a new stub

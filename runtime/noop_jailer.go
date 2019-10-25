@@ -63,8 +63,8 @@ func (j noopJailer) JailPath() vm.Dir {
 	return j.shimDir
 }
 
-func (j noopJailer) ExposeDeviceToJail(path string) error {
-	j.logger.Debug("noop operation for ExposeDeviceToJail")
+func (j noopJailer) ExposeFileToJail(path string) error {
+	j.logger.Debug("noop operation for ExposeFileToJail")
 	return nil
 }
 

@@ -207,15 +207,3 @@ func TestTokenBucketFromProto(t *testing.T) {
 	assert.EqualValues(t, refillTime, *bucket.RefillTime)
 	assert.EqualValues(t, capacity, *bucket.Size)
 }
-
-func TestAddDriveFromProto(t *testing.T) {
-	list := addDriveFromProto(firecracker.DrivesBuilder{}, &proto.FirecrackerDrive{
-		IsWritable: false,
-		PathOnHost: "/a",
-		Partuuid:   "xy",
-	}).Build()
-
-	assert.Equal(t, "/a", *list[0].PathOnHost)
-	assert.Equal(t, "xy", list[0].Partuuid)
-	assert.True(t, *list[0].IsReadOnly)
-}

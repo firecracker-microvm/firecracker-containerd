@@ -19,12 +19,20 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/containerd/containerd/mount"
-
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/runtime/firecrackeroci"
 	"github.com/pkg/errors"
 )
+
+const (
+	vmBundleRoot = "/container"
+)
+
+// VMBundleDir returns the directory inside a VM at which the bundle directory for
+// the provided taskID should exist.
+func VMBundleDir(taskID string) Dir {
+	return Dir(filepath.Join(vmBundleRoot, taskID))
+}
 
 // Dir represents the root of a container bundle dir. It's just a type wrapper
 // around a string, where the string is the path of the bundle dir.
@@ -33,12 +41,6 @@ type Dir string
 // RootPath returns the top-level directory of the bundle dir
 func (d Dir) RootPath() string {
 	return string(d)
-}
-
-// Create will mkdir the bundle RootPath with correct permissions (or no-op if it
-// already exists)
-func (d Dir) Create() error {
-	return os.MkdirAll(d.RootPath(), 0700)
 }
 
 // AddrFilePath is the path to the address file as found in the bundleDir.
@@ -58,21 +60,6 @@ func (d Dir) LogFifoPath() string {
 // RootfsPath returns the path to the "rootfs" dir of the bundle
 func (d Dir) RootfsPath() string {
 	return filepath.Join(d.RootPath(), internal.BundleRootfsName)
-}
-
-// MountRootfs creates the RootfsPath if it does not exist and mounts the
-// provided sourcePath there.
-func (d Dir) MountRootfs(sourcePath string, mountType string, mountOpts []string) error {
-	err := os.MkdirAll(d.RootfsPath(), 0700)
-	if err != nil {
-		return err
-	}
-
-	return mount.All([]mount.Mount{{
-		Source:  sourcePath,
-		Type:    mountType,
-		Options: mountOpts,
-	}}, d.RootfsPath())
 }
 
 // OCIConfigPath returns the path to the bundle's config.json

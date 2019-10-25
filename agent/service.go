@@ -17,10 +17,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"runtime/debug"
-	"strings"
-	"time"
 
 	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/log"
@@ -28,16 +25,15 @@ import (
 	"github.com/containerd/containerd/runtime/v2/shim"
 	taskAPI "github.com/containerd/containerd/runtime/v2/task"
 	"github.com/gogo/protobuf/types"
+	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/sys/unix"
 
+	"github.com/containerd/containerd/mount"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/bundle"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
-)
-
-const (
-	containerRootDir = "/container"
 )
 
 // TaskService represents inner shim wrapper over runc in order to:
@@ -47,6 +43,9 @@ const (
 type TaskService struct {
 	taskManager vm.TaskManager
 	runcService taskAPI.TaskService
+
+	// map of (exec,task id, as returned by taskExecID func) -> (callback for cleaning up state for the exec)
+	execCleanups map[string][]func() error
 
 	publisher shim.Publisher
 
@@ -64,13 +63,21 @@ type TaskService struct {
 	//
 	// This approach is also taken by containerd's current reference runc shim
 	// v2 implementation
-	shimCtx      context.Context
-	shimCancel   context.CancelFunc
-	driveHandler *driveHandler
+	shimCtx    context.Context
+	shimCancel context.CancelFunc
+}
+
+// provides a unique string for a given (taskID, execID) pair
+func taskExecID(taskID, execID string) string {
+	return fmt.Sprintf("exec-%s-task-%s", execID, taskID)
 }
 
 // NewTaskService creates new runc shim wrapper
-func NewTaskService(shimCtx context.Context, shimCancel context.CancelFunc, publisher shim.Publisher) (taskAPI.TaskService, error) {
+func NewTaskService(
+	shimCtx context.Context,
+	shimCancel context.CancelFunc,
+	publisher shim.Publisher,
+) (taskAPI.TaskService, error) {
 	// We provide an empty string for "id" as the service manages multiple tasks; there is no single
 	// "id" being managed. As noted in the comments of the called code, the "id" arg is only used by
 	// the Cleanup function, so it will never be invoked as part of the task service API, which is all
@@ -80,19 +87,14 @@ func NewTaskService(shimCtx context.Context, shimCancel context.CancelFunc, publ
 		return nil, err
 	}
 
-	dh, err := newDriveHandler(blockPath, drivePath)
-	if err != nil {
-		return nil, err
-	}
-
 	return &TaskService{
-		taskManager: vm.NewTaskManager(shimCtx, log.G(shimCtx)),
-		runcService: runcService,
+		taskManager:  vm.NewTaskManager(shimCtx, log.G(shimCtx)),
+		runcService:  runcService,
+		execCleanups: make(map[string][]func() error),
 
-		publisher:    publisher,
-		shimCtx:      shimCtx,
-		shimCancel:   shimCancel,
-		driveHandler: dh,
+		publisher:  publisher,
+		shimCtx:    shimCtx,
+		shimCancel: shimCancel,
 	}, nil
 }
 
@@ -113,18 +115,41 @@ func unmarshalExtraData(marshalled *types.Any) (*proto.ExtraData, error) {
 	return extraData, nil
 }
 
-func fifoName(taskID, execID string) string {
-	return fmt.Sprintf("exec-%s-task-%s", execID, taskID)
+func (ts *TaskService) addCleanup(taskID, execID string, cleanup func() error) {
+	id := taskExecID(taskID, execID)
+	ts.execCleanups[id] = append(ts.execCleanups[id], cleanup)
+}
+
+func (ts *TaskService) doCleanup(taskID, execID string) error {
+	id := taskExecID(taskID, execID)
+
+	var err *multierror.Error
+	// iterate in reverse order so changes are "unwound" (similar to a defer)
+	for i := len(ts.execCleanups[id]) - 1; i >= 0; i-- {
+		err = multierror.Append(err, ts.execCleanups[id][i]())
+	}
+
+	delete(ts.execCleanups, id)
+	return err.ErrorOrNil()
 }
 
 // Create creates a new initial process and container using runc
-func (ts *TaskService) Create(requestCtx context.Context, req *taskAPI.CreateTaskRequest) (*taskAPI.CreateTaskResponse, error) {
+func (ts *TaskService) Create(requestCtx context.Context, req *taskAPI.CreateTaskRequest) (_ *taskAPI.CreateTaskResponse, err error) {
 	defer logPanicAndDie(log.G(requestCtx))
 	taskID := req.ID
 	execID := "" // the exec ID of the initial process in a task is an empty string by containerd convention
 
 	logger := log.G(requestCtx).WithField("TaskID", taskID).WithField("ExecID", execID)
 	logger.Info("create")
+
+	defer func() {
+		if err != nil {
+			cleanupErr := ts.doCleanup(taskID, execID)
+			if cleanupErr != nil {
+				logger.WithError(cleanupErr).Error("failed to cleanup task")
+			}
+		}
+	}()
 
 	extraData, err := unmarshalExtraData(req.Options)
 	if err != nil {
@@ -134,58 +159,35 @@ func (ts *TaskService) Create(requestCtx context.Context, req *taskAPI.CreateTas
 	// Just provide runc the options it knows about, not our wrapper
 	req.Options = extraData.RuncOptions
 
-	// Override the bundle dir and rootfs paths, which were set on the Host and thus not valid here in the Guest
-	bundleDir := bundle.Dir(filepath.Join(containerRootDir, taskID))
-	err = bundleDir.Create()
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to create bundle dir")
-	}
-
-	defer func() {
+	bundleDir := bundle.Dir(req.Bundle)
+	ts.addCleanup(taskID, execID, func() error {
+		err := os.RemoveAll(bundleDir.RootPath())
 		if err != nil {
-			removeErr := os.RemoveAll(bundleDir.RootPath())
-			if removeErr != nil {
-				logger.WithError(removeErr).Error("failed to cleanup bundle dir")
-			}
+			return errors.Wrapf(err, "failed to remove bundle path %q", bundleDir.RootPath())
 		}
-	}()
+		return nil
+	})
+
+	// check the rootfs dir has been created (presumed to be by a previous MountDrive call)
+	rootfsStat, err := os.Stat(bundleDir.RootfsPath())
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to stat bundle's rootfs path %q", bundleDir.RootfsPath())
+	}
+	if !rootfsStat.IsDir() {
+		return nil, errors.Errorf("bundle's rootfs path %q is not a dir", bundleDir.RootfsPath())
+	}
+	ts.addCleanup(taskID, execID, func() error {
+		err := mount.UnmountAll(bundleDir.RootfsPath(), unix.MNT_DETACH)
+		if err != nil {
+			return errors.Wrapf(err, "failed to unmount bundle rootfs %q", bundleDir.RootfsPath())
+		}
+		return nil
+	})
 
 	err = bundleDir.OCIConfig().Write(extraData.JsonSpec)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to write oci config file")
 	}
-
-	driveID := strings.TrimSpace(extraData.DriveID)
-	drive, ok := ts.driveHandler.GetDrive(driveID)
-	if !ok {
-		return nil, fmt.Errorf("Drive %q could not be found", driveID)
-	}
-
-	const (
-		maxRetries = 100
-		retryDelay = 10 * time.Millisecond
-	)
-
-	// We retry here due to guest kernel needing some time to populate the guest
-	// drive.
-	// https://github.com/firecracker-microvm/firecracker/issues/1159
-	for i := 0; i < maxRetries; i++ {
-		if err = bundleDir.MountRootfs(drive.Path(), "ext4", nil); isRetryableMountError(err) {
-			logger.WithError(err).Warnf("retrying to mount rootfs %q", drive.Path())
-
-			time.Sleep(retryDelay)
-			continue
-		}
-
-		break
-	}
-
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to mount rootfs %q", drive.Path())
-	}
-
-	req.Bundle = bundleDir.RootPath()
-	req.Rootfs = nil
 
 	var ioConnectorSet vm.IOProxy
 
@@ -193,10 +195,12 @@ func (ts *TaskService) Create(requestCtx context.Context, req *taskAPI.CreateTas
 		ioConnectorSet = vm.NewNullIOProxy()
 	} else {
 		// Override the incoming stdio FIFOs, which have paths from the host that we can't use
-		fifoSet, err := cio.NewFIFOSetInDir(bundleDir.RootPath(), fifoName(taskID, execID), req.Terminal)
+		fifoName := taskExecID(taskID, execID)
+		fifoSet, err := cio.NewFIFOSetInDir(bundleDir.RootPath(), fifoName, req.Terminal)
 		if err != nil {
-			logger.WithError(err).Error("failed opening stdio FIFOs")
-			return nil, errors.Wrap(err, "failed to open stdio FIFOs")
+			err = errors.Wrap(err, "failed to open stdio FIFOs")
+			logger.WithError(err).Error()
+			return nil, err
 		}
 
 		var stdinConnectorPair *vm.IOConnectorPair
@@ -231,7 +235,7 @@ func (ts *TaskService) Create(requestCtx context.Context, req *taskAPI.CreateTas
 
 	resp, err := ts.taskManager.CreateTask(requestCtx, req, ts.runcService, ioConnectorSet)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create runc shim for task")
+		return nil, errors.Wrap(err, "failed to create runc shim")
 	}
 
 	logger.WithField("pid", resp.Pid).Debugf("create succeeded")
@@ -273,14 +277,21 @@ func (ts *TaskService) Start(requestCtx context.Context, req *taskAPI.StartReque
 	return resp, nil
 }
 
-// Delete deletes the initial process and container
+// Delete deletes the process with the provided exec ID
 func (ts *TaskService) Delete(requestCtx context.Context, req *taskAPI.DeleteRequest) (*taskAPI.DeleteResponse, error) {
 	defer logPanicAndDie(log.G(requestCtx))
-	log.G(requestCtx).WithFields(logrus.Fields{"id": req.ID, "exec_id": req.ExecID}).Debug("delete")
+	taskID := req.ID
+	execID := req.ExecID
+	log.G(requestCtx).WithFields(logrus.Fields{"id": taskID, "exec_id": execID}).Debug("delete")
 
 	resp, err := ts.taskManager.DeleteProcess(requestCtx, req, ts.runcService)
 	if err != nil {
 		return nil, err
+	}
+
+	err = ts.doCleanup(taskID, execID)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to cleanup task %q exec %q", taskID, execID)
 	}
 
 	log.G(requestCtx).WithFields(logrus.Fields{
@@ -366,7 +377,7 @@ func (ts *TaskService) Kill(requestCtx context.Context, req *taskAPI.KillRequest
 }
 
 // Exec runs an additional process inside the container
-func (ts *TaskService) Exec(requestCtx context.Context, req *taskAPI.ExecProcessRequest) (*types.Empty, error) {
+func (ts *TaskService) Exec(requestCtx context.Context, req *taskAPI.ExecProcessRequest) (_ *types.Empty, err error) {
 	defer logPanicAndDie(log.G(requestCtx))
 
 	taskID := req.ID
@@ -374,6 +385,15 @@ func (ts *TaskService) Exec(requestCtx context.Context, req *taskAPI.ExecProcess
 
 	logger := log.G(requestCtx).WithField("TaskID", taskID).WithField("ExecID", execID)
 	logger.Debug("exec")
+
+	defer func() {
+		if err != nil {
+			cleanupErr := ts.doCleanup(taskID, execID)
+			if cleanupErr != nil {
+				logger.WithError(cleanupErr).Error("failed to cleanup task")
+			}
+		}
+	}()
 
 	extraData, err := unmarshalExtraData(req.Spec)
 	if err != nil {
@@ -383,7 +403,7 @@ func (ts *TaskService) Exec(requestCtx context.Context, req *taskAPI.ExecProcess
 	// Just provide runc the options it knows about, not our wrapper
 	req.Spec = extraData.RuncOptions
 
-	bundleDir := bundle.Dir(filepath.Join(containerRootDir, taskID))
+	bundleDir := bundle.VMBundleDir(taskID)
 
 	var ioConnectorSet vm.IOProxy
 
@@ -391,10 +411,12 @@ func (ts *TaskService) Exec(requestCtx context.Context, req *taskAPI.ExecProcess
 		ioConnectorSet = vm.NewNullIOProxy()
 	} else {
 		// Override the incoming stdio FIFOs, which have paths from the host that we can't use
-		fifoSet, err := cio.NewFIFOSetInDir(bundleDir.RootPath(), fifoName(taskID, execID), req.Terminal)
+		fifoName := taskExecID(taskID, execID)
+		fifoSet, err := cio.NewFIFOSetInDir(bundleDir.RootPath(), fifoName, req.Terminal)
 		if err != nil {
-			logger.WithError(err).Error("failed opening stdio FIFOs")
-			return nil, errors.Wrap(err, "failed to open stdio FIFOs")
+			err = errors.Wrap(err, "failed to open stdio FIFOs")
+			logger.WithError(err).Error()
+			return nil, err
 		}
 
 		var stdinConnectorPair *vm.IOConnectorPair
@@ -404,6 +426,9 @@ func (ts *TaskService) Exec(requestCtx context.Context, req *taskAPI.ExecProcess
 				ReadConnector:  vm.VSockAcceptConnector(extraData.StdinPort),
 				WriteConnector: vm.FIFOConnector(fifoSet.Stdin),
 			}
+			ts.addCleanup(taskID, execID, func() error {
+				return os.RemoveAll(req.Stdin)
+			})
 		}
 
 		var stdoutConnectorPair *vm.IOConnectorPair
@@ -413,6 +438,9 @@ func (ts *TaskService) Exec(requestCtx context.Context, req *taskAPI.ExecProcess
 				ReadConnector:  vm.FIFOConnector(fifoSet.Stdout),
 				WriteConnector: vm.VSockAcceptConnector(extraData.StdoutPort),
 			}
+			ts.addCleanup(taskID, execID, func() error {
+				return os.RemoveAll(req.Stdout)
+			})
 		}
 
 		var stderrConnectorPair *vm.IOConnectorPair
@@ -422,6 +450,9 @@ func (ts *TaskService) Exec(requestCtx context.Context, req *taskAPI.ExecProcess
 				ReadConnector:  vm.FIFOConnector(fifoSet.Stderr),
 				WriteConnector: vm.VSockAcceptConnector(extraData.StderrPort),
 			}
+			ts.addCleanup(taskID, execID, func() error {
+				return os.RemoveAll(req.Stderr)
+			})
 		}
 
 		ioConnectorSet = vm.NewIOConnectorProxy(stdinConnectorPair, stdoutConnectorPair, stderrConnectorPair)

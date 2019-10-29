@@ -30,6 +30,7 @@ var defaultRuntimeConfig = Config{
 	CPUCount:              1,
 	CPUTemplate:           "T2",
 	LogLevel:              "Debug",
+	Debug:                 true,
 }
 
 func defaultSnapshotterName() string {

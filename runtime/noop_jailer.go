@@ -52,6 +52,11 @@ func (j noopJailer) BuildJailedMachine(cfg *Config, machineConfig *firecracker.C
 		WithSocketPath(relSocketPath).
 		Build(j.ctx)
 
+	if cfg.Debug {
+		cmd.Stdout = j.logger.WithField("vmm_stream", "stdout").WriterLevel(logrus.DebugLevel)
+		cmd.Stderr = j.logger.WithField("vmm_stream", "stderr").WriterLevel(logrus.DebugLevel)
+	}
+
 	j.logger.Debug("noop operation for BuildJailedMachine")
 	return []firecracker.Opt{
 		firecracker.WithProcessRunner(cmd),

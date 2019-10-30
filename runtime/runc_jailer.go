@@ -183,7 +183,13 @@ func (j *runcJailer) BuildJailedRootHandler(cfg *Config, socketPath *string, vmI
 						return errors.Wrapf(err, "failed to stat drive %q", drivePath)
 					}
 
-					if err := copyFile(drivePath, newDrivePath, info.Mode()); err != nil {
+					// If the file will be mounted as read-only, drop write permissions
+					mode := info.Mode()
+					if *d.IsReadOnly {
+						mode &= 0555
+					}
+
+					if err := copyFile(drivePath, newDrivePath, mode); err != nil {
 						return errors.Wrapf(err, "failed to copy drive %v", drivePath)
 					}
 				}

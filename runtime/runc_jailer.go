@@ -156,8 +156,11 @@ func (j *runcJailer) BuildJailedRootHandler(cfg *Config, socketPath *string, vmI
 			newKernelImagePath := filepath.Join(rootPath, kernelImageFileName)
 			j.logger.WithField("newKernelImagePath", newKernelImagePath).Debug("copying kernel image")
 
-			if err := copyFile(m.Cfg.KernelImagePath, newKernelImagePath, 0444); err != nil {
+			if err := copyFile(m.Cfg.KernelImagePath, newKernelImagePath, 0400); err != nil {
 				return errors.Wrap(err, "failed to mount kernel image")
+			}
+			if err := os.Chown(newKernelImagePath, int(j.uid), int(j.gid)); err != nil {
+				return err
 			}
 
 			m.Cfg.KernelImagePath = kernelImageFileName

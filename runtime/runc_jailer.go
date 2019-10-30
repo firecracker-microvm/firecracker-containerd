@@ -99,7 +99,7 @@ func (j *runcJailer) BuildJailedMachine(cfg *Config, machineConfig *firecracker.
 	client := firecracker.NewClient(machineConfig.SocketPath, j.logger, machineConfig.Debug)
 
 	opts := []firecracker.Opt{
-		firecracker.WithProcessRunner(j.jailerCommand(vmID)),
+		firecracker.WithProcessRunner(j.jailerCommand(vmID, cfg.Debug)),
 		firecracker.WithClient(client),
 		func(m *firecracker.Machine) {
 			m.Handlers.FcInit = m.Handlers.FcInit.Prepend(handler)
@@ -340,9 +340,15 @@ func copyFile(src, dst string, mode os.FileMode) error {
 	return nil
 }
 
-func (j runcJailer) jailerCommand(containerName string) *exec.Cmd {
+func (j runcJailer) jailerCommand(containerName string, isDebug bool) *exec.Cmd {
 	cmd := exec.CommandContext(j.ctx, j.runcBinaryPath, "run", containerName)
 	cmd.Dir = j.OCIBundlePath()
+
+	if isDebug {
+		cmd.Stdout = j.logger.WithField("vmm_stream", "stdout").WriterLevel(logrus.DebugLevel)
+		cmd.Stderr = j.logger.WithField("vmm_stream", "stderr").WriterLevel(logrus.DebugLevel)
+	}
+
 	return cmd
 }
 

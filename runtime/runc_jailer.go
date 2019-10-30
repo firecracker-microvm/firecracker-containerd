@@ -48,6 +48,8 @@ type runcJailer struct {
 	gid            uint32
 }
 
+const firecrackerFileName = "firecracker"
+
 func newRuncJailer(ctx context.Context, logger *logrus.Entry, ociBundlePath, runcBinPath string, uid, gid uint32) (*runcJailer, error) {
 	l := logger.WithField("ociBundlePath", ociBundlePath).
 		WithField("runcBinaryPath", runcBinPath)
@@ -140,7 +142,7 @@ func (j *runcJailer) BuildJailedRootHandler(cfg *Config, socketPath *string, vmI
 
 			// copy the firecracker binary
 			j.logger.WithField("root path", rootPath).Debug("copying firecracker binary")
-			newFirecrackerBinPath := filepath.Join(rootPath, filepath.Base(cfg.FirecrackerBinaryPath))
+			newFirecrackerBinPath := filepath.Join(rootPath, firecrackerFileName)
 			if err := copyFile(
 				cfg.FirecrackerBinaryPath,
 				newFirecrackerBinPath,
@@ -412,7 +414,7 @@ func (j runcJailer) setDefaultConfigValues(cfg *Config, socketPath string, spec 
 
 	if spec.Process.Args == nil {
 		cmd := firecracker.VMCommandBuilder{}.
-			WithBin("/firecracker").
+			WithBin("/" + firecrackerFileName).
 			WithSocketPath(socketPath).
 			// Don't need to pass in an actual context here as we are only building
 			// the command arguments and not actually building a command

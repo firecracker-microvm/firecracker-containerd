@@ -131,7 +131,7 @@ func (j *runcJailer) BuildJailedRootHandler(cfg *Config, socketPath *string, vmI
 
 			rootPathToConfig := filepath.Join(ociBundlePath, "config.json")
 			j.logger.WithField("rootPathToConfig", rootPathToConfig).Debug("Copying config")
-			if err := copyFile(runcConfigPath, rootPathToConfig, 0444); err != nil {
+			if err := copyFile(runcConfigPath, rootPathToConfig, 0400); err != nil {
 				return errors.Wrapf(err, "failed to copy config from %v to %v", runcConfigPath, rootPathToConfig)
 			}
 
@@ -398,7 +398,7 @@ func (j runcJailer) overwriteConfig(cfg *Config, socketPath, configPath string) 
 		return err
 	}
 
-	if err := ioutil.WriteFile(configPath, configBytes, 0444); err != nil {
+	if err := ioutil.WriteFile(configPath, configBytes, 0400); err != nil {
 		return err
 	}
 

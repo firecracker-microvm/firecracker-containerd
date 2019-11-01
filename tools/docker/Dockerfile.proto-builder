@@ -13,5 +13,13 @@
 
 FROM golang:1.12-stretch
 
-RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get -y install libseccomp-dev pkg-config
+RUN apt-get update && apt-get install --yes --no-install-recommends \
+	libprotobuf-dev \
+	protobuf-compiler \
+	&& go get -u github.com/containerd/ttrpc/cmd/protoc-gen-gogottrpc \
+	&& go get -u github.com/gogo/protobuf/protoc-gen-gogo \
+	&& mkdir /protobuf
+
+WORKDIR /protobuf
+ENTRYPOINT ["/usr/bin/make"]
+CMD ["proto"]

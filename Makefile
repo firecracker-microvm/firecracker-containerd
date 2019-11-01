@@ -36,6 +36,8 @@ RUNC_DIR=$(SUBMODULES)/runc
 RUNC_BIN=$(RUNC_DIR)/runc
 RUNC_BUILDER_NAME?=runc-builder
 
+PROTO_BUILDER_NAME?=proto-builder
+
 # Set this to pass additional commandline flags to the go compiler, e.g. "make test EXTRAGOARGS=-v"
 export EXTRAGOARGS?=
 
@@ -45,7 +47,11 @@ $(SUBDIRS):
 	$(MAKE) -C $@
 
 proto:
-	PATH=$(BINPATH):$(PATH) $(MAKE) -C proto/ proto
+	DOCKER_BUILDKIT=1 docker build \
+		--file tools/docker/Dockerfile.proto-builder \
+		--tag localhost/$(PROTO_BUILDER_NAME):${DOCKER_IMAGE_TAG} \
+		$(CURDIR)/tools/docker
+	PATH=$(BINPATH):$(PATH) $(MAKE) -C proto/ proto-docker
 
 clean:
 	for d in $(SUBDIRS); do $(MAKE) -C $$d clean; done
@@ -64,6 +70,7 @@ distclean: clean
 	docker volume rm -f $(CARGO_CACHE_VOLUME_NAME)
 	$(call rmi-if-exists,localhost/firecracker-containerd-integ-test:$(DOCKER_IMAGE_TAG))
 	$(call rmi-if-exists,localhost/firecracker-containerd-test:$(DOCKER_IMAGE_TAG))
+	$(call rmi-if-exists,localhost/$(PROTO_BUILDER_NAME):$(DOCKER_IMAGE_TAG))
 
 lint:
 	$(BINPATH)/ltag -t ./.headers -excludes "tools $(SUBMODULES)" -check -v
@@ -75,8 +82,6 @@ deps:
 	$(BINPATH)/golangci-lint --version
 	GOBIN=$(BINPATH) GO111MODULE=off go get -u github.com/vbatts/git-validation
 	GOBIN=$(BINPATH) GO111MODULE=off go get -u github.com/kunalkushwaha/ltag
-	GOBIN=$(BINPATH) GO111MODULE=off go get -u github.com/containerd/ttrpc/cmd/protoc-gen-gogottrpc
-	GOBIN=$(BINPATH) GO111MODULE=off go get -u github.com/gogo/protobuf/protoc-gen-gogo
 
 install:
 	for d in $(SUBDIRS); do $(MAKE) -C $$d install; done

@@ -13,6 +13,9 @@
 
 PROTO_SRC := $(wildcard *.proto)
 PROTO_GEN_SRC := $(PROTO_SRC:.proto=.pb.go)
+DOCKER_IMAGE_TAG?=latest
+UID?=$(shell id -u)
+GID?=$(shell id -g)
 
 $(PROTO_GEN_SRC): $(PROTO_SRC)
 	protoc \
@@ -22,6 +25,12 @@ $(PROTO_GEN_SRC): $(PROTO_SRC)
 proto: $(PROTO_GEN_SRC)
 	PROTOPATH=$(CURDIR) $(MAKE) -C service/fccontrol proto
 	PROTOPATH=$(CURDIR) $(MAKE) -C service/drivemount proto
+
+proto-docker:
+	docker run --rm \
+		-v $(CURDIR):/protobuf \
+		--user $(UID):$(GID) \
+		localhost/proto-builder:${DOCKER_IMAGE_TAG}
 
 clean:
 	- rm -f $(PROTO_GEN_SRC)

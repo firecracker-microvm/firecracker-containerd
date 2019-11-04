@@ -183,18 +183,12 @@ func (j *runcJailer) BuildJailedRootHandler(cfg *Config, socketPath *string, vmI
 				defer f.Close()
 
 				if !internal.IsStubDrive(f) {
-					info, err := os.Stat(drivePath)
-					if err != nil {
-						return errors.Wrapf(err, "failed to stat drive %q", drivePath)
+					mode := 0600
+					if firecracker.BoolValue(d.IsReadOnly) {
+						mode = 0400
 					}
 
-					// If the file will be mounted as read-only, drop write permissions
-					mode := info.Mode()
-					if *d.IsReadOnly {
-						mode &= 0555
-					}
-
-					if err := copyFile(drivePath, newDrivePath, mode); err != nil {
+					if err := copyFile(drivePath, newDrivePath, os.FileMode(mode)); err != nil {
 						return errors.Wrapf(err, "failed to copy drive %v", drivePath)
 					}
 				}

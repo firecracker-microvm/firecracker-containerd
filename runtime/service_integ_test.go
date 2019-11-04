@@ -1033,7 +1033,7 @@ func TestUpdateVMMetadata_Isolated(t *testing.T) {
 				InterfaceName: "veth0",
 			},
 		}},
-		ContainerCount: 1,
+		ContainerCount: 2,
 	})
 	require.NoError(t, err)
 	metadata := "{\"thing\":\"42\",\"ThreeThing\":\"wow\"}"
@@ -1071,12 +1071,12 @@ func TestUpdateVMMetadata_Isolated(t *testing.T) {
 	newContainer, err := client.NewContainer(ctx,
 		containerName,
 		containerd.WithSnapshotter(defaultSnapshotterName()),
-		containerd.WithNewSnapshot("mmds-test", image),
+		containerd.WithNewSnapshot("mmds-test-all", image),
 		containerd.WithNewSpec(
 			oci.WithProcessArgs("/usr/bin/wget",
 				"-q",      // don't print to stderr unless an error occurs
 				"-O", "-", // write to stdout
-				"http://169.254.169.254"),
+				"http://169.254.169.254/"),
 			firecrackeroci.WithVMID("1"),
 			firecrackeroci.WithVMNetwork,
 		),
@@ -1086,4 +1086,23 @@ func TestUpdateVMMetadata_Isolated(t *testing.T) {
 	stdout := startAndWaitTask(ctx, t, newContainer)
 	t.Logf("stdout output from task %q: %s", containerName, stdout)
 	assert.Equalf(t, "ThreeThing\nTwoThing\nthing", stdout, "container %q did not emit expected stdout", containerName)
+	// check a single entry
+	containerName += "-entry"
+	newContainer, err = client.NewContainer(ctx,
+		containerName,
+		containerd.WithSnapshotter(defaultSnapshotterName()),
+		containerd.WithNewSnapshot("mmds-test-entry", image),
+		containerd.WithNewSpec(
+			oci.WithProcessArgs("/usr/bin/wget",
+				"-q",      // don't print to stderr unless an error occurs
+				"-O", "-", // write to stdout
+				"http://169.254.169.254/thing"),
+			firecrackeroci.WithVMID("1"),
+			firecrackeroci.WithVMNetwork,
+		),
+	)
+	require.NoError(t, err, "failed to create container %s", containerName)
+	stdout = startAndWaitTask(ctx, t, newContainer)
+	t.Logf("stdout output from task %q: %s", containerName, stdout)
+	assert.Equalf(t, "45", stdout, "container %q did not emit expected stdout", containerName)
 }

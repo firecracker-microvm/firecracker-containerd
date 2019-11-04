@@ -143,25 +143,14 @@ func (j *runcJailer) BuildJailedRootHandler(cfg *Config, socketPath *string, vmI
 			// copy the firecracker binary
 			j.logger.WithField("root path", rootPath).Debug("copying firecracker binary")
 			newFirecrackerBinPath := filepath.Join(rootPath, firecrackerFileName)
-			if err := copyFile(
-				cfg.FirecrackerBinaryPath,
-				newFirecrackerBinPath,
-				0500,
-			); err != nil {
-				return errors.Wrapf(err, "could not copy firecracker binary from path %v", cfg.FirecrackerBinaryPath)
-			}
-			if err := os.Chown(newFirecrackerBinPath, int(j.uid), int(j.gid)); err != nil {
-				return errors.Wrap(err, "failed to change ownership of binary")
+			if err := j.copyFileToJail(cfg.FirecrackerBinaryPath, newFirecrackerBinPath, 0500); err != nil {
+				return err
 			}
 
 			// copy the kernel image
 			newKernelImagePath := filepath.Join(rootPath, kernelImageFileName)
 			j.logger.WithField("newKernelImagePath", newKernelImagePath).Debug("copying kernel image")
-
-			if err := copyFile(m.Cfg.KernelImagePath, newKernelImagePath, 0400); err != nil {
-				return errors.Wrap(err, "failed to mount kernel image")
-			}
-			if err := os.Chown(newKernelImagePath, int(j.uid), int(j.gid)); err != nil {
+			if err := j.copyFileToJail(m.Cfg.KernelImagePath, newKernelImagePath, 0400); err != nil {
 				return err
 			}
 
@@ -187,9 +176,8 @@ func (j *runcJailer) BuildJailedRootHandler(cfg *Config, socketPath *string, vmI
 					if firecracker.BoolValue(d.IsReadOnly) {
 						mode = 0400
 					}
-
-					if err := copyFile(drivePath, newDrivePath, os.FileMode(mode)); err != nil {
-						return errors.Wrapf(err, "failed to copy drive %v", drivePath)
+					if err := j.copyFileToJail(drivePath, newDrivePath, os.FileMode(mode)); err != nil {
+						return err
 					}
 				}
 
@@ -292,11 +280,7 @@ func (j runcJailer) ExposeFileToJail(srcPath string) error {
 		}
 
 		dst := filepath.Join(parentDir, filepath.Base(srcPath))
-		if err := copyFile(srcPath, dst, os.FileMode(stat.Mode)); err != nil {
-			return err
-		}
-
-		if err := os.Chown(dst, int(uid), int(gid)); err != nil {
+		if err := j.copyFileToJail(srcPath, dst, os.FileMode(stat.Mode)); err != nil {
 			return err
 		}
 
@@ -304,6 +288,17 @@ func (j runcJailer) ExposeFileToJail(srcPath string) error {
 		return fmt.Errorf("unsupported mode: %v", stat.Mode)
 	}
 
+	return nil
+}
+
+// copyFileToJail will copy a file from src to dst, and chown the new file to the jail user.
+func (j runcJailer) copyFileToJail(src, dst string, mode os.FileMode) error {
+	if err := copyFile(src, dst, mode); err != nil {
+		return err
+	}
+	if err := os.Chown(dst, int(j.uid), int(j.gid)); err != nil {
+		return err
+	}
 	return nil
 }
 

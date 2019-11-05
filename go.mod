@@ -18,7 +18,7 @@ require (
 	github.com/docker/go-events v0.0.0-20170721190031-9461782956ad // indirect
 	github.com/docker/go-metrics v0.0.0-20181218153428-b84716841b82 // indirect
 	github.com/docker/go-units v0.3.3
-	github.com/firecracker-microvm/firecracker-go-sdk v0.17.1-0.20191030150325-dbf9a1e05f090
+	github.com/firecracker-microvm/firecracker-go-sdk v0.17.1-0.20191029213755-dbf9a1e05f09
 	github.com/go-ole/go-ole v1.2.4 // indirect
 	github.com/godbus/dbus v0.0.0-20181025153459-66d97aec3384 // indirect
 	github.com/gofrs/uuid v3.2.0+incompatible
@@ -53,3 +53,5 @@ require (
 
 // Workaround for github.com/containerd/containerd issue #3031
 replace github.com/docker/distribution v2.7.1+incompatible => github.com/docker/distribution v2.7.1-0.20190205005809-0d3efadf0154+incompatible
+
+go 1.11

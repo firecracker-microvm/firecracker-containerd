@@ -17,7 +17,7 @@
 # COMMON IMAGES
 #
 #########################################
-FROM golang:1.12-stretch as base
+FROM golang:1.13-stretch as base
 # Set up a non-root user for running builds and some tests in later stages
 # Buildkit caches don't support anything like a "--chown" flag yet, so we need to ensure builder will have access to them
 RUN useradd --create-home --uid 1001 builder \

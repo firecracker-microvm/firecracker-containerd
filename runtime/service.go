@@ -1185,11 +1185,6 @@ func (s *service) Shutdown(requestCtx context.Context, req *taskAPI.ShutdownRequ
 		shutdownErr = multierror.Append(shutdownErr, errors.Wrap(err, "failed to gracefully stop VM"))
 	}
 
-	err = os.RemoveAll(s.shimDir.RootPath())
-	if err != nil {
-		shutdownErr = multierror.Append(shutdownErr, errors.Wrapf(err, "failed to remove VM dir %q during shutdown", s.shimDir.RootPath()))
-	}
-
 	if shutdownErr != nil {
 		s.logger.WithError(shutdownErr).Error()
 		return nil, shutdownErr

@@ -30,6 +30,7 @@ import (
 	"github.com/containerd/containerd/runtime/v2/shim"
 	"github.com/containerd/containerd/sys"
 	"github.com/golang/protobuf/ptypes/empty"
+	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"
@@ -369,9 +370,23 @@ func (s *local) newShim(ns, vmID, containerdAddress string, shimSocket *net.Unix
 
 	// make sure to wait after start
 	go func() {
-		logger.Debug("waiting on shim process")
-		waitErr := cmd.Wait()
-		logger.WithError(waitErr).Debug("completed waiting on shim process")
+		var allErr *multierror.Error
+
+		if waitErr := cmd.Wait(); waitErr != nil {
+			allErr = multierror.Append(allErr, waitErr)
+		}
+
+		if removeErr := os.RemoveAll(shimDir.RootPath()); err != nil {
+			allErr = multierror.Append(allErr, removeErr)
+		}
+
+		if allErr != nil {
+			logger.WithError(allErr).Error("shim was unexpectedly killed")
+		} else {
+			// I would change the wording below later.
+			// Even Firecracker is SIGTERM'd, the shim finishes fine.
+			logger.Debug("shim was successfully finished")
+		}
 	}()
 
 	err = setShimOOMScore(cmd.Process.Pid)

@@ -61,22 +61,22 @@ func TestBuildJailedRootHandler_Isolated(t *testing.T) {
 		KernelImagePath:       kernelImagePath,
 		RootDrive:             rootDrivePath,
 	}
-	socketPath := "/path/to/api.socket"
-	vmID := "foo"
-	handler := jailer.BuildJailedRootHandler(&cfg, &socketPath, vmID)
-
-	machine := firecracker.Machine{
-		Cfg: firecracker.Config{
-			SocketPath:      socketPath,
-			KernelImagePath: kernelImagePath,
-			Drives: []models.Drive{
-				{
-					PathOnHost:   firecracker.String(rootDrivePath),
-					IsRootDevice: firecracker.Bool(true),
-					IsReadOnly:   firecracker.Bool(true),
-				},
+	machineConfig := firecracker.Config{
+		SocketPath:      "/path/to/api.socket",
+		KernelImagePath: kernelImagePath,
+		Drives: []models.Drive{
+			{
+				PathOnHost:   firecracker.String(rootDrivePath),
+				IsRootDevice: firecracker.Bool(true),
+				IsReadOnly:   firecracker.Bool(true),
 			},
 		},
+	}
+	vmID := "foo"
+	handler := jailer.BuildJailedRootHandler(&cfg, &machineConfig, vmID)
+
+	machine := firecracker.Machine{
+		Cfg: machineConfig,
 	}
 	err = handler.Fn(context.Background(), &machine)
 	assert.NoError(t, err, "jailed handler failed to run")

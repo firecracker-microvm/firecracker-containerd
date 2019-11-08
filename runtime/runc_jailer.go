@@ -35,6 +35,10 @@ import (
 	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
 )
 
+const (
+	networkNamespaceRuncName = "network"
+)
+
 // runcJailer uses runc to set up a jailed environment for the Firecracker VM.
 type runcJailer struct {
 	ctx    context.Context
@@ -46,6 +50,7 @@ type runcJailer struct {
 	runcBinaryPath string
 	uid            uint32
 	gid            uint32
+	configSpec     specs.Spec
 }
 
 const firecrackerFileName = "firecracker"
@@ -63,6 +68,19 @@ func newRuncJailer(ctx context.Context, logger *logrus.Entry, ociBundlePath, run
 		gid:            gid,
 	}
 
+	spec := specs.Spec{}
+	var configBytes []byte
+	configBytes, err := ioutil.ReadFile(runcConfigPath)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to read %s", runcConfigPath)
+	}
+
+	if err = json.Unmarshal(configBytes, &spec); err != nil {
+		return nil, errors.Wrapf(err, "failed to unmarshal %s", runcConfigPath)
+	}
+
+	j.configSpec = spec
+
 	rootPath := j.RootPath()
 
 	const mode = os.FileMode(0700)
@@ -77,17 +95,17 @@ func newRuncJailer(ctx context.Context, logger *logrus.Entry, ociBundlePath, run
 
 // JailPath returns the base directory from where the jail binary will be ran
 // from
-func (j runcJailer) OCIBundlePath() string {
+func (j *runcJailer) OCIBundlePath() string {
 	return j.ociBundlePath
 }
 
 // RootPath returns the root fs of the jailed system.
-func (j runcJailer) RootPath() string {
+func (j *runcJailer) RootPath() string {
 	return filepath.Join(j.OCIBundlePath(), rootfsFolder)
 }
 
 // JailPath will return the OCI bundle rootfs path
-func (j runcJailer) JailPath() vm.Dir {
+func (j *runcJailer) JailPath() vm.Dir {
 	return vm.Dir(j.RootPath())
 }
 
@@ -95,10 +113,16 @@ func (j runcJailer) JailPath() vm.Dir {
 // instance. In addition, some configuration values will be overwritten to the
 // jailed values, like SocketPath in the machineConfig.
 func (j *runcJailer) BuildJailedMachine(cfg *Config, machineConfig *firecracker.Config, vmID string) ([]firecracker.Opt, error) {
-	handler := j.BuildJailedRootHandler(cfg, &machineConfig.SocketPath, vmID)
+	handler := j.BuildJailedRootHandler(cfg, machineConfig, vmID)
 	fifoHandler := j.BuildLinkFifoHandler()
 	// Build a new client since BuildJailedRootHandler modifies the socket path value.
 	client := firecracker.NewClient(machineConfig.SocketPath, j.logger, machineConfig.Debug)
+
+	if machineConfig.NetNS == "" {
+		if netns := getNetNS(j.configSpec); netns != "" {
+			machineConfig.NetNS = netns
+		}
+	}
 
 	opts := []firecracker.Opt{
 		firecracker.WithProcessRunner(j.jailerCommand(vmID, cfg.Debug)),
@@ -120,10 +144,10 @@ func (j *runcJailer) BuildJailedMachine(cfg *Config, machineConfig *firecracker.
 
 // BuildJailedRootHandler will populate the jail with the necessary files, which may be
 // device nodes, hard links, and/or bind-mount targets
-func (j *runcJailer) BuildJailedRootHandler(cfg *Config, socketPath *string, vmID string) firecracker.Handler {
+func (j *runcJailer) BuildJailedRootHandler(cfg *Config, machineConfig *firecracker.Config, vmID string) firecracker.Handler {
 	ociBundlePath := j.OCIBundlePath()
 	rootPath := j.RootPath()
-	*socketPath = filepath.Join(rootPath, "api.socket")
+	machineConfig.SocketPath = filepath.Join(rootPath, "api.socket")
 
 	return firecracker.Handler{
 		Name: jailerHandlerName,
@@ -136,7 +160,9 @@ func (j *runcJailer) BuildJailedRootHandler(cfg *Config, socketPath *string, vmI
 			}
 
 			j.logger.Debug("Overwritting process args of config")
-			if err := j.overwriteConfig(cfg, filepath.Base(m.Cfg.SocketPath), rootPathToConfig); err != nil {
+			// we pass m.Cfg as opposed to machineConfig as we want the populated
+			// config defaults when calling NewMachine
+			if err := j.overwriteConfig(cfg, &m.Cfg, filepath.Base(m.Cfg.SocketPath), rootPathToConfig); err != nil {
 				return errors.Wrap(err, "failed to overwrite config.json")
 			}
 
@@ -206,7 +232,7 @@ func (j *runcJailer) BuildJailedRootHandler(cfg *Config, socketPath *string, vmI
 
 // BuildLinkFifoHandler will return a new firecracker.Handler with the function
 // that will allow linking of the fifos making them visible to Firecracker.
-func (j runcJailer) BuildLinkFifoHandler() firecracker.Handler {
+func (j *runcJailer) BuildLinkFifoHandler() firecracker.Handler {
 	return firecracker.Handler{
 		Name: jailerFifoHandlerName,
 		Fn: func(ctx context.Context, m *firecracker.Machine) error {
@@ -232,7 +258,7 @@ func (j runcJailer) BuildLinkFifoHandler() firecracker.Handler {
 
 // StubDrivesOptions will return a set of options used to create a new stub
 // drive handler.
-func (j runcJailer) StubDrivesOptions() []stubDrivesOpt {
+func (j *runcJailer) StubDrivesOptions() []stubDrivesOpt {
 	return []stubDrivesOpt{
 		func(drives []models.Drive) error {
 			for _, drive := range drives {
@@ -251,7 +277,7 @@ func (j runcJailer) StubDrivesOptions() []stubDrivesOpt {
 // the jail. For block devices we will use mknod to create the device and then
 // set the correct permissions to ensure visibility in the jail. Regular files
 // will be copied into the jail.
-func (j runcJailer) ExposeFileToJail(srcPath string) error {
+func (j *runcJailer) ExposeFileToJail(srcPath string) error {
 	uid := j.uid
 	gid := j.gid
 
@@ -292,7 +318,7 @@ func (j runcJailer) ExposeFileToJail(srcPath string) error {
 }
 
 // copyFileToJail will copy a file from src to dst, and chown the new file to the jail user.
-func (j runcJailer) copyFileToJail(src, dst string, mode os.FileMode) error {
+func (j *runcJailer) copyFileToJail(src, dst string, mode os.FileMode) error {
 	if err := copyFile(src, dst, mode); err != nil {
 		return err
 	}
@@ -340,7 +366,7 @@ func copyFile(src, dst string, mode os.FileMode) error {
 	return nil
 }
 
-func (j runcJailer) jailerCommand(containerName string, isDebug bool) *exec.Cmd {
+func (j *runcJailer) jailerCommand(containerName string, isDebug bool) *exec.Cmd {
 	cmd := exec.CommandContext(j.ctx, j.runcBinaryPath, "run", containerName)
 	cmd.Dir = j.OCIBundlePath()
 
@@ -353,19 +379,8 @@ func (j runcJailer) jailerCommand(containerName string, isDebug bool) *exec.Cmd 
 }
 
 // overwriteConfig will set the proper default values if a field had not been set.
-//
-// TODO: Add netns
-func (j runcJailer) overwriteConfig(cfg *Config, socketPath, configPath string) error {
-	spec := specs.Spec{}
-	configBytes, err := ioutil.ReadFile(configPath)
-	if err != nil {
-		return err
-	}
-
-	if err := json.Unmarshal(configBytes, &spec); err != nil {
-		return err
-	}
-
+func (j *runcJailer) overwriteConfig(cfg *Config, machineConfig *firecracker.Config, socketPath, configPath string) error {
+	spec := j.configSpec
 	if spec.Process.User.UID != 0 ||
 		spec.Process.User.GID != 0 {
 		return fmt.Errorf(
@@ -376,13 +391,22 @@ func (j runcJailer) overwriteConfig(cfg *Config, socketPath, configPath string) 
 	}
 
 	spec = j.setDefaultConfigValues(cfg, socketPath, spec)
-
 	spec.Root.Path = rootfsFolder
 	spec.Root.Readonly = false
 	spec.Process.User.UID = j.uid
 	spec.Process.User.GID = j.gid
 
-	configBytes, err = json.Marshal(&spec)
+	if machineConfig.NetNS != "" {
+		for i, ns := range spec.Linux.Namespaces {
+			if ns.Type == networkNamespaceRuncName {
+				ns.Path = machineConfig.NetNS
+				spec.Linux.Namespaces[i] = ns
+				break
+			}
+		}
+	}
+
+	configBytes, err := json.Marshal(&spec)
 	if err != nil {
 		return err
 	}
@@ -396,7 +420,7 @@ func (j runcJailer) overwriteConfig(cfg *Config, socketPath, configPath string) 
 
 // setDefaultConfigValues will process the spec file provided and allow any
 // empty/zero values to be replaced with default values.
-func (j runcJailer) setDefaultConfigValues(cfg *Config, socketPath string, spec specs.Spec) specs.Spec {
+func (j *runcJailer) setDefaultConfigValues(cfg *Config, socketPath string, spec specs.Spec) specs.Spec {
 	if spec.Process == nil {
 		spec.Process = &specs.Process{}
 	}
@@ -447,4 +471,14 @@ func mkdirAllWithPermissions(path string, mode os.FileMode, uid, gid uint32) err
 	}
 
 	return nil
+}
+
+func getNetNS(spec specs.Spec) string {
+	for _, ns := range spec.Linux.Namespaces {
+		if ns.Type == networkNamespaceRuncName {
+			return ns.Path
+		}
+	}
+
+	return ""
 }

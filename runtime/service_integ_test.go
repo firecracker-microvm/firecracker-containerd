@@ -37,6 +37,7 @@ import (
 	"github.com/containerd/containerd/pkg/ttrpcutil"
 	"github.com/containerd/containerd/runtime"
 	"github.com/containerd/typeurl"
+	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/shirou/gopsutil/process"
@@ -214,6 +215,8 @@ func createTapDevice(ctx context.Context, tapName string) error {
 func TestMultipleVMs_Isolated(t *testing.T) {
 	prepareIntegTest(t, withJailer())
 
+	netns, err := ns.GetCurrentNS()
+
 	cases := []struct {
 		MaxContainers int32
 		JailerConfig  *proto.JailerConfig
@@ -229,11 +232,15 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 		},
 		{
 			MaxContainers: 3,
-			JailerConfig:  &proto.JailerConfig{},
+			JailerConfig: &proto.JailerConfig{
+				NetNS: netns.Path(),
+			},
 		},
 		{
 			MaxContainers: 3,
-			JailerConfig:  &proto.JailerConfig{},
+			JailerConfig: &proto.JailerConfig{
+				NetNS: netns.Path(),
+			},
 		},
 	}
 
@@ -262,6 +269,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 
 			tapName := fmt.Sprintf("tap%d", vmID)
 			err = createTapDevice(ctx, tapName)
+
 			require.NoError(t, err, "failed to create tap device for vm %d", vmID)
 
 			rootfsPath := defaultVMRootfsPath
@@ -288,10 +296,6 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 				JailerConfig:   jailerConfig,
 			}
 
-			if jailerConfig != nil {
-				req.NetworkInterfaces = nil
-			}
-
 			_, err = fcClient.CreateVM(ctx, req)
 			require.NoError(t, err, "failed to create vm")
 
@@ -307,13 +311,6 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 						"/usr/bin/readlink /proc/self/ns/mnt",
 						fmt.Sprintf("/bin/sleep %d", testTimeout/time.Second),
 					}, " && "))
-
-					if jailerConfig != nil {
-						// TODO: this if statement block can go away once we add netns
-						processArgs = oci.WithProcessArgs("/bin/sh", "-c", strings.Join([]string{
-							fmt.Sprintf("/bin/sleep %d", testTimeout/time.Second),
-						}, " && "))
-					}
 
 					// spawn a container that just prints the VM's eth0 mac address (which we have set uniquely per VM)
 					newContainer, err := client.NewContainer(ctx,
@@ -443,20 +440,13 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 
 						stdoutLines := strings.Split(strings.TrimSpace(taskStdout.String()), "\n")
 						lines := 2
-						if jailerConfig != nil {
-							lines = 1
-						}
 						require.Len(t, stdoutLines, lines)
 
 						printedVMID := strings.TrimSpace(stdoutLines[0])
-						// TODO: Remove this if statement once we can add a netns which
-						// will allow firecracker to have visibility of the tap devices.
-						if jailerConfig == nil {
-							require.Equal(t, vmIDtoMacAddr(uint(vmID)), printedVMID, "unexpected VMID output from container %q", containerName)
+						require.Equal(t, vmIDtoMacAddr(uint(vmID)), printedVMID, "unexpected VMID output from container %q", containerName)
 
-							taskMntNS := strings.TrimSpace(stdoutLines[1])
-							require.Equal(t, execMntNS, taskMntNS, "unexpected mnt NS output from container %q", containerName)
-						}
+						taskMntNS := strings.TrimSpace(stdoutLines[1])
+						require.Equal(t, execMntNS, taskMntNS, "unexpected mnt NS output from container %q", containerName)
 
 					case <-ctx.Done():
 						require.Fail(t, "context cancelled",

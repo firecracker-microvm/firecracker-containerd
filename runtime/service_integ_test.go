@@ -1217,3 +1217,42 @@ func TestRandomness_Isolated(t *testing.T) {
 		}
 	}
 }
+
+func TestStopVM_Isolated(t *testing.T) {
+	prepareIntegTest(t)
+	require := require.New(t)
+
+	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	defer client.Close()
+
+	timeout, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	ctx := namespaces.WithNamespace(timeout, "default")
+
+	image, err := alpineImage(ctx, client, defaultSnapshotterName())
+	require.NoError(err, "failed to get alpine image")
+
+	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
+	require.NoError(err, "failed to create ttrpc client")
+
+	vmID := testNameToVMID(t.Name())
+
+	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
+	_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{VMID: vmID})
+	require.NoError(err)
+
+	c, err := client.NewContainer(ctx,
+		"container",
+		containerd.WithSnapshotter(defaultSnapshotterName()),
+		containerd.WithNewSnapshot("snapshot", image),
+		containerd.WithNewSpec(oci.WithProcessArgs("/bin/echo", "-n", "hello"), firecrackeroci.WithVMID(vmID)),
+	)
+	require.NoError(err)
+
+	stdout := startAndWaitTask(ctx, t, c)
+	require.Equal("hello", stdout)
+
+	_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
+	require.NoError(err)
+}

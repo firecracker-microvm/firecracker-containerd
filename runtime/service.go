@@ -1178,11 +1178,14 @@ func (s *service) Shutdown(requestCtx context.Context, req *taskAPI.ShutdownRequ
 	_, err := s.agentClient.Shutdown(requestCtx, req)
 	if err != nil {
 		shutdownErr = multierror.Append(shutdownErr, errors.Wrap(err, "failed to shutdown VM Agent"))
+
+		if err := s.machine.StopVMM(); err != nil {
+			shutdownErr = multierror.Append(shutdownErr, errors.Wrap(err, "failed to shutdown VMM"))
+		}
 	}
 
-	err = s.machine.StopVMM()
-	if err != nil {
-		shutdownErr = multierror.Append(shutdownErr, errors.Wrap(err, "failed to gracefully stop VM"))
+	if err := s.machine.Wait(context.Background()); err != nil {
+		shutdownErr = multierror.Append(shutdownErr, err)
 	}
 
 	if shutdownErr != nil {
@@ -1190,7 +1193,6 @@ func (s *service) Shutdown(requestCtx context.Context, req *taskAPI.ShutdownRequ
 		return nil, shutdownErr
 	}
 
-	s.logger.Info("successfully stopped the VM")
 	return &ptypes.Empty{}, nil
 }
 

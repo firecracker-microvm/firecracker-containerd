@@ -1104,3 +1104,116 @@ func TestUpdateVMMetadata_Isolated(t *testing.T) {
 	t.Logf("stdout output from task %q: %s", containerName, stdout)
 	assert.Equalf(t, "45", stdout, "container %q did not emit expected stdout", containerName)
 }
+
+// TestRandomness validates that there is a reasonable amount of entropy available to the VM and thus
+// randomness available to containers (test reads about 2.5MB from /dev/random w/ an overall test
+// timeout of 60 seconds). It also validates that the quality of the randomness passes the rngtest
+// utility's suite.
+func TestRandomness_Isolated(t *testing.T) {
+	prepareIntegTest(t)
+
+	ctx, cancel := context.WithTimeout(namespaces.WithNamespace(context.Background(), defaultNamespace), 60*time.Second)
+	defer cancel()
+
+	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	defer client.Close()
+
+	image, err := alpineImage(ctx, client, defaultSnapshotterName())
+	require.NoError(t, err, "failed to get alpine image")
+	containerName := "test-entropy"
+
+	const blockCount = 1024
+	ddContainer, err := client.NewContainer(ctx,
+		containerName,
+		containerd.WithSnapshotter(defaultSnapshotterName()),
+		containerd.WithNewSnapshot("test-entropy-snapshot", image),
+		containerd.WithNewSpec(
+			oci.WithDefaultUnixDevices,
+			// Use blocksize of 2500 as rngtest consumes data in blocks of 2500 bytes.
+			oci.WithProcessArgs("/bin/dd", "iflag=fullblock", "if=/dev/random", "of=/dev/stdout", "bs=2500",
+				fmt.Sprintf("count=%d", blockCount)),
+		),
+	)
+	require.NoError(t, err, "failed to create container %s", containerName)
+
+	// rngtest is a utility to "check the randomness of data using FIPS 140-2 tests", installed as part of
+	// the container image this test is running in. We pipe the output from "dd if=/dev/random" to rngtest
+	// to validate the quality of the randomness inside the VM.
+	// TODO It would be conceptually simpler to just run rngtest inside the container in the VM, but
+	// doing so would require some updates to our test infrastructure to support custom-built container
+	// images running in VMs (right now it's only feasible to use publicly available container images).
+	// Right now, it's instead run as a subprocess of this test outside the VM.
+	var rngtestStdout bytes.Buffer
+	var rngtestStderr bytes.Buffer
+	rngtestCmd := exec.CommandContext(ctx, "rngtest",
+		// we set this to 1 less than the number of blocks read by dd above to account for the fact that
+		// the first 32 bits read by rngtest are not used for the tests themselves
+		fmt.Sprintf("--blockcount=%d", blockCount-1),
+	)
+	rngtestCmd.Stdout = &rngtestStdout
+	rngtestCmd.Stderr = &rngtestStderr
+	rngtestStdin, err := rngtestCmd.StdinPipe()
+	require.NoError(t, err, "failed to get pipe to rngtest command's stdin")
+
+	ddStdout := rngtestStdin
+	var ddStderr bytes.Buffer
+
+	task, err := ddContainer.NewTask(ctx, cio.NewCreator(cio.WithStreams(nil, ddStdout, &ddStderr)))
+	require.NoError(t, err, "failed to create task for dd container")
+
+	exitCh, err := task.Wait(ctx)
+	require.NoError(t, err, "failed to wait on task for dd container")
+
+	err = task.Start(ctx)
+	require.NoError(t, err, "failed to start task for dd container")
+
+	err = rngtestCmd.Start()
+	require.NoError(t, err, "failed to start rngtest")
+
+	select {
+	case exitStatus := <-exitCh:
+		assert.NoError(t, exitStatus.Error(), "failed to retrieve exitStatus")
+		assert.EqualValues(t, 0, exitStatus.ExitCode())
+
+		status, err := task.Delete(ctx)
+		assert.NoErrorf(t, err, "failed to delete dd task after exit")
+		if status != nil {
+			assert.NoError(t, status.Error())
+		}
+
+		t.Logf("stderr output from dd:\n %s", ddStderr.String())
+	case <-ctx.Done():
+		require.Fail(t, "context cancelled",
+			"context cancelled while waiting for dd container to exit (is it blocked on reading /dev/random?), err: %v", ctx.Err())
+	}
+
+	err = rngtestCmd.Wait()
+	t.Logf("stdout output from rngtest:\n %s", rngtestStdout.String())
+	t.Logf("stderr output from rngtest:\n %s", rngtestStderr.String())
+	if err != nil {
+		// rngtest will exit non-zero if any blocks fail its randomness tests.
+		// Trials showed an approximate false-negative rate of 27/32863 blocks,
+		// so testing on 1023 blocks gives a ~36% chance of there being a single
+		// false-negative. The chance of there being 5 or more drops down to
+		// about 0.1%, which is an acceptable flakiness rate, so we assert
+		// that there are no more than 4 failed blocks.
+		// Even though we have a failure tolerance, the test still provides some
+		// value in that we can be aware if a change to the rootfs results in a
+		// regression.
+		require.EqualValues(t, 1, rngtestCmd.ProcessState.ExitCode())
+		const failureTolerance = 4
+
+		for _, outputLine := range strings.Split(rngtestStderr.String(), "\n") {
+			var failureCount int
+			_, err := fmt.Sscanf(strings.TrimSpace(outputLine), "rngtest: FIPS 140-2 failures: %d", &failureCount)
+			if err == nil {
+				if failureCount > failureTolerance {
+					require.Failf(t, "too many d block test failures from rngtest",
+						"%d failures is greater than tolerance of up to %d failures", failureCount, failureTolerance)
+				}
+				break
+			}
+		}
+	}
+}

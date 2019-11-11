@@ -103,7 +103,8 @@ RUN apt-get update && apt-get install --yes --no-install-recommends \
 		iptables \
 		iperf3 \
 		libdevmapper-dev \
-		libseccomp-dev
+		libseccomp-dev \
+		rng-tools # used for rngtest
 
 RUN mkdir -p /var/lib/firecracker-containerd/runtime \
         && curl --silent --show-error --retry 3 --max-time 30 --output default-vmlinux.bin \

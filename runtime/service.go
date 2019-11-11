@@ -19,6 +19,7 @@ import (
 	"math"
 	"net"
 	"os"
+	"os/exec"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -45,7 +46,6 @@ import (
 	"github.com/gofrs/uuid"
 	ptypes "github.com/gogo/protobuf/types"
 	"github.com/golang/protobuf/ptypes/empty"
-	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
@@ -71,6 +71,7 @@ const (
 	minVsockIOPort          = uint32(11000)
 	firecrackerStartTimeout = 5 * time.Second
 	defaultStopVMTimeout    = 5 * time.Second
+	defaultShutdownTimeout  = 5 * time.Second
 
 	// StartEventName is the topic published to when a VM starts
 	StartEventName = "/firecracker-vm/start"
@@ -548,46 +549,31 @@ func (s *service) mountDrives(requestCtx context.Context, driveMounts []*proto.F
 	return nil
 }
 
-// StopVM will shutdown the firecracker VM and start this shim's shutdown procedure. If the VM has not been
-// created yet and the timeout is hit waiting for it to exist, an error will be returned but the shim will
-// continue to shutdown.
+// StopVM will shutdown the VMM. Unlike Shutdown, this method is exposed to containerd clients.
+// If the VM has not been created yet and the timeout is hit waiting for it to exist, an error will be returned
+// but the shim will continue to shutdown.
 func (s *service) StopVM(requestCtx context.Context, request *proto.StopVMRequest) (_ *empty.Empty, err error) {
+	defer logPanicAndDie(s.logger)
+	s.logger.WithFields(logrus.Fields{"timeout_seconds": request.TimeoutSeconds}).Debug("StopVM")
+
 	timeout := defaultStopVMTimeout
 	if request.TimeoutSeconds > 0 {
 		timeout = time.Duration(request.TimeoutSeconds) * time.Second
 	}
-	timer := time.NewTimer(timeout)
-	defer logPanicAndDie(s.logger)
-	// If something goes wrong here, just shut down ungracefully. This eliminates some scenarios that would result
-	// in the user being unable to shut down the VM.
-	defer func() {
-		if err != nil {
-			s.logger.WithError(err).Error("StopVM error, shim is shutting down ungracefully")
-			s.shimCancel()
-		}
-	}()
 
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), timeout)
+	defer shutdownCancel()
+
+	defer s.shimCancel()
 	err = s.waitVMReady()
 	if err != nil {
 		return nil, err
 	}
 
-	shutdownCh := make(chan error)
-	go func() {
-		defer close(shutdownCh)
-		_, err := s.Shutdown(requestCtx, &taskAPI.ShutdownRequest{Now: true})
-		shutdownCh <- err
-	}()
-
-	select {
-	case <-timer.C:
-		return nil, status.Error(codes.DeadlineExceeded, "timed out waiting for VM shutdown")
-	case err = <-shutdownCh:
-		if err != nil {
-			return nil, err
-		}
-		return &empty.Empty{}, nil
+	if err = s.shutdown(requestCtx, shutdownCtx, &taskAPI.ShutdownRequest{Now: true}); err != nil {
+		return nil, err
 	}
+	return &empty.Empty{}, nil
 }
 
 // GetVMInfo returns metadata for the VM being managed by this shim. If the VM has not been created yet, this
@@ -1149,51 +1135,71 @@ func (s *service) Connect(requestCtx context.Context, req *taskAPI.ConnectReques
 	return nil, errdefs.ErrNotImplemented
 }
 
-// Shutdown will attempt a graceful shutdown of the shim+VM. The shutdown procedure will only actually take
-// place if "Now" was set to true OR the VM started successfully, all tasks have been deleted and we were
-// told to shutdown when all tasks were deleted. Otherwise the call is just ignored.
+// Shutdown will shutdown of the VMM. Unlike StopVM, this method is only exposed to containerd itself.
 //
-// Shutdown can be called from a few code paths:
-// * If StopVM is called by the user (in which case "Now" is set to true)
-// * After any task is deleted via containerd's API (containerd calls on behalf of the user)
-// * After any task Create call returns an error (containerd calls on behalf of the user)
-// Shutdown is not directly exposed to containerd clients.
+// The shutdown procedure will only actually take place if "Now" was set to true OR
+// the VM started successfully, all tasks have been deleted and we were told to shutdown when all tasks were deleted.
+// Otherwise the call is just ignored.
+//
+// containerd calls this API on behalf of the user in the following cases:
+// * After any task is deleted via containerd's API
+// * After any task Create call returns an error
 func (s *service) Shutdown(requestCtx context.Context, req *taskAPI.ShutdownRequest) (*ptypes.Empty, error) {
 	defer logPanicAndDie(log.G(requestCtx))
-	s.logger.WithFields(logrus.Fields{"task_id": req.ID, "now": req.Now}).Debug("shutdown")
+	s.logger.WithFields(logrus.Fields{"task_id": req.ID, "now": req.Now}).Debug("Shutdown")
 
 	shouldShutdown := req.Now || s.exitAfterAllTasksDeleted && s.taskManager.ShutdownIfEmpty()
 	if !shouldShutdown {
 		return &ptypes.Empty{}, nil
 	}
 
-	// cancel the shim context no matter what, which will result in the VM getting a SIGKILL (if not already
-	// dead from graceful shutdown) and the shim process itself to begin exiting
-	defer s.shimCancel()
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), defaultShutdownTimeout*time.Second)
+	defer shutdownCancel()
 
-	s.logger.Info("stopping the VM")
-
-	var shutdownErr error
-
-	_, err := s.agentClient.Shutdown(requestCtx, req)
-	if err != nil {
-		shutdownErr = multierror.Append(shutdownErr, errors.Wrap(err, "failed to shutdown VM Agent"))
-
-		if err := s.machine.StopVMM(); err != nil {
-			shutdownErr = multierror.Append(shutdownErr, errors.Wrap(err, "failed to shutdown VMM"))
-		}
-	}
-
-	if err := s.machine.Wait(context.Background()); err != nil {
-		shutdownErr = multierror.Append(shutdownErr, err)
-	}
-
-	if shutdownErr != nil {
-		s.logger.WithError(shutdownErr).Error()
-		return nil, shutdownErr
+	if err := s.shutdown(requestCtx, shutdownCtx, req); err != nil {
+		return &ptypes.Empty{}, err
 	}
 
 	return &ptypes.Empty{}, nil
+}
+
+// shutdown will shutdown the VMM. requestCtx is used to issue requests and shutdownCtx is used for waiting a graceful shutdown procedure.
+// When shutdownCtx's Done channel is closed during the graceful shutdown procedure, the VMM is forcefully killed.
+func (s *service) shutdown(requestCtx, shutdownCtx context.Context, req *taskAPI.ShutdownRequest) error {
+	// cancel the shim at the end, in case even the last StopVMM() doesn't work
+	defer s.shimCancel()
+
+	s.logger.Info("stopping the VM")
+	if _, err := s.agentClient.Shutdown(requestCtx, req); err != nil {
+		return err
+	}
+
+	shutdownCh := make(chan error)
+	go func() {
+		defer close(shutdownCh)
+		err := s.machine.Wait(shutdownCtx)
+		shutdownCh <- err
+	}()
+
+	var shutdownErr error
+	select {
+	case shutdownErr = <-shutdownCh:
+		if shutdownErr == nil {
+			s.logger.Info("the VM has been stopped successfully")
+			return nil
+		} else if exitErr, ok := shutdownErr.(*exec.ExitError); ok {
+			s.logger.WithError(exitErr).Error("the VM has been stopped, but not successfully")
+			return exitErr
+		}
+		s.logger.WithError(shutdownErr).Error("the VM returns unknown error")
+	case <-shutdownCtx.Done():
+		s.logger.Error("the VM hasn't been stopped before the context's deadline")
+	}
+
+	if err := s.machine.StopVMM(); err != nil {
+		return err
+	}
+	return shutdownErr
 }
 
 func (s *service) Stats(requestCtx context.Context, req *taskAPI.StatsRequest) (*taskAPI.StatsResponse, error) {

@@ -140,16 +140,7 @@ func TestShimExitsUponContainerDelete_Isolated(t *testing.T) {
 	err = task.Start(testCtx)
 	require.NoError(t, err, "failed to start task for container %s", containerName)
 
-	shimProcesses, err := internal.WaitForProcessToExist(testCtx, time.Second,
-		func(ctx context.Context, p *process.Process) (bool, error) {
-			processExecutable, err := p.ExeWithContext(ctx)
-			if err != nil {
-				return false, err
-			}
-
-			return filepath.Base(processExecutable) == shimProcessName, nil
-		},
-	)
+	shimProcesses, err := internal.WaitForProcessToExist(testCtx, time.Second, findShim)
 	require.NoError(t, err, "failed waiting for expected shim process %q to come up", shimProcessName)
 	require.Len(t, shimProcesses, 1, "expected only one shim process to exist")
 	shimProcess := shimProcesses[0]
@@ -1253,6 +1244,22 @@ func TestStopVM_Isolated(t *testing.T) {
 	stdout := startAndWaitTask(ctx, t, c)
 	require.Equal("hello", stdout)
 
+	shimProcesses, err := internal.WaitForProcessToExist(ctx, time.Second, findShim)
+	require.NoError(err, "failed waiting for expected shim process %q to come up", shimProcessName)
+	require.Len(shimProcesses, 1, "expected only one shim process to exist")
+
 	_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
 	require.NoError(err)
+
+	err = internal.WaitForPidToExit(ctx, time.Second, shimProcesses[0].Pid)
+	require.NoError(err, "shim hasn't been terminated")
+}
+
+func findShim(ctx context.Context, p *process.Process) (bool, error) {
+	processExecutable, err := p.ExeWithContext(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	return filepath.Base(processExecutable) == shimProcessName, nil
 }

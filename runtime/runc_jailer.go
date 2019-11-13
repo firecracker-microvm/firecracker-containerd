@@ -48,6 +48,8 @@ type runcJailer struct {
 	gid            uint32
 }
 
+const firecrackerFileName = "firecracker"
+
 func newRuncJailer(ctx context.Context, logger *logrus.Entry, ociBundlePath, runcBinPath string, uid, gid uint32) (*runcJailer, error) {
 	l := logger.WithField("ociBundlePath", ociBundlePath).
 		WithField("runcBinaryPath", runcBinPath)
@@ -129,7 +131,7 @@ func (j *runcJailer) BuildJailedRootHandler(cfg *Config, socketPath *string, vmI
 
 			rootPathToConfig := filepath.Join(ociBundlePath, "config.json")
 			j.logger.WithField("rootPathToConfig", rootPathToConfig).Debug("Copying config")
-			if err := copyFile(runcConfigPath, rootPathToConfig, 0444); err != nil {
+			if err := copyFile(runcConfigPath, rootPathToConfig, 0400); err != nil {
 				return errors.Wrapf(err, "failed to copy config from %v to %v", runcConfigPath, rootPathToConfig)
 			}
 
@@ -140,24 +142,16 @@ func (j *runcJailer) BuildJailedRootHandler(cfg *Config, socketPath *string, vmI
 
 			// copy the firecracker binary
 			j.logger.WithField("root path", rootPath).Debug("copying firecracker binary")
-			newFirecrackerBinPath := filepath.Join(rootPath, filepath.Base(cfg.FirecrackerBinaryPath))
-			if err := copyFile(
-				cfg.FirecrackerBinaryPath,
-				newFirecrackerBinPath,
-				0500,
-			); err != nil {
-				return errors.Wrapf(err, "could not copy firecracker binary from path %v", cfg.FirecrackerBinaryPath)
-			}
-			if err := os.Chown(newFirecrackerBinPath, int(j.uid), int(j.gid)); err != nil {
-				return errors.Wrap(err, "failed to change ownership of binary")
+			newFirecrackerBinPath := filepath.Join(rootPath, firecrackerFileName)
+			if err := j.copyFileToJail(cfg.FirecrackerBinaryPath, newFirecrackerBinPath, 0500); err != nil {
+				return err
 			}
 
 			// copy the kernel image
 			newKernelImagePath := filepath.Join(rootPath, kernelImageFileName)
 			j.logger.WithField("newKernelImagePath", newKernelImagePath).Debug("copying kernel image")
-
-			if err := copyFile(m.Cfg.KernelImagePath, newKernelImagePath, 0444); err != nil {
-				return errors.Wrap(err, "failed to mount kernel image")
+			if err := j.copyFileToJail(m.Cfg.KernelImagePath, newKernelImagePath, 0400); err != nil {
+				return err
 			}
 
 			m.Cfg.KernelImagePath = kernelImageFileName
@@ -178,13 +172,12 @@ func (j *runcJailer) BuildJailedRootHandler(cfg *Config, socketPath *string, vmI
 				defer f.Close()
 
 				if !internal.IsStubDrive(f) {
-					info, err := os.Stat(drivePath)
-					if err != nil {
-						return errors.Wrapf(err, "failed to stat drive %q", drivePath)
+					mode := 0600
+					if firecracker.BoolValue(d.IsReadOnly) {
+						mode = 0400
 					}
-
-					if err := copyFile(drivePath, newDrivePath, info.Mode()); err != nil {
-						return errors.Wrapf(err, "failed to copy drive %v", drivePath)
+					if err := j.copyFileToJail(drivePath, newDrivePath, os.FileMode(mode)); err != nil {
+						return err
 					}
 				}
 
@@ -287,11 +280,7 @@ func (j runcJailer) ExposeFileToJail(srcPath string) error {
 		}
 
 		dst := filepath.Join(parentDir, filepath.Base(srcPath))
-		if err := copyFile(srcPath, dst, os.FileMode(stat.Mode)); err != nil {
-			return err
-		}
-
-		if err := os.Chown(dst, int(uid), int(gid)); err != nil {
+		if err := j.copyFileToJail(srcPath, dst, os.FileMode(stat.Mode)); err != nil {
 			return err
 		}
 
@@ -299,6 +288,17 @@ func (j runcJailer) ExposeFileToJail(srcPath string) error {
 		return fmt.Errorf("unsupported mode: %v", stat.Mode)
 	}
 
+	return nil
+}
+
+// copyFileToJail will copy a file from src to dst, and chown the new file to the jail user.
+func (j runcJailer) copyFileToJail(src, dst string, mode os.FileMode) error {
+	if err := copyFile(src, dst, mode); err != nil {
+		return err
+	}
+	if err := os.Chown(dst, int(j.uid), int(j.gid)); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -387,7 +387,7 @@ func (j runcJailer) overwriteConfig(cfg *Config, socketPath, configPath string) 
 		return err
 	}
 
-	if err := ioutil.WriteFile(configPath, configBytes, 0444); err != nil {
+	if err := ioutil.WriteFile(configPath, configBytes, 0400); err != nil {
 		return err
 	}
 
@@ -403,7 +403,7 @@ func (j runcJailer) setDefaultConfigValues(cfg *Config, socketPath string, spec 
 
 	if spec.Process.Args == nil {
 		cmd := firecracker.VMCommandBuilder{}.
-			WithBin("/firecracker").
+			WithBin("/" + firecrackerFileName).
 			WithSocketPath(socketPath).
 			// Don't need to pass in an actual context here as we are only building
 			// the command arguments and not actually building a command

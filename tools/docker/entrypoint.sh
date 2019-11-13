@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -ex
+set -e
 
 chmod a+rwx ${FICD_LOG_DIR}
 

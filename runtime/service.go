@@ -328,7 +328,7 @@ func (s *service) StartShim(shimCtx context.Context, containerID, containerdBina
 
 		log.Info("will start a single-task VM since no VMID has been provided")
 	} else {
-		log.Info("will start a persistent VM")
+		log.WithField("vmID", s.vmID).Info("will start a persistent VM")
 	}
 
 	client, err := ttrpcutil.NewClient(containerdTTRPCAddress)

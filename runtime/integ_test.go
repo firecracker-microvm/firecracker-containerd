@@ -26,7 +26,7 @@ const runtimeConfigPath = "/etc/containerd/firecracker-runtime.json"
 var defaultRuntimeConfig = Config{
 	FirecrackerBinaryPath: "/usr/local/bin/firecracker",
 	KernelImagePath:       "/var/lib/firecracker-containerd/runtime/default-vmlinux.bin",
-	KernelArgs:            "ro console=ttyS0 noapic reboot=k panic=1 pci=off nomodules systemd.journald.forward_to_console systemd.unit=firecracker.target init=/sbin/overlay-init",
+	KernelArgs:            "ro console=ttyS0 noapic reboot=k panic=1 pci=off nomodules systemd.journald.forward_to_console systemd.log_color=false systemd.unit=firecracker.target init=/sbin/overlay-init",
 	RootDrive:             "/var/lib/firecracker-containerd/runtime/default-rootfs.img",
 	CPUCount:              1,
 	CPUTemplate:           "T2",

@@ -12,8 +12,6 @@
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
-set -x
-
 # Parameters:
 # 1. rw_root -- path where the read/write root is mounted
 # 2. work_dir -- path to the overlay workdir (must be on same filesystem as rw_root)

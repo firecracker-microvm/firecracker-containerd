@@ -13,5 +13,7 @@ install:
   - make deps
 
 script:
+  # "make" must be happening before "make lint" to download dependencies
   - make
   - make lint
+  - make test

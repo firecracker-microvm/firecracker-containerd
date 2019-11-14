@@ -1,0 +1,22 @@
+[Unit]
+Description=Entropy Daemon based on the HAVEGE algorithm
+Documentation=man:haveged(8) http://www.issihosts.com/haveged/
+DefaultDependencies=no
+ConditionVirtualization=!container
+After=local-fs.target
+Before=firecracker.target sysinit.target shutdown.target
+
+[Service]
+ExecStart=/usr/sbin/haveged --Foreground --verbose=1 -w 1024
+SuccessExitStatus=143
+SecureBits=noroot-locked
+NoNewPrivileges=yes
+CapabilityBoundingSet=CAP_SYS_ADMIN
+PrivateTmp=yes
+PrivateDevices=yes
+PrivateNetwork=yes
+ProtectSystem=full
+ProtectHome=yes
+
+[Install]
+WantedBy=default.target

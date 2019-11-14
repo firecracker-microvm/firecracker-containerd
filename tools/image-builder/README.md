@@ -74,3 +74,14 @@ the final parameter passed on the kernel command line.
 A complete command line, settable via the `kernel_args` setting in `/etc/containerd/firecracker-runtime.json`, is:
 
     ro console=ttyS0 noapic reboot=k panic=1 pci=off nomodules systemd.journald.forward_to_console systemd.unit=firecracker.target init=/sbin/overlay-init
+
+### Security ###
+
+In order to ensure sufficient entropy is consistently available within 
+the VM, the rootfs is configured to start the 
+[`haveged`](https://manpages.debian.org/buster/haveged/haveged.8.en.html)
+daemon during boot. [More information on its method of operation and other
+details can be found in its FAQ](https://issihosts.com/haveged/faq.html).
+Users of the image created by this utility are encouraged to evaluate 
+`haveged` against their security requirements before running any
+cryptographically-sensitive workloads inside their microVMs and containers.

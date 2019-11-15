@@ -51,12 +51,15 @@ integ-test:
 			--volume /dev:/dev \
 			--volume /run/udev/control:/run/udev/control \
 			--volume $(CURDIR)/logs:/var/log/firecracker-containerd-test \
+			--volume $(CURDIR)/..:/firecracker-containerd \
 			--env ENABLE_ISOLATED_TESTS=1 \
 			--env FICD_SNAPSHOTTER=$(FICD_SNAPSHOTTER) \
 			--env FICD_DM_POOL=$(FICD_DM_POOL) \
+			--env GOPROXY=direct \
+			--env GOSUMDB=off \
 			--workdir="/firecracker-containerd/runtime" \
 			--init \
-			localhost/firecracker-containerd-integ-test:$(DOCKER_IMAGE_TAG) \
+			localhost/firecracker-containerd-integ-test-tiny:$(DOCKER_IMAGE_TAG) \
 			"go test $(EXTRAGOARGS) -run \"^$(TESTNAME)$$\"" || exit 1; \
 	)
 

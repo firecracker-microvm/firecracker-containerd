@@ -26,7 +26,7 @@ EOF
 [plugins]
   [plugins.devmapper]
     pool_name = "fcci--vg-${FICD_DM_POOL}"
-    base_image_size = "128MB"
+    base_image_size = "1024MB"
 EOF
         ;;
     *)

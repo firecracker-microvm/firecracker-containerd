@@ -15,6 +15,7 @@ package main
 
 import (
 	"context"
+	"os"
 
 	"github.com/firecracker-microvm/firecracker-go-sdk"
 	"github.com/sirupsen/logrus"
@@ -54,13 +55,17 @@ type jailer interface {
 	// JailPath is used to return the directory we are supposed to be working in.
 	JailPath() vm.Dir
 	// StubDrivesOptions will return a set of options used to create a new stub
-	// drive handler.
-	StubDrivesOptions() []stubDrivesOpt
+	// drive file
+	StubDrivesOptions() []FileOpt
 }
 
 type cgroupPather interface {
 	CgroupPath() string
 }
+
+// FileOpt is a functional option that operates on an open file, modifying it to be usable
+// by the jailer implementation providing the option.
+type FileOpt func(*os.File) error
 
 // newJailer is used to construct a jailer from the CreateVM request. If no
 // request or jailer config was provided, then the noopJailer will be returned.

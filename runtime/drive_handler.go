@@ -15,21 +15,25 @@ package main
 
 import (
 	"context"
+	"encoding/base32"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
 
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
 	firecracker "github.com/firecracker-microvm/firecracker-go-sdk"
-	models "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
+	"github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
+	"github.com/firecracker-microvm/firecracker-containerd/proto"
+	drivemount "github.com/firecracker-microvm/firecracker-containerd/proto/service/drivemount/ttrpc"
 )
 
 const (
-	// fcSectorSize is the sector size of Firecracker
+	// fcSectorSize is the sector size of Firecracker drives
 	fcSectorSize = 512
 )
 
@@ -37,103 +41,203 @@ var (
 	// ErrDrivesExhausted occurs when there are no more drives left to use. This
 	// can happen by calling PatchStubDrive greater than the number of drives.
 	ErrDrivesExhausted = fmt.Errorf("There are no remaining drives to be used")
-
-	// ErrDriveIDNil should never happen, but we safe guard against nil dereferencing
-	ErrDriveIDNil = fmt.Errorf("DriveID of current drive is nil")
 )
 
-// stubDriveHandler is used to manage stub drives.
-type stubDriveHandler struct {
-	RootPath       string
-	stubDriveIndex int64
-	drives         []models.Drive
-	logger         *logrus.Entry
-	mutex          sync.Mutex
-}
+// CreateContainerStubs will create a StubDriveHandler for managing the stub drives
+// of container rootfs drives. The Firecracker drives are hardcoded to be read-write
+// and have no rate limiter configuration.
+func CreateContainerStubs(
+	machineCfg *firecracker.Config,
+	jail jailer,
+	containerCount int,
+	logger *logrus.Entry,
+) (*StubDriveHandler, error) {
+	var containerStubs []*stubDrive
+	for i := 0; i < containerCount; i++ {
+		isWritable := true
+		var rateLimiter *proto.FirecrackerRateLimiter
+		stubFileName := fmt.Sprintf("ctrstub%d", i)
 
-// stubDrivesOpt is used to make and modify changes to the stub drives.
-type stubDrivesOpt func(stubDrives []models.Drive) error
+		stubDrive, err := newStubDrive(
+			filepath.Join(jail.JailPath().RootPath(), stubFileName),
+			jail, isWritable, rateLimiter, logger)
 
-func newStubDriveHandler(path string, logger *logrus.Entry, count int, opts ...stubDrivesOpt) (*stubDriveHandler, error) {
-	h := stubDriveHandler{
-		RootPath: path,
-		logger:   logger,
-	}
-	drives, err := h.createStubDrives(count)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, opt := range opts {
-		if err := opt(drives); err != nil {
-			h.logger.WithError(err).Debug("failed to apply option to stub drives")
-			return nil, err
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to create container stub drive")
 		}
-	}
-	h.drives = drives
-	return &h, nil
-}
 
-func (h *stubDriveHandler) createStubDrives(stubDriveCount int) ([]models.Drive, error) {
-	paths, err := h.stubDrivePaths(stubDriveCount)
-	if err != nil {
-		return nil, err
-	}
-
-	stubDrives := make([]models.Drive, 0, stubDriveCount)
-	for i, path := range paths {
-		stubDrives = append(stubDrives, models.Drive{
-			DriveID:      firecracker.String(fmt.Sprintf("stub%d", i)),
-			IsReadOnly:   firecracker.Bool(false),
-			PathOnHost:   firecracker.String(path),
+		machineCfg.Drives = append(machineCfg.Drives, models.Drive{
+			DriveID:      firecracker.String(stubDrive.driveID),
+			PathOnHost:   firecracker.String(stubDrive.stubPath),
+			IsReadOnly:   firecracker.Bool(!isWritable),
+			RateLimiter:  rateLimiterFromProto(rateLimiter),
 			IsRootDevice: firecracker.Bool(false),
 		})
+		containerStubs = append(containerStubs, stubDrive)
 	}
 
-	return stubDrives, nil
+	return &StubDriveHandler{
+		freeDrives: containerStubs,
+		usedDrives: make(map[string]*stubDrive),
+	}, nil
 }
 
-// stubDrivePaths will create stub drives and return the paths associated with
-// the stub drives.
-func (h *stubDriveHandler) stubDrivePaths(count int) ([]string, error) {
-	paths := []string{}
-	for i := 0; i < count; i++ {
-		driveID := fmt.Sprintf("stub%d", i)
-		path := filepath.Join(h.RootPath, driveID)
+// StubDriveHandler manages a set of stub drives. It currently only supports reserving
+// one of the drives from its set.
+// In the future, it may be expanded to also support recycling a drive to be used again
+// for a different mount.
+type StubDriveHandler struct {
+	freeDrives []*stubDrive
+	// map of id -> stub drive being used by that task
+	usedDrives map[string]*stubDrive
+	mu         sync.Mutex
+}
 
-		if err := h.createStubDrive(driveID, path); err != nil {
+// Reserve pops a unused stub drive and returns a MountableStubDrive that can be
+// mounted with the provided options as the patched drive information.
+func (h *StubDriveHandler) Reserve(
+	id string,
+	hostPath string,
+	vmPath string,
+	filesystemType string,
+	options []string,
+) (MountableStubDrive, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if len(h.freeDrives) == 0 {
+		return nil, ErrDrivesExhausted
+	}
+
+	freeDrive := h.freeDrives[0]
+	options, err := setReadWriteOptions(options, freeDrive.driveMount.IsWritable)
+	if err != nil {
+		return nil, err
+	}
+
+	h.freeDrives = h.freeDrives[1:]
+	h.usedDrives[id] = freeDrive
+	return freeDrive.withMountConfig(
+		hostPath,
+		vmPath,
+		filesystemType,
+		options,
+	), nil
+}
+
+// CreateDriveMountStubs creates a set of MountableStubDrives from the provided DriveMount configs.
+// The RateLimiter and ReadOnly settings need to be provided up front here as they currently
+// cannot be patched after the Firecracker VM starts.
+func CreateDriveMountStubs(
+	machineCfg *firecracker.Config,
+	jail jailer,
+	driveMounts []*proto.FirecrackerDriveMount,
+	logger *logrus.Entry,
+) ([]MountableStubDrive, error) {
+	containerStubs := make([]MountableStubDrive, len(driveMounts))
+	for i, driveMount := range driveMounts {
+		isWritable := driveMount.IsWritable
+		rateLimiter := driveMount.RateLimiter
+		stubFileName := fmt.Sprintf("drivemntstub%d", i)
+		options, err := setReadWriteOptions(driveMount.Options, isWritable)
+		if err != nil {
 			return nil, err
 		}
 
-		paths = append(paths, path)
+		stubDrive, err := newStubDrive(
+			filepath.Join(jail.JailPath().RootPath(), stubFileName),
+			jail, isWritable, rateLimiter, logger)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to create drive mount stub drive")
+		}
+
+		machineCfg.Drives = append(machineCfg.Drives, models.Drive{
+			DriveID:      firecracker.String(stubDrive.driveID),
+			PathOnHost:   firecracker.String(stubDrive.stubPath),
+			IsReadOnly:   firecracker.Bool(!isWritable),
+			RateLimiter:  rateLimiterFromProto(rateLimiter),
+			IsRootDevice: firecracker.Bool(false),
+		})
+		containerStubs[i] = stubDrive.withMountConfig(
+			driveMount.HostPath,
+			driveMount.VMPath,
+			driveMount.FilesystemType,
+			options)
 	}
 
-	return paths, nil
+	return containerStubs, nil
 }
 
-func (h *stubDriveHandler) createStubDrive(driveID, path string) error {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+func setReadWriteOptions(options []string, isWritable bool) ([]string, error) {
+	var expectedOpt string
+	if isWritable {
+		expectedOpt = "rw"
+	} else {
+		expectedOpt = "ro"
+	}
+
+	for _, opt := range options {
+		if opt == "ro" || opt == "rw" {
+			if opt != expectedOpt {
+				return nil, errors.Errorf("mount option %s is incompatible with IsWritable=%t", opt, isWritable)
+			}
+			return options, nil
+		}
+	}
+
+	// if here, the neither "ro" or "rw" was specified, so explicitly set the option for the user
+	return append(options, expectedOpt), nil
+}
+
+// A MountableStubDrive represents a stub drive that is ready to be patched and mounted
+// once PatchAndMount is called.
+type MountableStubDrive interface {
+	PatchAndMount(
+		requestCtx context.Context,
+		machine firecracker.MachineIface,
+		driveMounter drivemount.DriveMounterService,
+	) error
+}
+
+func stubPathToDriveID(stubPath string) string {
+	// Firecracker resource ids "can only contain alphanumeric characters and underscores", so
+	// do a base32 encoding to remove any invalid characters (base32 avoids invalid "-" chars
+	// from base64)
+	return base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString([]byte(
+		filepath.Base(stubPath)))
+}
+
+func newStubDrive(
+	stubPath string,
+	jail jailer,
+	isWritable bool,
+	rateLimiter *proto.FirecrackerRateLimiter,
+	logger *logrus.Entry,
+) (*stubDrive, error) {
+	// use the stubPath as the drive ID since it needs to be unique per-stubdrive anyways
+	driveID := stubPathToDriveID(stubPath)
+
+	f, err := os.OpenFile(stubPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer func() {
 		if err := f.Close(); err != nil {
-			h.logger.WithError(err).Errorf("unexpected error during %v close", f.Name())
+			logger.WithError(err).Errorf("unexpected error during %v close", f.Name())
 		}
 	}()
 
 	stubContent, err := internal.GenerateStubContent(driveID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if _, err := f.WriteString(stubContent); err != nil {
-		return err
+		return nil, err
 	}
 
 	info, err := f.Stat()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	fileSize := info.Size()
@@ -153,56 +257,76 @@ func (h *stubDriveHandler) createStubDrive(driveID, path string) error {
 	// not a multiple of 512 bytes, then the remainder will not be visible to
 	// Firecracker. So we adjust to the appropriate size based on the residual
 	// bytes remaining.
-	if err := os.Truncate(path, driveSize); err != nil {
-		return err
+	if err := os.Truncate(stubPath, driveSize); err != nil {
+		return nil, err
 	}
 
-	return nil
-}
-
-// GetDrives returns the associated stub drives
-func (h *stubDriveHandler) GetDrives() []models.Drive {
-	return h.drives
-}
-
-// InDriveSet will iterate through all the stub drives and see if the path
-// exists on any of the drives
-func (h *stubDriveHandler) InDriveSet(path string) bool {
-	for _, d := range h.GetDrives() {
-		if firecracker.StringValue(d.PathOnHost) == path {
-			return true
+	for _, opt := range jail.StubDrivesOptions() {
+		err := opt(f)
+		if err != nil {
+			return nil, err
 		}
 	}
 
-	return false
+	return &stubDrive{
+		stubPath: stubPath,
+		jail:     jail,
+		driveID:  driveID,
+		driveMount: &proto.FirecrackerDriveMount{
+			IsWritable:  isWritable,
+			RateLimiter: rateLimiter,
+		},
+	}, nil
 }
 
-// PatchStubDrive will replace the next available stub drive with the provided drive
-func (h *stubDriveHandler) PatchStubDrive(ctx context.Context, client firecracker.MachineIface, pathOnHost string) (string, error) {
-	h.mutex.Lock()
-	defer h.mutex.Unlock()
+type stubDrive struct {
+	stubPath   string
+	jail       jailer
+	driveID    string
+	driveMount *proto.FirecrackerDriveMount
+}
 
-	// Check to see if stubDriveIndex has increased more than the drive amount.
-	if h.stubDriveIndex >= int64(len(h.drives)) {
-		return "", ErrDrivesExhausted
+func (sd stubDrive) withMountConfig(
+	hostPath string,
+	vmPath string,
+	filesystemType string,
+	options []string,
+) stubDrive {
+	sd.driveMount = &proto.FirecrackerDriveMount{
+		HostPath:       hostPath,
+		VMPath:         vmPath,
+		FilesystemType: filesystemType,
+		Options:        options,
+		IsWritable:     sd.driveMount.IsWritable,
+		RateLimiter:    sd.driveMount.RateLimiter,
 	}
+	return sd
+}
 
-	d := h.drives[h.stubDriveIndex]
-	d.PathOnHost = &pathOnHost
-
-	if d.DriveID == nil {
-		// this should never happen, but we want to ensure that we never nil
-		// dereference
-		return "", ErrDriveIDNil
-	}
-
-	h.drives[h.stubDriveIndex] = d
-
-	err := client.UpdateGuestDrive(ctx, firecracker.StringValue(d.DriveID), pathOnHost)
+func (sd stubDrive) PatchAndMount(
+	requestCtx context.Context,
+	machine firecracker.MachineIface,
+	driveMounter drivemount.DriveMounterService,
+) error {
+	err := sd.jail.ExposeFileToJail(sd.driveMount.HostPath)
 	if err != nil {
-		return "", err
+		return errors.Wrap(err, "failed to expose patched drive contents to jail")
 	}
 
-	h.stubDriveIndex++
-	return firecracker.StringValue(d.DriveID), nil
+	err = machine.UpdateGuestDrive(requestCtx, sd.driveID, sd.driveMount.HostPath)
+	if err != nil {
+		return errors.Wrap(err, "failed to patch drive")
+	}
+
+	_, err = driveMounter.MountDrive(requestCtx, &drivemount.MountDriveRequest{
+		DriveID:         sd.driveID,
+		DestinationPath: sd.driveMount.VMPath,
+		FilesytemType:   sd.driveMount.FilesystemType,
+		Options:         sd.driveMount.Options,
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to mount newly patched drive")
+	}
+
+	return nil
 }

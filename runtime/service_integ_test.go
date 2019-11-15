@@ -1107,7 +1107,9 @@ func TestUpdateVMMetadata_Isolated(t *testing.T) {
 
 func exitCode(err *exec.ExitError) int {
 	if status, ok := err.Sys().(syscall.WaitStatus); ok {
-		return int(status)
+		// As like Go 1.12's ExitStatus and WEXITSTATUS()
+		// https://github.com/golang/go/blob/3bea90d84107889aaaaa0089f615d7070951a832/src/syscall/syscall_linux.go#L301
+		return (int(status) & 0xff00) >> 8
 	}
 	return -1
 }

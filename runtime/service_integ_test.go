@@ -1105,6 +1105,13 @@ func TestUpdateVMMetadata_Isolated(t *testing.T) {
 	assert.Equalf(t, "45", stdout, "container %q did not emit expected stdout", containerName)
 }
 
+func exitCode(err *exec.ExitError) int {
+	if status, ok := err.Sys().(syscall.WaitStatus); ok {
+		return int(status)
+	}
+	return -1
+}
+
 // TestRandomness validates that there is a reasonable amount of entropy available to the VM and thus
 // randomness available to containers (test reads about 2.5MB from /dev/random w/ an overall test
 // timeout of 60 seconds). It also validates that the quality of the randomness passes the rngtest
@@ -1201,9 +1208,11 @@ func TestRandomness_Isolated(t *testing.T) {
 		// Even though we have a failure tolerance, the test still provides some
 		// value in that we can be aware if a change to the rootfs results in a
 		// regression.
-		require.EqualValues(t, 1, rngtestCmd.ProcessState.ExitCode())
-		const failureTolerance = 4
+		exitErr, ok := err.(*exec.ExitError)
+		require.True(t, ok, "the error is not ExitError")
+		require.EqualValues(t, 1, exitCode(exitErr))
 
+		const failureTolerance = 4
 		for _, outputLine := range strings.Split(rngtestStderr.String(), "\n") {
 			var failureCount int
 			_, err := fmt.Sscanf(strings.TrimSpace(outputLine), "rngtest: FIPS 140-2 failures: %d", &failureCount)

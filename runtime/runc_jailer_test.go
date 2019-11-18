@@ -33,7 +33,7 @@ import (
 func TestBuildJailedRootHandler_Isolated(t *testing.T) {
 	internal.RequiresIsolation(t)
 	runcConfigPath = "./firecracker-runc-config.json.example"
-	dir, err := ioutil.TempDir("./", "TestBuildJailedRootHandler")
+	dir, err := ioutil.TempDir("", "TestBuildJailedRootHandler")
 	require.NoError(t, err, "failed to create temporary directory")
 
 	defer os.RemoveAll(dir)
@@ -98,7 +98,7 @@ func TestMkdirAllWithPermissions_Isolated(t *testing.T) {
 	// requires isolation so we can change uid/gid of files
 	internal.RequiresIsolation(t)
 
-	tmpdir, err := ioutil.TempDir("./", "TestMkdirAllWithPermissions")
+	tmpdir, err := ioutil.TempDir("", "TestMkdirAllWithPermissions")
 	require.NoError(t, err, "failed to create temporary directory")
 
 	existingPath := filepath.Join(tmpdir, "exists")

@@ -116,7 +116,7 @@ image: $(RUNC_BIN) agent
 
 test-images: test-images-stamp
 
-test-images-stamp: | image firecracker-containerd-integ-test-image firecracker-containerd-test-image
+test-images-stamp: | image firecracker-containerd-integ-test-image firecracker-containerd-test-image firecracker-containerd-integ-test-image-tiny
 	touch $@
 
 firecracker-containerd-test-image:
@@ -133,6 +133,17 @@ firecracker-containerd-integ-test-image: $(RUNC_BIN) $(FIRECRACKER_BIN) $(JAILER
 		--target firecracker-containerd-integ-test \
 		--build-arg FIRECRACKER_TARGET=$(FIRECRACKER_TARGET) \
 		--tag localhost/firecracker-containerd-integ-test:${DOCKER_IMAGE_TAG} .
+
+firecracker-containerd-integ-test-image-tiny: all
+	mkdir -p $(CURDIR)/build/opt/cni/bin
+	make install-cni-bin CNI_BIN_ROOT=$(CURDIR)/build/opt/cni/bin
+	make -C internal test-bridged-tap
+	cp internal/test-bridged-tap $(CURDIR)/build/opt/cni/bin
+	DOCKER_BUILDKIT=1 docker build \
+		--progress=plain \
+		--file tools/docker/Dockerfile.integ-test \
+		--build-arg FIRECRACKER_TARGET=$(FIRECRACKER_TARGET) \
+		--tag localhost/firecracker-containerd-integ-test-tiny:${DOCKER_IMAGE_TAG} .
 
 .PHONY: all $(SUBDIRS) clean proto deps lint install image test-images firecracker-container-test-image firecracker-containerd-integ-test-image test test-in-docker $(TEST_SUBDIRS) integ-test $(INTEG_TEST_SUBDIRS)
 
@@ -165,8 +176,9 @@ $(FCNET_CONFIG):
 	mkdir -p $(dir $(FCNET_CONFIG))
 	cp tools/demo/fcnet.conflist $(FCNET_CONFIG)
 
-.PHONY: demo-network
-demo-network: $(PTP_BIN) $(HOSTLOCAL_BIN) $(FIREWALL_BIN) $(TC_REDIRECT_TAP_BIN) $(FCNET_CONFIG)
+.PHONY: demo-network install-cni-bin
+install-cni-bin: $(PTP_BIN) $(HOSTLOCAL_BIN) $(FIREWALL_BIN) $(TC_REDIRECT_TAP_BIN)
+demo-network: install-cni-bin $(FCNET_CONFIG)
 
 ##########################
 # Firecracker submodule

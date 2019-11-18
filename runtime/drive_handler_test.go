@@ -33,7 +33,7 @@ import (
 )
 
 func TestStubDriveHandler(t *testing.T) {
-	tempPath, err := ioutil.TempDir("./", "TestStubDriveHandler")
+	tempPath, err := ioutil.TempDir("", "TestStubDriveHandler")
 	require.NoError(t, err)
 	defer func() {
 		os.RemoveAll(tempPath)

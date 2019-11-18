@@ -41,38 +41,33 @@ const (
 
 // runcJailer uses runc to set up a jailed environment for the Firecracker VM.
 type runcJailer struct {
-	ctx    context.Context
-	logger *logrus.Entry
-	// ociBundlePath is the path that will be used to create an OCI bundle,
-	// https://github.com/opencontainers/runtime-spec/blob/master/bundle.md
-	ociBundlePath string
-	// runcBinaryPath is the path used to execute the runc binary from.
-	runcBinaryPath string
-	uid            uint32
-	gid            uint32
-	vmID           string
-	configSpec     specs.Spec
+	ctx        context.Context
+	logger     *logrus.Entry
+	Config     runcJailerConfig
+	vmID       string
+	configSpec specs.Spec
 }
 
 const firecrackerFileName = "firecracker"
 
-func newRuncJailer(
-	ctx context.Context,
-	logger *logrus.Entry,
-	vmID string,
-	ociBundlePath string,
-	runcBinaryPath string,
-	uid uint32,
-	gid uint32) (*runcJailer, error) {
-	l := logger.WithField("ociBundlePath", ociBundlePath).WithField("runcBinaryPath", runcBinaryPath)
+type runcJailerConfig struct {
+	OCIBundlePath string
+	RuncBinPath   string
+	UID           uint32
+	GID           uint32
+	CPUs          string
+	Mems          string
+}
+
+func newRuncJailer(ctx context.Context, logger *logrus.Entry, vmID string, cfg runcJailerConfig) (*runcJailer, error) {
+	l := logger.WithField("ociBundlePath", cfg.OCIBundlePath).
+		WithField("runcBinaryPath", cfg.RuncBinPath)
+
 	j := &runcJailer{
-		ctx:            ctx,
-		logger:         l,
-		ociBundlePath:  ociBundlePath,
-		runcBinaryPath: runcBinaryPath,
-		uid:            uid,
-		gid:            gid,
-		vmID:           vmID,
+		ctx:    ctx,
+		logger: l,
+		Config: cfg,
+		vmID:   vmID,
 	}
 
 	spec := specs.Spec{}
@@ -93,7 +88,7 @@ func newRuncJailer(
 	const mode = os.FileMode(0700)
 	// Create the proper paths needed for the runc jailer
 	j.logger.WithField("rootPath", rootPath).Debug("Creating root drive path")
-	if err := mkdirAndChown(rootPath, mode, j.uid, j.gid); err != nil {
+	if err := mkdirAndChown(rootPath, mode, j.Config.UID, j.Config.GID); err != nil {
 		return nil, errors.Wrapf(err, "%s failed to mkdirAndChown", rootPath)
 	}
 
@@ -103,7 +98,7 @@ func newRuncJailer(
 // JailPath returns the base directory from where the jail binary will be ran
 // from
 func (j *runcJailer) OCIBundlePath() string {
-	return j.ociBundlePath
+	return j.Config.OCIBundlePath
 }
 
 // RootPath returns the root fs of the jailed system.
@@ -268,7 +263,7 @@ func (j *runcJailer) BuildLinkFifoHandler() firecracker.Handler {
 func (j runcJailer) StubDrivesOptions() []FileOpt {
 	return []FileOpt{
 		func(file *os.File) error {
-			err := unix.Fchown(int(file.Fd()), int(j.uid), int(j.gid))
+			err := unix.Fchown(int(file.Fd()), int(j.Config.UID), int(j.Config.GID))
 			if err != nil {
 				return errors.Wrapf(err, "failed to chown stub file %q", file.Name())
 			}
@@ -283,8 +278,8 @@ func (j runcJailer) StubDrivesOptions() []FileOpt {
 // set the correct permissions to ensure visibility in the jail. Regular files
 // will be copied into the jail.
 func (j *runcJailer) ExposeFileToJail(srcPath string) error {
-	uid := j.uid
-	gid := j.gid
+	uid := j.Config.UID
+	gid := j.Config.GID
 
 	stat := syscall.Stat_t{}
 	if err := syscall.Stat(srcPath, &stat); err != nil {
@@ -327,7 +322,7 @@ func (j *runcJailer) copyFileToJail(src, dst string, mode os.FileMode) error {
 	if err := copyFile(src, dst, mode); err != nil {
 		return err
 	}
-	if err := os.Chown(dst, int(j.uid), int(j.gid)); err != nil {
+	if err := os.Chown(dst, int(j.Config.UID), int(j.Config.GID)); err != nil {
 		return err
 	}
 	return nil
@@ -372,7 +367,7 @@ func copyFile(src, dst string, mode os.FileMode) error {
 }
 
 func (j *runcJailer) jailerCommand(containerName string, isDebug bool) *exec.Cmd {
-	cmd := exec.CommandContext(j.ctx, j.runcBinaryPath, "run", containerName)
+	cmd := exec.CommandContext(j.ctx, j.Config.RuncBinPath, "run", containerName)
 	cmd.Dir = j.OCIBundlePath()
 
 	if isDebug {
@@ -398,8 +393,8 @@ func (j *runcJailer) overwriteConfig(cfg *Config, machineConfig *firecracker.Con
 	spec = j.setDefaultConfigValues(cfg, socketPath, spec)
 	spec.Root.Path = rootfsFolder
 	spec.Root.Readonly = false
-	spec.Process.User.UID = j.uid
-	spec.Process.User.GID = j.gid
+	spec.Process.User.UID = j.Config.UID
+	spec.Process.User.GID = j.Config.GID
 
 	if machineConfig.NetNS != "" {
 		for i, ns := range spec.Linux.Namespaces {
@@ -410,6 +405,17 @@ func (j *runcJailer) overwriteConfig(cfg *Config, machineConfig *firecracker.Con
 			}
 		}
 	}
+
+	if spec.Linux.Resources == nil {
+		spec.Linux.Resources = &specs.LinuxResources{}
+	}
+
+	if spec.Linux.Resources.CPU == nil {
+		spec.Linux.Resources.CPU = &specs.LinuxCPU{}
+	}
+
+	spec.Linux.Resources.CPU.Cpus = j.Config.CPUs
+	spec.Linux.Resources.CPU.Mems = j.Config.Mems
 
 	configBytes, err := json.Marshal(&spec)
 	if err != nil {

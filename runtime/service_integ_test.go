@@ -406,8 +406,10 @@ func testMultipleExecs(ctx context.Context, t *testing.T, vmID int, containerID 
 		require.NoError(t, err, "failed to get shim dir")
 
 		jailer := &runcJailer{
-			ociBundlePath: string(shimDir),
-			vmID:          vmIDStr,
+			Config: runcJailerConfig{
+				OCIBundlePath: string(shimDir),
+			},
+			vmID: vmIDStr,
 		}
 		_, err = os.Stat(jailer.RootPath())
 		require.NoError(t, err, "failed to stat root path of jailer")

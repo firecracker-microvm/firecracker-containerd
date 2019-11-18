@@ -82,13 +82,13 @@ func newJailer(
 	}
 
 	l := logger.WithField("jailer", "runc")
-	return newRuncJailer(
-		ctx,
-		l,
-		service.vmID,
-		ociBundlePath,
-		service.config.JailerConfig.RuncBinaryPath,
-		jailerUID,
-		jailerGID,
-	)
+	config := runcJailerConfig{
+		OCIBundlePath: ociBundlePath,
+		RuncBinPath:   service.config.JailerConfig.RuncBinaryPath,
+		UID:           jailerUID,
+		GID:           jailerGID,
+		CPUs:          request.JailerConfig.CPUs,
+		Mems:          request.JailerConfig.Mems,
+	}
+	return newRuncJailer(ctx, l, service.vmID, config)
 }

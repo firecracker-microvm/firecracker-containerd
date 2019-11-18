@@ -28,6 +28,7 @@ import (
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/oci"
 	"github.com/containerd/containerd/pkg/ttrpcutil"
+	"github.com/firecracker-microvm/firecracker-go-sdk/cni/cmd/tc-redirect-tap/args"
 	"github.com/shirou/gopsutil/cpu"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -39,8 +40,7 @@ import (
 )
 
 func TestCNISupport_Isolated(t *testing.T) {
-	prepareIntegTest(t)
-
+	prepareIntegTest(t, withJailer())
 	testTimeout := 120 * time.Second
 	ctx, cancel := context.WithTimeout(namespaces.WithNamespace(context.Background(), defaultNamespace), testTimeout)
 	defer cancel()
@@ -96,8 +96,23 @@ func TestCNISupport_Isolated(t *testing.T) {
 					CNIConfig: &proto.CNIConfiguration{
 						NetworkName:   cniNetworkName,
 						InterfaceName: "veth0",
+						Args: []*proto.CNIConfiguration_CNIArg{
+							{
+								Key:   "IgnoreUnknown",
+								Value: "true",
+							},
+							{
+								Key:   args.TCRedirectTapUID,
+								Value: fmt.Sprintf("%d", jailerUID),
+							},
+							{
+								Key:   args.TCRedirectTapGID,
+								Value: fmt.Sprintf("%d", jailerGID),
+							},
+						},
 					},
 				}},
+				JailerConfig: &proto.JailerConfig{},
 			})
 			require.NoError(t, err, "failed to create vm")
 

@@ -698,6 +698,10 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 		VMID:        s.vmID,
 	}
 
+	if req.JailerConfig != nil {
+		cfg.NetNS = req.JailerConfig.NetNS
+	}
+
 	s.logger.Debugf("using socket path: %s", cfg.SocketPath)
 
 	// Kernel configuration

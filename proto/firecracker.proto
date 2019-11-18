@@ -72,5 +72,6 @@ message GetVMMetadataResponse {
 }
 
 message JailerConfig {
+    string NetNS = 1;
 }
 

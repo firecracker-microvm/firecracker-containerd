@@ -410,12 +410,13 @@ func (s *service) waitVMReady() error {
 
 // CreateVM will attempt to create the VM as specified in the provided request, but only on the first request
 // received. Any subsequent requests will be ignored and get an AlreadyExists error response.
-func (s *service) CreateVM(requestCtx context.Context, request *proto.CreateVMRequest) (*empty.Empty, error) {
+func (s *service) CreateVM(requestCtx context.Context, request *proto.CreateVMRequest) (*proto.CreateVMResponse, error) {
 	defer logPanicAndDie(s.logger)
 
 	var (
 		err       error
 		createRan bool
+		resp      proto.CreateVMResponse
 	)
 
 	s.vmStartOnce.Do(func() {
@@ -445,7 +446,11 @@ func (s *service) CreateVM(requestCtx context.Context, request *proto.CreateVMRe
 
 	// let all the other methods know that the VM is ready for tasks
 	close(s.vmReady)
-	return &empty.Empty{}, nil
+
+	if c, ok := s.jailer.(cgroupPather); ok {
+		resp.CgroupPath = c.CgroupPath()
+	}
+	return &resp, nil
 }
 
 func (s *service) publishVMStart() error {

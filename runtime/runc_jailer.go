@@ -50,22 +50,29 @@ type runcJailer struct {
 	runcBinaryPath string
 	uid            uint32
 	gid            uint32
+	vmID           string
 	configSpec     specs.Spec
 }
 
 const firecrackerFileName = "firecracker"
 
-func newRuncJailer(ctx context.Context, logger *logrus.Entry, ociBundlePath, runcBinPath string, uid, gid uint32) (*runcJailer, error) {
-	l := logger.WithField("ociBundlePath", ociBundlePath).
-		WithField("runcBinaryPath", runcBinPath)
-
+func newRuncJailer(
+	ctx context.Context,
+	logger *logrus.Entry,
+	vmID string,
+	ociBundlePath string,
+	runcBinaryPath string,
+	uid uint32,
+	gid uint32) (*runcJailer, error) {
+	l := logger.WithField("ociBundlePath", ociBundlePath).WithField("runcBinaryPath", runcBinaryPath)
 	j := &runcJailer{
 		ctx:            ctx,
 		logger:         l,
 		ociBundlePath:  ociBundlePath,
-		runcBinaryPath: runcBinPath,
+		runcBinaryPath: runcBinaryPath,
 		uid:            uid,
 		gid:            gid,
+		vmID:           vmID,
 	}
 
 	spec := specs.Spec{}
@@ -418,6 +425,10 @@ func (j *runcJailer) overwriteConfig(cfg *Config, machineConfig *firecracker.Con
 	return nil
 }
 
+func (j runcJailer) CgroupPath() string {
+	return filepath.Join("/firecracker-containerd", j.vmID)
+}
+
 // setDefaultConfigValues will process the spec file provided and allow any
 // empty/zero values to be replaced with default values.
 func (j *runcJailer) setDefaultConfigValues(cfg *Config, socketPath string, spec specs.Spec) specs.Spec {
@@ -435,6 +446,10 @@ func (j *runcJailer) setDefaultConfigValues(cfg *Config, socketPath string, spec
 
 		spec.Process.Args = cmd.Args
 	}
+
+	cgroupPath := j.CgroupPath()
+	j.logger.WithField("CgroupPath", cgroupPath).Debug("using cgroup path")
+	spec.Linux.CgroupsPath = cgroupPath
 
 	return spec
 }

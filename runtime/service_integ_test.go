@@ -274,9 +274,10 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 
 			rootfsPath := defaultVMRootfsPath
 
+			vmIDStr := strconv.Itoa(vmID)
 			fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
 			req := &proto.CreateVMRequest{
-				VMID: strconv.Itoa(vmID),
+				VMID: vmIDStr,
 				MachineCfg: &proto.FirecrackerMachineConfiguration{
 					MemSizeMib: 512,
 				},
@@ -296,7 +297,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 				JailerConfig:   jailerConfig,
 			}
 
-			_, err = fcClient.CreateVM(ctx, req)
+			resp, err := fcClient.CreateVM(ctx, req)
 			require.NoError(t, err, "failed to create vm")
 
 			var containerWg sync.WaitGroup
@@ -403,9 +404,13 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 
 						jailer := &runcJailer{
 							ociBundlePath: string(shimDir),
+							vmID:          vmIDStr,
 						}
 						_, err = os.Stat(jailer.RootPath())
 						require.NoError(t, err, "failed to stat root path of jailer")
+						_, err = os.Stat(filepath.Join("/sys/fs/cgroup/cpu", resp.CgroupPath))
+						require.NoError(t, err, "failed to stat cgroup path of jailer")
+						assert.Equal(t, filepath.Join("/firecracker-containerd", vmIDStr), resp.CgroupPath)
 					}
 
 					// Verify each exec had the same stdout and use that value as the mount namespace that will be compared

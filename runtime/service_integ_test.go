@@ -140,16 +140,7 @@ func TestShimExitsUponContainerDelete_Isolated(t *testing.T) {
 	err = task.Start(testCtx)
 	require.NoError(t, err, "failed to start task for container %s", containerName)
 
-	shimProcesses, err := internal.WaitForProcessToExist(testCtx, time.Second,
-		func(ctx context.Context, p *process.Process) (bool, error) {
-			processExecutable, err := p.ExeWithContext(ctx)
-			if err != nil {
-				return false, err
-			}
-
-			return filepath.Base(processExecutable) == shimProcessName, nil
-		},
-	)
+	shimProcesses, err := internal.WaitForProcessToExist(testCtx, time.Second, findShim)
 	require.NoError(t, err, "failed waiting for expected shim process %q to come up", shimProcessName)
 	require.Len(t, shimProcesses, 1, "expected only one shim process to exist")
 	shimProcess := shimProcesses[0]
@@ -1227,4 +1218,59 @@ func TestRandomness_Isolated(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestStopVM_Isolated(t *testing.T) {
+	prepareIntegTest(t)
+	require := require.New(t)
+
+	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	defer client.Close()
+
+	timeout, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	ctx := namespaces.WithNamespace(timeout, "default")
+
+	image, err := alpineImage(ctx, client, defaultSnapshotterName())
+	require.NoError(err, "failed to get alpine image")
+
+	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
+	require.NoError(err, "failed to create ttrpc client")
+
+	vmID := testNameToVMID(t.Name())
+
+	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
+	_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{VMID: vmID})
+	require.NoError(err)
+
+	c, err := client.NewContainer(ctx,
+		"container",
+		containerd.WithSnapshotter(defaultSnapshotterName()),
+		containerd.WithNewSnapshot("snapshot", image),
+		containerd.WithNewSpec(oci.WithProcessArgs("/bin/echo", "-n", "hello"), firecrackeroci.WithVMID(vmID)),
+	)
+	require.NoError(err)
+
+	stdout := startAndWaitTask(ctx, t, c)
+	require.Equal("hello", stdout)
+
+	shimProcesses, err := internal.WaitForProcessToExist(ctx, time.Second, findShim)
+	require.NoError(err, "failed waiting for expected shim process %q to come up", shimProcessName)
+	require.Len(shimProcesses, 1, "expected only one shim process to exist")
+
+	_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
+	require.NoError(err)
+
+	err = internal.WaitForPidToExit(ctx, time.Second, shimProcesses[0].Pid)
+	require.NoError(err, "shim hasn't been terminated")
+}
+
+func findShim(ctx context.Context, p *process.Process) (bool, error) {
+	processExecutable, err := p.ExeWithContext(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	return filepath.Base(processExecutable) == shimProcessName, nil
 }

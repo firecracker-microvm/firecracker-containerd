@@ -369,9 +369,17 @@ func (s *local) newShim(ns, vmID, containerdAddress string, shimSocket *net.Unix
 
 	// make sure to wait after start
 	go func() {
-		logger.Debug("waiting on shim process")
-		waitErr := cmd.Wait()
-		logger.WithError(waitErr).Debug("completed waiting on shim process")
+		if err := cmd.Wait(); err != nil {
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				// shim is usually terminated by cancelling the context
+				logger.WithError(exitErr).Debug("shim has been terminated")
+			} else {
+				logger.WithError(err).Error("shim has been unexpectedly terminated")
+			}
+		}
+		if err := os.RemoveAll(shimDir.RootPath()); err != nil {
+			logger.WithError(err).Errorf("failed to remove %q", shimDir.RootPath())
+		}
 	}()
 
 	err = setShimOOMScore(cmd.Process.Pid)

@@ -59,4 +59,4 @@ do_overlay
 
 # invoke the actual system init program and procede with the boot
 # process.
-exec /sbin/init $@
+exec /usr/sbin/init $@

@@ -124,15 +124,15 @@ type service struct {
 	agentClient              taskAPI.TaskService
 	eventBridgeClient        eventbridge.Getter
 	driveMountClient         drivemount.DriveMounterService
-	stubDriveHandler         *stubDriveHandler
+	jailer                   jailer
+	containerStubHandler     *StubDriveHandler
+	driveMountStubs          []MountableStubDrive
 	exitAfterAllTasksDeleted bool // exit the VM and shim when all tasks are deleted
 
 	machine          *firecracker.Machine
 	machineConfig    *firecracker.Config
 	vsockIOPortCount uint32
 	vsockPortMu      sync.Mutex
-
-	jailer jailer
 }
 
 func shimOpts(shimCtx context.Context) (*shim.Opts, error) {
@@ -520,7 +520,7 @@ func (s *service) createVM(requestCtx context.Context, request *proto.CreateVMRe
 	s.driveMountClient = drivemount.NewDriveMounterClient(rpcClient)
 	s.exitAfterAllTasksDeleted = request.ExitAfterAllTasksDeleted
 
-	err = s.mountDrives(requestCtx, request.DriveMounts)
+	err = s.mountDrives(requestCtx)
 	if err != nil {
 		return err
 	}
@@ -529,26 +529,11 @@ func (s *service) createVM(requestCtx context.Context, request *proto.CreateVMRe
 	return nil
 }
 
-func (s *service) mountDrives(requestCtx context.Context, driveMounts []*proto.FirecrackerDriveMount) error {
-	for _, driveMount := range driveMounts {
-		err := s.jailer.ExposeFileToJail(driveMount.HostPath)
-		if err != nil {
-			return errors.Wrapf(err, "failed to expose drive mount host path to jail %s", driveMount.HostPath)
-		}
-
-		driveID, err := s.stubDriveHandler.PatchStubDrive(requestCtx, s.machine, driveMount.HostPath)
+func (s *service) mountDrives(requestCtx context.Context) error {
+	for _, stubDrive := range s.driveMountStubs {
+		err := stubDrive.PatchAndMount(requestCtx, s.machine, s.driveMountClient)
 		if err != nil {
 			return errors.Wrapf(err, "failed to patch drive mount stub")
-		}
-
-		_, err = s.driveMountClient.MountDrive(requestCtx, &drivemount.MountDriveRequest{
-			DriveID:         driveID,
-			DestinationPath: driveMount.VMPath,
-			FilesytemType:   driveMount.FilesystemType,
-			Options:         driveMount.Options,
-		})
-		if err != nil {
-			return errors.Wrapf(err, "failed to mount drive inside vm")
 		}
 	}
 	return nil
@@ -723,6 +708,8 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 		cfg.KernelImagePath = s.config.KernelImagePath
 	}
 
+	cfg.Drives = s.buildRootDrive(req)
+
 	// Drives configuration
 	containerCount := int(req.ContainerCount)
 	if containerCount < 1 {
@@ -732,18 +719,17 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 		containerCount = 1
 	}
 
-	// Create stub drives first and let stub driver handler manage the drives
-	stubDriveHandler, err := newStubDriveHandler(
-		string(s.jailer.JailPath()),
-		s.logger, containerCount+len(req.DriveMounts),
-		s.jailer.StubDrivesOptions()...,
-	)
+	s.containerStubHandler, err = CreateContainerStubs(
+		&cfg, s.jailer, containerCount, s.logger)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create stub drives")
+		return nil, errors.Wrapf(err, "failed to create container stub drives")
 	}
-	s.stubDriveHandler = stubDriveHandler
 
-	cfg.Drives = append(stubDriveHandler.GetDrives(), s.buildRootDrive(req)...)
+	s.driveMountStubs, err = CreateDriveMountStubs(
+		&cfg, s.jailer, req.DriveMounts, s.logger)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to create drive mount stub drives")
+	}
 
 	// If no value for NetworkInterfaces was specified (not even an empty but non-nil list) and
 	// the runtime config specifies a default list, use those defaults
@@ -817,28 +803,26 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 		return nil, err
 	}
 
-	for _, mnt := range request.Rootfs {
-		if err := s.jailer.ExposeFileToJail(mnt.Source); err != nil {
-			return nil, errors.Wrapf(err, "failed to expose mount to jail %v", mnt.Source)
-		}
+	// We don't support a rootfs with multiple mounts, only one mount can be exposed to the
+	// vm per-container
+	if len(request.Rootfs) != 1 {
+		return nil, errors.Errorf("can only support rootfs with exactly one mount: %+v", request.Rootfs)
+	}
+	rootfsMnt := request.Rootfs[0]
 
-		driveID, err := s.stubDriveHandler.PatchStubDrive(requestCtx, s.machine, mnt.Source)
-		if err != nil {
-			if err == ErrDrivesExhausted {
-				return nil, errors.Wrapf(errdefs.ErrUnavailable, "no remaining stub drives to be used")
-			}
-			return nil, errors.Wrapf(err, "failed to mount %v", mnt.Source)
-		}
+	stubDrive, err := s.containerStubHandler.Reserve(request.ID,
+		rootfsMnt.Source, vmBundleDir.RootfsPath(), "ext4", nil)
+	if err != nil {
+		err = errors.Wrapf(err, "failed to get stub drive for task %q", request.ID)
+		logger.WithError(err).Error()
+		return nil, err
+	}
 
-		_, err = s.driveMountClient.MountDrive(requestCtx, &drivemount.MountDriveRequest{
-			DriveID:         driveID,
-			DestinationPath: vmBundleDir.RootfsPath(),
-			FilesytemType:   "ext4",
-			Options:         nil,
-		})
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to mount drive inside vm")
-		}
+	err = stubDrive.PatchAndMount(requestCtx, s.machine, s.driveMountClient)
+	if err != nil {
+		err = errors.Wrapf(err, "failed to mount drive inside vm")
+		logger.WithError(err).Error()
+		return nil, err
 	}
 
 	ociConfigBytes, err := hostBundleDir.OCIConfig().Bytes()

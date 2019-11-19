@@ -812,7 +812,7 @@ func TestCreateTooManyContainers_Isolated(t *testing.T) {
 
 	// When we reuse a VM explicitly, we cannot start multiple containers unless we pre-allocate stub drives.
 	_, err = c2.NewTask(ctx, cio.NewCreator(cio.WithStreams(nil, &stdout, &stderr)))
-	assert.Equal("no remaining stub drives to be used: unavailable: unknown", err.Error())
+	assert.Contains(err.Error(), "There are no remaining drives to be used")
 	require.Error(t, err)
 }
 
@@ -842,6 +842,8 @@ func TestDriveMount_Isolated(t *testing.T) {
 		VMMountOptions []string
 		ContainerPath  string
 		FSImgFile      internal.FSImgFile
+		IsWritable     bool
+		RateLimiter    *proto.FirecrackerRateLimiter
 	}{
 		{
 			// /systemmount meant to make sure logic doesn't ban this just because it begins with /sys
@@ -853,28 +855,48 @@ func TestDriveMount_Isolated(t *testing.T) {
 				Subpath:  "dir/foo",
 				Contents: "foo\n",
 			},
+			RateLimiter: &proto.FirecrackerRateLimiter{
+				Bandwidth: &proto.FirecrackerTokenBucket{
+					OneTimeBurst: 111,
+					RefillTime:   222,
+					Capacity:     333,
+				},
+				Ops: &proto.FirecrackerTokenBucket{
+					OneTimeBurst: 1111,
+					RefillTime:   2222,
+					Capacity:     3333,
+				},
+			},
+			IsWritable: true,
 		},
 		{
 			VMPath:         "/mnt",
 			FilesystemType: "ext3",
-			VMMountOptions: []string{"ro", "relatime"},
+			// don't specify "ro" to validate it's automatically set via "IsWritable: false"
+			VMMountOptions: []string{"relatime"},
 			ContainerPath:  "/bar",
 			FSImgFile: internal.FSImgFile{
 				Subpath:  "dir/bar",
 				Contents: "bar\n",
 			},
+			// you actually get permission denied if you try to mount a ReadOnly block device
+			// w/ "rw" mount option, so we can only test IsWritable=false when "ro" is also the
+			// mount option, not in isolation
+			IsWritable: false,
 		},
 	}
 
 	vmDriveMounts := []*proto.FirecrackerDriveMount{}
 	ctrBindMounts := []specs.Mount{}
-	ctrCatCommands := []string{}
+	ctrCommands := []string{}
 	for _, vmMount := range vmMounts {
 		vmDriveMounts = append(vmDriveMounts, &proto.FirecrackerDriveMount{
 			HostPath:       internal.CreateFSImg(ctx, t, vmMount.FilesystemType, vmMount.FSImgFile),
 			VMPath:         vmMount.VMPath,
 			FilesystemType: vmMount.FilesystemType,
 			Options:        vmMount.VMMountOptions,
+			IsWritable:     vmMount.IsWritable,
+			RateLimiter:    vmMount.RateLimiter,
 		})
 
 		ctrBindMounts = append(ctrBindMounts, specs.Mount{
@@ -883,9 +905,20 @@ func TestDriveMount_Isolated(t *testing.T) {
 			Options:     []string{"bind"},
 		})
 
-		ctrCatCommands = append(ctrCatCommands, fmt.Sprintf("/bin/cat %s",
+		ctrCommands = append(ctrCommands, fmt.Sprintf("/bin/cat %s",
 			filepath.Join(vmMount.ContainerPath, vmMount.FSImgFile.Subpath),
 		))
+
+		if !vmMount.IsWritable {
+			// if read-only is set on the firecracker drive, make sure that you are unable
+			// to create a new file
+			ctrCommands = append(ctrCommands, fmt.Sprintf(`/bin/sh -c '/bin/touch %s 2>/dev/null && exit 1 || exit 0'`,
+				filepath.Join(vmMount.ContainerPath, vmMount.FSImgFile.Subpath+"noexist"),
+			))
+		}
+
+		// RateLimiter settings are not asserted on in this test right now as there's not a clear simple
+		// way to test them. Coverage that RateLimiter settings are passed as expected are covered in unit tests
 	}
 
 	_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
@@ -903,7 +936,7 @@ func TestDriveMount_Isolated(t *testing.T) {
 		containerd.WithSnapshotter(defaultSnapshotterName()),
 		containerd.WithNewSnapshot(snapshotName, image),
 		containerd.WithNewSpec(
-			oci.WithProcessArgs("/bin/sh", "-c", strings.Join(append(ctrCatCommands,
+			oci.WithProcessArgs("/bin/sh", "-c", strings.Join(append(ctrCommands,
 				"/bin/cat /proc/mounts",
 			), " && ")),
 			oci.WithMounts(ctrBindMounts),
@@ -914,7 +947,7 @@ func TestDriveMount_Isolated(t *testing.T) {
 
 	outputLines := strings.Split(startAndWaitTask(ctx, t, newContainer), "\n")
 	if len(outputLines) < len(vmMounts) {
-		require.Fail(t, "unexpected ctr output, expected at least %d lines: %+v", len(vmMounts), outputLines)
+		require.Fail(t, "unexpected ctr output", "expected at least %d lines: %+v", len(vmMounts), outputLines)
 	}
 
 	mountInfos, err := internal.ParseProcMountLines(outputLines[len(vmMounts):]...)
@@ -937,6 +970,13 @@ func TestDriveMount_Isolated(t *testing.T) {
 				for _, vmMountOption := range vmMount.VMMountOptions {
 					assert.Containsf(t, actualMountInfo.Options, vmMountOption,
 						"vm mount at %q did not have expected option", vmMount.ContainerPath)
+				}
+				if !vmMount.IsWritable {
+					assert.Containsf(t, actualMountInfo.Options, "ro",
+						`vm mount at %q with IsWritable=false did not have "ro" option`, vmMount.ContainerPath)
+				} else {
+					assert.Containsf(t, actualMountInfo.Options, "rw",
+						`vm mount at %q with IsWritable=false did not have "rw" option`, vmMount.ContainerPath)
 				}
 				break
 			}
@@ -976,6 +1016,21 @@ func TestDriveMountFails_Isolated(t *testing.T) {
 			VMPath:         "/sys/foo", // invalid due to being under /sys
 			FilesystemType: "ext4",
 		},
+		{
+			HostPath:       testImgHostPath,
+			VMPath:         "/valid",
+			FilesystemType: "ext4",
+			// invalid due to "ro" option used with IsWritable=true
+			Options:    []string{"ro"},
+			IsWritable: true,
+		},
+		{
+			HostPath:       testImgHostPath,
+			VMPath:         "/valid",
+			FilesystemType: "ext4",
+			// invalid due to "rw" option used with IsWritable=false
+			Options: []string{"rw"},
+		},
 	} {
 		_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
 			VMID:        "test-drive-mount-fails",
@@ -984,7 +1039,7 @@ func TestDriveMountFails_Isolated(t *testing.T) {
 
 		// TODO it would be good to check for more specific error types, see #294 for possible improvements:
 		// https://github.com/firecracker-microvm/firecracker-containerd/issues/294
-		assert.Error(t, err, "unexpectedly succeeded in creating a VM with a drive mount under banned path")
+		assert.Error(t, err, "unexpectedly succeeded in creating a VM with an invalid drive mount")
 	}
 }
 

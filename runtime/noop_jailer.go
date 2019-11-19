@@ -73,7 +73,7 @@ func (j noopJailer) ExposeFileToJail(path string) error {
 	return nil
 }
 
-func (j noopJailer) StubDrivesOptions() []stubDrivesOpt {
+func (j noopJailer) StubDrivesOptions() []FileOpt {
 	j.logger.Debug("noop operation for StubDrivesOptions")
-	return []stubDrivesOpt{}
+	return []FileOpt{}
 }

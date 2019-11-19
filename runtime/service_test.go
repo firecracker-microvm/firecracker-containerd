@@ -250,18 +250,17 @@ func TestBuildVMConfiguration(t *testing.T) {
 
 			drives := make([]models.Drive, tc.expectedStubDriveCount)
 			for i := 0; i < tc.expectedStubDriveCount; i++ {
-				drives[i].PathOnHost = firecracker.String(filepath.Join(tempDir, fmt.Sprintf("stub%d", i)))
-				drives[i].DriveID = firecracker.String(fmt.Sprintf("stub%d", i))
+				hostPath := filepath.Join(tempDir, fmt.Sprintf("ctrstub%d", i))
+				drives[i].PathOnHost = firecracker.String(hostPath)
+				drives[i].DriveID = firecracker.String(stubPathToDriveID(hostPath))
 				drives[i].IsReadOnly = firecracker.Bool(false)
 				drives[i].IsRootDevice = firecracker.Bool(false)
 			}
-			tc.expectedCfg.Drives = append(drives, tc.expectedCfg.Drives...)
+			tc.expectedCfg.Drives = append(tc.expectedCfg.Drives, drives...)
 
 			actualCfg, err := svc.buildVMConfiguration(tc.request)
 			assert.NoError(t, err)
 			require.Equal(t, tc.expectedCfg, actualCfg)
-
-			require.Equal(t, tc.expectedStubDriveCount, len(svc.stubDriveHandler.drives), "The stub driver only knows stub drives")
 		})
 	}
 }

@@ -20,10 +20,7 @@ GOSUM := $(GOMOD:.mod=.sum)
 DOCKER_IMAGE_TAG?=latest
 
 INTEG_TEST_SUFFIX := _Isolated
-INTEG_TESTNAMES=$(shell docker run --rm \
-		--workdir="/firecracker-containerd/runtime" \
-		localhost/firecracker-containerd-test:$(DOCKER_IMAGE_TAG) \
-		"go test -list . | sed '$$d' | grep $(INTEG_TEST_SUFFIX)")
+INTEG_TESTNAMES=$(shell go test -list . | sed '$$d' | grep $(INTEG_TEST_SUFFIX))
 
 
 all: runtime
@@ -39,29 +36,30 @@ install: containerd-shim-aws-firecracker
 test:
 	go test ./... $(EXTRAGOARGS)
 
-integ-test:
-	mkdir -p $(CURDIR)/logs
+integ-test: $(addprefix integ-test-,$(INTEG_TESTNAMES))
 
-	$(foreach TESTNAME,$(INTEG_TESTNAMES),\
-		$(CURDIR)/../tools/thinpool.sh reset "$(FICD_DM_POOL)"; \
-		docker run --rm -it \
-			--privileged \
-			--ipc=host \
-			--network=none \
-			--volume /dev:/dev \
-			--volume /run/udev/control:/run/udev/control \
-			--volume $(CURDIR)/logs:/var/log/firecracker-containerd-test \
-			--volume $(CURDIR)/..:/firecracker-containerd \
-			--env ENABLE_ISOLATED_TESTS=1 \
-			--env FICD_SNAPSHOTTER=$(FICD_SNAPSHOTTER) \
-			--env FICD_DM_POOL=$(FICD_DM_POOL) \
-			--env GOPROXY=direct \
-			--env GOSUMDB=off \
-			--workdir="/firecracker-containerd/runtime" \
-			--init \
-			localhost/firecracker-containerd-integ-test-tiny:$(DOCKER_IMAGE_TAG) \
-			"go test $(EXTRAGOARGS) -run \"^$(TESTNAME)$$\"" || exit 1; \
-	)
+integ-test-%: logs
+	$(CURDIR)/../tools/thinpool.sh reset "$(FICD_DM_POOL)"
+	docker run --rm -it \
+		--privileged \
+		--ipc=host \
+		--network=none \
+		--volume /dev:/dev \
+		--volume /run/udev/control:/run/udev/control \
+		--volume $(CURDIR)/logs:/var/log/firecracker-containerd-test \
+		--volume $(CURDIR)/..:/firecracker-containerd \
+		--env ENABLE_ISOLATED_TESTS=1 \
+		--env FICD_SNAPSHOTTER=$(FICD_SNAPSHOTTER) \
+		--env FICD_DM_POOL=$(FICD_DM_POOL) \
+		--env GOPROXY=direct \
+		--env GOSUMDB=off \
+		--workdir="/firecracker-containerd/runtime" \
+		--init \
+		localhost/firecracker-containerd-integ-test-tiny:$(DOCKER_IMAGE_TAG) \
+		"go test $(EXTRAGOARGS) -run '^$(subst integ-test-,,$@)$$'"
+
+logs:
+	mkdir logs
 
 PERF_TESTNAME?=TestCNIPlugin_Performance
 PERF_VMCOUNT?=25

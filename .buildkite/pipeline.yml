@@ -48,7 +48,7 @@ steps:
     agents:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
     env:
-      EXTRAGOARGS: "-v -count=1"
+      EXTRAGOARGS: "-v -count=1 -race"
     command:
       - cp "/local/artifacts/$BUILDKITE_BUILD_NUMBER/rootfs.img" tools/image-builder/rootfs.img
       - make test-in-docker

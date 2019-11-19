@@ -201,7 +201,7 @@ type mockProc struct {
 	stderrInput  io.ReadWriteCloser
 	stderrOutput *bytes.Buffer
 
-	ioDone sync.WaitGroup
+	ioDone *sync.WaitGroup
 }
 
 func (t *mockProc) WriteStdin(bytes []byte) error {
@@ -309,6 +309,8 @@ func newMockProc(
 
 		stderrInput:  taskStderrW,
 		stderrOutput: &stderrBuf,
+
+		ioDone: &ioDone,
 	}
 }
 

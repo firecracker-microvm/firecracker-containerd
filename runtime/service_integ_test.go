@@ -30,7 +30,6 @@ import (
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/api/events"
-	"github.com/containerd/containerd/api/services/tasks/v1"
 	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/oci"
@@ -216,6 +215,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 	prepareIntegTest(t, withJailer())
 
 	netns, err := ns.GetCurrentNS()
+	require.NoError(t, err, "failed to get a namespace")
 
 	cases := []struct {
 		MaxContainers int32
@@ -268,7 +268,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 			defer vmWg.Done()
 
 			tapName := fmt.Sprintf("tap%d", vmID)
-			err = createTapDevice(ctx, tapName)
+			err := createTapDevice(ctx, tapName)
 
 			require.NoError(t, err, "failed to create tap device for vm %d", vmID)
 
@@ -433,9 +433,7 @@ func testMultipleExecs(ctx context.Context, t *testing.T, vmID int, containerID 
 
 	select {
 	case <-taskExitCh:
-		_, err = client.TaskService().DeleteProcess(ctx, &tasks.DeleteProcessRequest{
-			ContainerID: containerName,
-		})
+		_, err = newTask.Delete(ctx)
 		require.NoError(t, err, "failed to delete task %q", containerName)
 
 		// if there was anything on stderr, print it to assist debugging
@@ -478,10 +476,7 @@ func getMountNamespace(ctx context.Context, t *testing.T, client *containerd.Cli
 
 	select {
 	case exitStatus := <-execExitCh:
-		_, err = client.TaskService().DeleteProcess(ctx, &tasks.DeleteProcessRequest{
-			ContainerID: containerName,
-			ExecID:      execID,
-		})
+		_, err = newExec.Delete(ctx)
 		require.NoError(t, err, "failed to delete exec %q", execID)
 
 		// if there was anything on stderr, print it to assist debugging
@@ -634,6 +629,9 @@ func TestStubBlockDevices_Isolated(t *testing.T) {
 
 	select {
 	case exitStatus := <-exitCh:
+		_, err = newTask.Delete(ctx)
+		require.NoError(t, err)
+
 		// if there was anything on stderr, print it to assist debugging
 		stderrOutput := stderr.String()
 		if len(stderrOutput) != 0 {

@@ -278,8 +278,10 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 			fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
 			req := &proto.CreateVMRequest{
 				VMID: vmIDStr,
+				// Enabling Go Race Detector makes in-microVM binaries heavy in terms of CPU and memory.
 				MachineCfg: &proto.FirecrackerMachineConfiguration{
-					MemSizeMib: 512,
+					VcpuCount:  4,
+					MemSizeMib: 4096,
 				},
 				RootDrive: &proto.FirecrackerRootDrive{
 					HostPath: rootfsPath,

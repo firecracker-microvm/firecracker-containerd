@@ -44,7 +44,7 @@ export EXTRAGOARGS?=
 all: $(SUBDIRS)
 
 $(SUBDIRS):
-	$(MAKE) -C $@
+	$(MAKE) -C $@ EXTRAGOARGS=$(EXTRAGOARGS)
 
 proto:
 	DOCKER_BUILDKIT=1 docker build \

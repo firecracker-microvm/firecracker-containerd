@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"runtime/debug"
+	"sync"
 
 	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/log"
@@ -45,7 +46,8 @@ type TaskService struct {
 	runcService taskAPI.TaskService
 
 	// map of (exec,task id, as returned by taskExecID func) -> (callback for cleaning up state for the exec)
-	execCleanups map[string][]func() error
+	execCleanups   map[string][]func() error
+	execCleanupsMu sync.Mutex
 
 	publisher shim.Publisher
 
@@ -117,11 +119,17 @@ func unmarshalExtraData(marshalled *types.Any) (*proto.ExtraData, error) {
 
 func (ts *TaskService) addCleanup(taskID, execID string, cleanup func() error) {
 	id := taskExecID(taskID, execID)
+
+	ts.execCleanupsMu.Lock()
+	defer ts.execCleanupsMu.Unlock()
 	ts.execCleanups[id] = append(ts.execCleanups[id], cleanup)
 }
 
 func (ts *TaskService) doCleanup(taskID, execID string) error {
 	id := taskExecID(taskID, execID)
+
+	ts.execCleanupsMu.Lock()
+	defer ts.execCleanupsMu.Unlock()
 
 	var err *multierror.Error
 	// iterate in reverse order so changes are "unwound" (similar to a defer)

@@ -92,6 +92,11 @@ func taskWorkflow(containerCIDR, gateway, snapshotter string) (err error) {
 	vmID := "fc-example"
 	createVMRequest := &proto.CreateVMRequest{
 		VMID: vmID,
+		// Enabling Go Race Detector makes in-microVM binaries heavy in terms of CPU and memory.
+		MachineCfg: &proto.FirecrackerMachineConfiguration{
+			VcpuCount:  2,
+			MemSizeMib: 2048,
+		},
 	}
 
 	if containerCIDR != "" {

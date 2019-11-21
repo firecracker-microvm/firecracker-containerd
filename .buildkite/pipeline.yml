@@ -18,6 +18,7 @@ steps:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
     env:
       DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
+      EXTRAGOARGS: "-race"
     command:
       - make test-images
       - docker run --rm -v $PWD:/mnt debian:stretch-slim rm -rf /mnt/tools/image-builder/rootfs
@@ -59,7 +60,7 @@ steps:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
     env:
       DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
-      EXTRAGOARGS: "-v -count=1"
+      EXTRAGOARGS: "-v -count=1 -race"
     command: 'make -C snapshotter integ-test'
     timeout_in_minutes: 10
     concurrency: 1
@@ -70,7 +71,7 @@ steps:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
     env:
       DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
-      EXTRAGOARGS: "-v -count=1"
+      EXTRAGOARGS: "-v -count=1 -race"
     artifact_paths:
       - "runtime/logs/*"
     command:

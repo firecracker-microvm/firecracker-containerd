@@ -30,7 +30,6 @@ import (
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/api/events"
-	"github.com/containerd/containerd/api/services/tasks/v1"
 	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/oci"
@@ -216,6 +215,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 	prepareIntegTest(t, withJailer())
 
 	netns, err := ns.GetCurrentNS()
+	require.NoError(t, err, "failed to get a namespace")
 
 	cases := []struct {
 		MaxContainers int32
@@ -268,7 +268,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 			defer vmWg.Done()
 
 			tapName := fmt.Sprintf("tap%d", vmID)
-			err = createTapDevice(ctx, tapName)
+			err := createTapDevice(ctx, tapName)
 
 			require.NoError(t, err, "failed to create tap device for vm %d", vmID)
 
@@ -278,8 +278,10 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 			fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
 			req := &proto.CreateVMRequest{
 				VMID: vmIDStr,
+				// Enabling Go Race Detector makes in-microVM binaries heavy in terms of CPU and memory.
 				MachineCfg: &proto.FirecrackerMachineConfiguration{
-					MemSizeMib: 512,
+					VcpuCount:  4,
+					MemSizeMib: 4096,
 				},
 				RootDrive: &proto.FirecrackerRootDrive{
 					HostPath: rootfsPath,
@@ -305,158 +307,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 				containerWg.Add(1)
 				go func(containerID int) {
 					defer containerWg.Done()
-					containerName := fmt.Sprintf("container-%d-%d", vmID, containerID)
-					snapshotName := fmt.Sprintf("snapshot-%d-%d", vmID, containerID)
-					processArgs := oci.WithProcessArgs("/bin/sh", "-c", strings.Join([]string{
-						fmt.Sprintf("/bin/cat /sys/class/net/%s/address", defaultVMNetDevName),
-						"/usr/bin/readlink /proc/self/ns/mnt",
-						fmt.Sprintf("/bin/sleep %d", testTimeout/time.Second),
-					}, " && "))
-
-					// spawn a container that just prints the VM's eth0 mac address (which we have set uniquely per VM)
-					newContainer, err := client.NewContainer(ctx,
-						containerName,
-						containerd.WithSnapshotter(defaultSnapshotterName()),
-						containerd.WithNewSnapshot(snapshotName, image),
-						containerd.WithNewSpec(
-							processArgs,
-							oci.WithHostNamespace(specs.NetworkNamespace),
-							firecrackeroci.WithVMID(strconv.Itoa(vmID)),
-						),
-					)
-					require.NoError(t, err, "failed to create container %s", containerName)
-
-					var taskStdout bytes.Buffer
-					var taskStderr bytes.Buffer
-
-					newTask, err := newContainer.NewTask(ctx,
-						cio.NewCreator(cio.WithStreams(nil, &taskStdout, &taskStderr)))
-					require.NoError(t, err, "failed to create task for container %s", containerName)
-
-					taskExitCh, err := newTask.Wait(ctx)
-					require.NoError(t, err, "failed to wait on task for container %s", containerName)
-
-					err = newTask.Start(ctx)
-					require.NoError(t, err, "failed to start task for container %s", containerName)
-
-					// Create a few execs for the task, including one with the same ID as the taskID (to provide
-					// regression coverage for a bug related to using the same task and exec ID).
-					//
-					// Save each of their stdout buffers, which will later be compared to ensure they each have
-					// the same output.
-					//
-					// The output of the exec is the mount namespace in which it found itself executing. This
-					// will be compared with the mount namespace the task is executing to ensure they are the same.
-					// This is a rudimentary way of asserting that each exec was created in the expected task.
-					execIDs := []string{fmt.Sprintf("exec-%d-%d", vmID, containerID), containerName}
-					execStdouts := make(chan string, len(execIDs))
-					var execWg sync.WaitGroup
-					for _, execID := range execIDs {
-						execWg.Add(1)
-						go func(execID string) {
-							defer execWg.Done()
-							var execStdout bytes.Buffer
-							var execStderr bytes.Buffer
-
-							newExec, err := newTask.Exec(ctx, execID, &specs.Process{
-								Args: []string{"/usr/bin/readlink", "/proc/self/ns/mnt"},
-								Cwd:  "/",
-							}, cio.NewCreator(cio.WithStreams(nil, &execStdout, &execStderr)))
-							require.NoError(t, err, "failed to exec %s", execID)
-
-							execExitCh, err := newExec.Wait(ctx)
-							require.NoError(t, err, "failed to wait on exec %s", execID)
-
-							err = newExec.Start(ctx)
-							require.NoError(t, err, "failed to start exec %s", execID)
-
-							select {
-							case exitStatus := <-execExitCh:
-								_, err = client.TaskService().DeleteProcess(ctx, &tasks.DeleteProcessRequest{
-									ContainerID: containerName,
-									ExecID:      execID,
-								})
-								require.NoError(t, err, "failed to delete exec %q", execID)
-
-								// if there was anything on stderr, print it to assist debugging
-								stderrOutput := execStderr.String()
-								if len(stderrOutput) != 0 {
-									fmt.Printf("stderr output from exec %q: %q", execID, stderrOutput)
-								}
-
-								mntNS := strings.TrimSpace(execStdout.String())
-								require.NotEmptyf(t, mntNS, "no stdout output for task %q exec %q", containerName, execID)
-								execStdouts <- mntNS
-
-								require.Equal(t, uint32(0), exitStatus.ExitCode())
-							case <-ctx.Done():
-								require.Fail(t, "context cancelled",
-									"context cancelled while waiting for exec %s to exit, err: %v", execID, ctx.Err())
-							}
-						}(execID)
-					}
-					execWg.Wait()
-					close(execStdouts)
-
-					if jailerConfig != nil {
-						shimDir, err := vm.ShimDir("default", strconv.Itoa(vmID))
-						require.NoError(t, err, "failed to get shim dir")
-
-						jailer := &runcJailer{
-							ociBundlePath: string(shimDir),
-							vmID:          vmIDStr,
-						}
-						_, err = os.Stat(jailer.RootPath())
-						require.NoError(t, err, "failed to stat root path of jailer")
-						_, err = os.Stat(filepath.Join("/sys/fs/cgroup/cpu", resp.CgroupPath))
-						require.NoError(t, err, "failed to stat cgroup path of jailer")
-						assert.Equal(t, filepath.Join("/firecracker-containerd", vmIDStr), resp.CgroupPath)
-					}
-
-					// Verify each exec had the same stdout and use that value as the mount namespace that will be compared
-					// against that of the task below.
-					var execMntNS string
-					for execStdout := range execStdouts {
-						if execMntNS == "" {
-							// This is the first iteration of loop; we do a check that execStdout is not "" via require.NotEmptyf
-							// in the execID loop above.
-							execMntNS = execStdout
-						}
-
-						require.Equal(t, execMntNS, execStdout, "execs in same task unexpectedly have different outputs")
-					}
-
-					// Now kill the task and verify it was in the right VM and has the same mnt namespace as its execs
-					err = newTask.Kill(ctx, syscall.SIGKILL)
-					require.NoError(t, err, "failed to kill task %q", containerName)
-
-					select {
-					case <-taskExitCh:
-						_, err = client.TaskService().DeleteProcess(ctx, &tasks.DeleteProcessRequest{
-							ContainerID: containerName,
-						})
-						require.NoError(t, err, "failed to delete task %q", containerName)
-
-						// if there was anything on stderr, print it to assist debugging
-						stderrOutput := taskStderr.String()
-						if len(stderrOutput) != 0 {
-							fmt.Printf("stderr output from task %q: %q", containerName, stderrOutput)
-						}
-
-						stdoutLines := strings.Split(strings.TrimSpace(taskStdout.String()), "\n")
-						lines := 2
-						require.Len(t, stdoutLines, lines)
-
-						printedVMID := strings.TrimSpace(stdoutLines[0])
-						require.Equal(t, vmIDtoMacAddr(uint(vmID)), printedVMID, "unexpected VMID output from container %q", containerName)
-
-						taskMntNS := strings.TrimSpace(stdoutLines[1])
-						require.Equal(t, execMntNS, taskMntNS, "unexpected mnt NS output from container %q", containerName)
-
-					case <-ctx.Done():
-						require.Fail(t, "context cancelled",
-							"context cancelled while waiting for container %s to exit, err: %v", containerName, ctx.Err())
-					}
+					testMultipleExecs(ctx, t, vmID, containerID, client, image, jailerConfig, resp.CgroupPath)
 				}(containerID)
 			}
 
@@ -488,6 +339,165 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 	}
 
 	vmWg.Wait()
+}
+
+func testMultipleExecs(ctx context.Context, t *testing.T, vmID int, containerID int, client *containerd.Client, image containerd.Image, jailerConfig *proto.JailerConfig, cgroupPath string) {
+	vmIDStr := strconv.Itoa(vmID)
+	testTimeout := 600 * time.Second
+
+	containerName := fmt.Sprintf("container-%d-%d", vmID, containerID)
+	snapshotName := fmt.Sprintf("snapshot-%d-%d", vmID, containerID)
+	processArgs := oci.WithProcessArgs("/bin/sh", "-c", strings.Join([]string{
+		fmt.Sprintf("/bin/cat /sys/class/net/%s/address", defaultVMNetDevName),
+		"/usr/bin/readlink /proc/self/ns/mnt",
+		fmt.Sprintf("/bin/sleep %d", testTimeout/time.Second),
+	}, " && "))
+
+	// spawn a container that just prints the VM's eth0 mac address (which we have set uniquely per VM)
+	newContainer, err := client.NewContainer(ctx,
+		containerName,
+		containerd.WithSnapshotter(defaultSnapshotterName()),
+		containerd.WithNewSnapshot(snapshotName, image),
+		containerd.WithNewSpec(
+			processArgs,
+			oci.WithHostNamespace(specs.NetworkNamespace),
+			firecrackeroci.WithVMID(vmIDStr),
+		),
+	)
+	require.NoError(t, err, "failed to create container %s", containerName)
+
+	var taskStdout bytes.Buffer
+	var taskStderr bytes.Buffer
+
+	newTask, err := newContainer.NewTask(ctx,
+		cio.NewCreator(cio.WithStreams(nil, &taskStdout, &taskStderr)))
+	require.NoError(t, err, "failed to create task for container %s", containerName)
+
+	taskExitCh, err := newTask.Wait(ctx)
+	require.NoError(t, err, "failed to wait on task for container %s", containerName)
+
+	err = newTask.Start(ctx)
+	require.NoError(t, err, "failed to start task for container %s", containerName)
+
+	// Create a few execs for the task, including one with the same ID as the taskID (to provide
+	// regression coverage for a bug related to using the same task and exec ID).
+	//
+	// Save each of their stdout buffers, which will later be compared to ensure they each have
+	// the same output.
+	//
+	// The output of the exec is the mount namespace in which it found itself executing. This
+	// will be compared with the mount namespace the task is executing to ensure they are the same.
+	// This is a rudimentary way of asserting that each exec was created in the expected task.
+	execIDs := []string{fmt.Sprintf("exec-%d-%d", vmID, containerID), containerName}
+	execStdouts := make(chan string, len(execIDs))
+	var execWg sync.WaitGroup
+	for _, execID := range execIDs {
+		execWg.Add(1)
+		go func(execID string) {
+			defer execWg.Done()
+			execStdouts <- getMountNamespace(ctx, t, client, containerName, newTask, execID)
+		}(execID)
+	}
+	execWg.Wait()
+	close(execStdouts)
+
+	if jailerConfig != nil {
+		shimDir, err := vm.ShimDir("default", strconv.Itoa(vmID))
+		require.NoError(t, err, "failed to get shim dir")
+
+		jailer := &runcJailer{
+			ociBundlePath: string(shimDir),
+			vmID:          vmIDStr,
+		}
+		_, err = os.Stat(jailer.RootPath())
+		require.NoError(t, err, "failed to stat root path of jailer")
+		_, err = os.Stat(filepath.Join("/sys/fs/cgroup/cpu", cgroupPath))
+		require.NoError(t, err, "failed to stat cgroup path of jailer")
+		assert.Equal(t, filepath.Join("/firecracker-containerd", vmIDStr), cgroupPath)
+	}
+
+	// Verify each exec had the same stdout and use that value as the mount namespace that will be compared
+	// against that of the task below.
+	var execMntNS string
+	for execStdout := range execStdouts {
+		if execMntNS == "" {
+			// This is the first iteration of loop; we do a check that execStdout is not "" via require.NotEmptyf
+			// in the execID loop above.
+			execMntNS = execStdout
+		}
+
+		require.Equal(t, execMntNS, execStdout, "execs in same task unexpectedly have different outputs")
+	}
+
+	// Now kill the task and verify it was in the right VM and has the same mnt namespace as its execs
+	err = newTask.Kill(ctx, syscall.SIGKILL)
+	require.NoError(t, err, "failed to kill task %q", containerName)
+
+	select {
+	case <-taskExitCh:
+		_, err = newTask.Delete(ctx)
+		require.NoError(t, err, "failed to delete task %q", containerName)
+
+		// if there was anything on stderr, print it to assist debugging
+		stderrOutput := taskStderr.String()
+		if len(stderrOutput) != 0 {
+			fmt.Printf("stderr output from task %q: %q", containerName, stderrOutput)
+		}
+
+		stdoutLines := strings.Split(strings.TrimSpace(taskStdout.String()), "\n")
+		lines := 2
+		require.Len(t, stdoutLines, lines)
+
+		printedVMID := strings.TrimSpace(stdoutLines[0])
+		require.Equal(t, vmIDtoMacAddr(uint(vmID)), printedVMID, "unexpected VMID output from container %q", containerName)
+
+		taskMntNS := strings.TrimSpace(stdoutLines[1])
+		require.Equal(t, execMntNS, taskMntNS, "unexpected mnt NS output from container %q", containerName)
+
+	case <-ctx.Done():
+		require.Fail(t, "context cancelled",
+			"context cancelled while waiting for container %s to exit, err: %v", containerName, ctx.Err())
+	}
+}
+
+func getMountNamespace(ctx context.Context, t *testing.T, client *containerd.Client, containerName string, newTask containerd.Task, execID string) string {
+	var execStdout bytes.Buffer
+	var execStderr bytes.Buffer
+
+	newExec, err := newTask.Exec(ctx, execID, &specs.Process{
+		Args: []string{"/usr/bin/readlink", "/proc/self/ns/mnt"},
+		Cwd:  "/",
+	}, cio.NewCreator(cio.WithStreams(nil, &execStdout, &execStderr)))
+	require.NoError(t, err, "failed to exec %s", execID)
+
+	execExitCh, err := newExec.Wait(ctx)
+	require.NoError(t, err, "failed to wait on exec %s", execID)
+
+	err = newExec.Start(ctx)
+	require.NoError(t, err, "failed to start exec %s", execID)
+
+	select {
+	case exitStatus := <-execExitCh:
+		_, err = newExec.Delete(ctx)
+		require.NoError(t, err, "failed to delete exec %q", execID)
+
+		// if there was anything on stderr, print it to assist debugging
+		stderrOutput := execStderr.String()
+		if len(stderrOutput) != 0 {
+			fmt.Printf("stderr output from exec %q: %q", execID, stderrOutput)
+		}
+
+		mntNS := strings.TrimSpace(execStdout.String())
+		require.NotEmptyf(t, mntNS, "no stdout output for task %q exec %q", containerName, execID)
+
+		require.Equal(t, uint32(0), exitStatus.ExitCode())
+
+		return mntNS
+	case <-ctx.Done():
+		require.Fail(t, "context cancelled",
+			"context cancelled while waiting for exec %s to exit, err: %v", execID, ctx.Err())
+	}
+	return ""
 }
 
 func TestLongUnixSocketPath_Isolated(t *testing.T) {
@@ -621,6 +631,9 @@ func TestStubBlockDevices_Isolated(t *testing.T) {
 
 	select {
 	case exitStatus := <-exitCh:
+		_, err = newTask.Delete(ctx)
+		require.NoError(t, err)
+
 		// if there was anything on stderr, print it to assist debugging
 		stderrOutput := stderr.String()
 		if len(stderrOutput) != 0 {

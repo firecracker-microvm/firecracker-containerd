@@ -23,10 +23,10 @@ all: build
 build: firecracker-containerd firecracker-ctr
 
 firecracker-containerd: $(SRC) $(GOMOD) $(GOSUM)
-	go build -v -o firecracker-containerd
+	go build $(EXTRAGOARGS) -o firecracker-containerd
 
 firecracker-ctr: $(GOMOD) $(GOSUM)
-	GOBIN=$(CURDIR) go install -tags=no_cri github.com/containerd/containerd/cmd/ctr
+	GOBIN=$(CURDIR) go install -tags=no_cri $(EXTRAGOARGS) github.com/containerd/containerd/cmd/ctr
 	mv ctr firecracker-ctr
 
 install: firecracker-containerd firecracker-ctr

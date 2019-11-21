@@ -177,22 +177,11 @@ func (dh driveHandler) MountDrive(ctx context.Context, req *drivemount.MountDriv
 	logger = logger.WithField("drive_path", drive.Path())
 
 	// Do a basic check that we won't be mounting over any important system directories
-	resolvedDest, err := evalAnySymlinks(req.DestinationPath)
-	if err != nil {
-		return nil, errors.Wrapf(err,
-			"failed to evaluate any symlinks in drive mount destination %q", req.DestinationPath)
+	if err := isSystemDir(req.DestinationPath); err != nil {
+		return nil, err
 	}
 
-	for _, systemDir := range bannedSystemDirs {
-		if isOrUnderDir(resolvedDest, systemDir) {
-			return nil, errors.Errorf(
-				"drive mount destination %q resolves to path %q under banned system directory %q",
-				req.DestinationPath, resolvedDest, systemDir,
-			)
-		}
-	}
-
-	err = os.MkdirAll(req.DestinationPath, 0700)
+	err := os.MkdirAll(req.DestinationPath, 0700)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to create drive mount destination %q", req.DestinationPath)
 	}
@@ -227,6 +216,40 @@ func (dh driveHandler) MountDrive(ctx context.Context, req *drivemount.MountDriv
 
 	return nil, errors.Errorf("exhausted retries mounting drive from %q to %q",
 		drive.Path(), req.DestinationPath)
+}
+
+func (dh driveHandler) UnmountDrive(ctx context.Context, req *drivemount.UnmountDriveRequest) (*empty.Empty, error) {
+	drive, ok := dh.GetDrive(req.DriveID)
+	if !ok {
+		return nil, fmt.Errorf("drive %q could not be found", req.DriveID)
+	}
+
+	err := mount.Unmount(drive.Path(), 0)
+	if err == nil {
+		return &empty.Empty{}, nil
+	}
+
+	return nil, errors.Errorf("failed to unmount the drive %q",
+		drive.Path())
+}
+
+func isSystemDir(path string) error {
+	resolvedDest, err := evalAnySymlinks(path)
+	if err != nil {
+		return errors.Wrapf(err,
+			"failed to evaluate any symlinks in drive ummount destination %q", path)
+	}
+
+	for _, systemDir := range bannedSystemDirs {
+		if isOrUnderDir(resolvedDest, systemDir) {
+			return errors.Errorf(
+				"drive mount destination %q resolves to path %q under banned system directory %q",
+				path, resolvedDest, systemDir,
+			)
+		}
+	}
+
+	return nil
 }
 
 // evalAnySymlinks is similar to filepath.EvalSymlinks, except it will not return an error if part of the

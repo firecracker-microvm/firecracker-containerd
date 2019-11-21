@@ -46,6 +46,7 @@ import (
 	"github.com/gofrs/uuid"
 	ptypes "github.com/gogo/protobuf/types"
 	"github.com/golang/protobuf/ptypes/empty"
+	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
@@ -810,17 +811,10 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 	}
 	rootfsMnt := request.Rootfs[0]
 
-	stubDrive, err := s.containerStubHandler.Reserve(request.ID,
-		rootfsMnt.Source, vmBundleDir.RootfsPath(), "ext4", nil)
+	err = s.containerStubHandler.Reserve(requestCtx, request.ID,
+		rootfsMnt.Source, vmBundleDir.RootfsPath(), "ext4", nil, s.driveMountClient, s.machine)
 	if err != nil {
 		err = errors.Wrapf(err, "failed to get stub drive for task %q", request.ID)
-		logger.WithError(err).Error()
-		return nil, err
-	}
-
-	err = stubDrive.PatchAndMount(requestCtx, s.machine, s.driveMountClient)
-	if err != nil {
-		err = errors.Wrapf(err, "failed to mount drive inside vm")
 		logger.WithError(err).Error()
 		return nil, err
 	}
@@ -928,6 +922,12 @@ func (s *service) Delete(requestCtx context.Context, req *taskAPI.DeleteRequest)
 	if req.ExecID != "" {
 		return resp, nil
 	}
+	var result *multierror.Error
+	// Trying to release stub drive for further reuse
+	err = s.containerStubHandler.Release(requestCtx, req.ID, s.driveMountClient, s.machine)
+	if err != nil {
+		multierror.Append(result, errors.Wrapf(err, "failed to release stub drive for container: %s", req.ID))
+	}
 
 	// Otherwise, delete the container
 	dir, err := s.shimDir.BundleLink(req.ID)
@@ -941,10 +941,10 @@ func (s *service) Delete(requestCtx context.Context, req *taskAPI.DeleteRequest)
 	}
 
 	if err = os.Remove(dir.RootPath()); err != nil {
-		return nil, errors.Wrapf(err, "failed to remove the bundle directory of the container: %s", dir.RootPath())
+		return nil, multierror.Append(result, errors.Wrapf(err, "failed to remove the bundle directory of the container: %s", dir.RootPath()))
 	}
 
-	return resp, nil
+	return resp, result.ErrorOrNil()
 }
 
 // Exec an additional process inside the container

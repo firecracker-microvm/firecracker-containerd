@@ -96,32 +96,79 @@ type StubDriveHandler struct {
 // Reserve pops a unused stub drive and returns a MountableStubDrive that can be
 // mounted with the provided options as the patched drive information.
 func (h *StubDriveHandler) Reserve(
+	requestCtx context.Context,
 	id string,
 	hostPath string,
 	vmPath string,
 	filesystemType string,
 	options []string,
-) (MountableStubDrive, error) {
+	driveMounter drivemount.DriveMounterService,
+	machine firecracker.MachineIface,
+) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if len(h.freeDrives) == 0 {
-		return nil, ErrDrivesExhausted
+		return ErrDrivesExhausted
+	}
+	if _, ok := h.usedDrives[id]; ok {
+		// This case means that driver wasn't released or removed properly
+		return fmt.Errorf("drive with ID %s already in use, a previous attempt to remove it may have failed", id)
 	}
 
 	freeDrive := h.freeDrives[0]
 	options, err := setReadWriteOptions(options, freeDrive.driveMount.IsWritable)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	h.freeDrives = h.freeDrives[1:]
-	h.usedDrives[id] = freeDrive
-	return freeDrive.withMountConfig(
+	stubDrive := freeDrive.withMountConfig(
 		hostPath,
 		vmPath,
 		filesystemType,
 		options,
-	), nil
+	)
+
+	err = stubDrive.PatchAndMount(requestCtx, machine, driveMounter)
+	if err != nil {
+		err = errors.Wrapf(err, "failed to mount drive inside vm")
+		return err
+	}
+
+	h.freeDrives = h.freeDrives[1:]
+	h.usedDrives[id] = freeDrive
+	return nil
+}
+
+// Release unmounts stub drive of just deleted container
+// and pushes just released drive to freeDrives
+func (h *StubDriveHandler) Release(
+	requestCtx context.Context,
+	id string,
+	driveMounter drivemount.DriveMounterService,
+	machine firecracker.MachineIface,
+) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	drive, ok := h.usedDrives[id]
+	if !ok {
+		return errors.Errorf("container %s drive wasn't found", id)
+	}
+
+	_, err := driveMounter.UnmountDrive(requestCtx, &drivemount.UnmountDriveRequest{
+		DriveID: drive.driveID,
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to unmount drive")
+	}
+
+	err = machine.UpdateGuestDrive(requestCtx, drive.driveID, drive.driveMount.HostPath)
+	if err != nil {
+		return errors.Wrap(err, "failed to patch drive")
+	}
+
+	delete(h.usedDrives, id)
+	h.freeDrives = append(h.freeDrives, drive)
+	return nil
 }
 
 // CreateDriveMountStubs creates a set of MountableStubDrives from the provided DriveMount configs.

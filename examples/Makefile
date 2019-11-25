@@ -18,6 +18,7 @@ SOURCES:=$(shell find . -name '*.go')
 GOMOD := $(shell go env GOMOD)
 GOSUM := $(GOMOD:.mod=.sum)
 DOCKER_IMAGE_TAG?=latest
+FIRECRACKER_CONTAINERD_TEST_IMAGE?=localhost/firecracker-containerd-test
 
 all: examples
 
@@ -39,12 +40,12 @@ integ-test:
 		--volume /run/udev/control:/run/udev/control \
 		--volume $(CURDIR)/etc/containerd/firecracker-runtime.json:/etc/containerd/firecracker-runtime.json \
 		--volume $(CURDIR)/logs:/var/log/firecracker-containerd-test \
-		--volume $(CURDIR)/..:/firecracker-containerd \
+		--volume $(CURDIR)/..:/src \
 		--env FICD_SNAPSHOTTER=$(TEST_SS) \
 		--env FICD_DM_POOL=$(TEST_POOL) \
 		--env EXTRAGOARGS="${EXTRAGOARGS}" \
-		--workdir="/firecracker-containerd/examples" \
-		localhost/firecracker-containerd-integ-test-tiny:${DOCKER_IMAGE_TAG} \
+		--workdir="/src/examples" \
+		$(FIRECRACKER_CONTAINERD_TEST_IMAGE):${DOCKER_IMAGE_TAG} \
 		"make examples && make testtap && sleep 3 && ./taskworkflow -ip $(TEST_IP)$(TEST_SUBNET) -gw $(TEST_GATEWAY) -ss $(TEST_SS)"
 
 TEST_GATEWAY?=172.16.0.1

@@ -1,13 +1,16 @@
+# syntax=docker/dockerfile:experimental
 # Test image that starts up containerd and the naive snapshotter. The default CMD will drop to a bash shell. Overrides
 # to CMD will be provided appended to /bin/bash -c
 FROM golang:1.13-stretch
-ENV PATH="/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin:/usr/local/sbin:/usr/local/go/bin" \
-	FICD_LOG_DIR="/var/log/firecracker-containerd-test"\
-	DEBIAN_FRONTEND="noninteractive"
-ENV FICD_SNAPSHOTTER="naive" \
-	FICD_SNAPSHOTTER_OUTFILE="${FICD_LOG_DIR}/snapshotter.out" \
-	FICD_CONTAINERD_OUTFILE="${FICD_LOG_DIR}/containerd.out"
+ENV PATH="/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin:/usr/local/sbin:/usr/local/go/bin"
+ENV INSTALLROOT="/usr/local"
+ENV DEBIAN_FRONTEND="noninteractive"
+
 ARG FIRECRACKER_TARGET=x86_64-unknown-linux-musl
+ENV FICD_LOG_DIR="/var/log/firecracker-containerd-test"
+ENV FICD_SNAPSHOTTER="naive"
+ENV FICD_SNAPSHOTTER_OUTFILE="${FICD_LOG_DIR}/snapshotter.out"
+ENV FICD_CONTAINERD_OUTFILE="${FICD_LOG_DIR}/containerd.out"
 
 RUN apt-get update && apt-get install --yes --no-install-recommends \
 		build-essential \
@@ -21,54 +24,35 @@ RUN apt-get update && apt-get install --yes --no-install-recommends \
 		rng-tools # used for rngtest
 
 RUN mkdir -p \
-    /var/lib/firecracker-containerd/runtime \
     /var/run/firecracker-containerd \
-    /opt/cni/bin \
-    /firecracker-containerd \
+    /src \
     /var/lib/firecracker-containerd/naive \
     ${FICD_LOG_DIR}
 
-RUN curl --silent --show-error --retry 3 --max-time 30 --output default-vmlinux.bin \
-    "https://s3.amazonaws.com/spec.ccfc.min/img/hello/kernel/hello-vmlinux.bin" \
-    && echo "882fa465c43ab7d92e31bd4167da3ad6a82cb9230f9b0016176df597c6014cef default-vmlinux.bin" | sha256sum -c - \
-    && chmod 0444 default-vmlinux.bin \
-    && mv default-vmlinux.bin /var/lib/firecracker-containerd/runtime/default-vmlinux.bin
-
-# Download Go dependencies
-COPY go.mod go.sum /firecracker-containerd
-RUN cd /firecracker-containerd && go mod download
-
-# Copy submodules
-COPY _submodules/firecracker/target/$FIRECRACKER_TARGET/release/firecracker \
-    _submodules/firecracker/target/$FIRECRACKER_TARGET/release/jailer \
-    _submodules/runc/runc \
-    /usr/local/bin
-
-# Copy our binaries
-COPY runtime/containerd-shim-aws-firecracker \
-     snapshotter/cmd/naive/naive_snapshotter \
-     /usr/local/bin
-
-# Copy our binaries but rename them
-COPY firecracker-control/cmd/containerd/firecracker-containerd /usr/local/bin/containerd
-COPY firecracker-control/cmd/containerd/firecracker-ctr /usr/local/bin/ctr
-
-COPY runtime/firecracker-runc-config.json.example /etc/containerd/firecracker-runc-config.json
-COPY tools/image-builder/rootfs.img /var/lib/firecracker-containerd/runtime/default-rootfs.img
-RUN chmod 0444 /var/lib/firecracker-containerd/runtime/default-rootfs.img
-
-# CNI
-COPY build/opt/cni/bin/* /opt/cni/bin
-COPY tools/demo/fcnet.conflist /etc/cni/conf.d/fcnet.conflist
-
-# pull the images the tests need into the content store so we don't need internet
-# access during the tests themselves
+# Pull the images the tests need into the content store so we don't need internet
+# access during the tests themselves. This runs as a seperate step before the other
+# installs so we can minimize re-runs of the time-expensive downloading of images.
 COPY tools/docker/config.toml /etc/containerd/config.toml
+RUN --mount=type=bind,source=firecracker-control/cmd/containerd,target=/src \
+  make -C /src install && \
+  ln -sv /usr/local/bin/firecracker-containerd /usr/local/bin/containerd && \
+  ln -sv /usr/local/bin/firecracker-ctr /usr/local/bin/ctr
 RUN containerd 2>/dev/null & \
-	ctr content fetch docker.io/library/alpine:3.10.1 >/dev/null && \
-	ctr content fetch docker.io/mlabbe/iperf3:3.6-r0 >/dev/null
+  ctr content fetch docker.io/library/alpine:3.10.1 >/dev/null && \
+  ctr content fetch docker.io/mlabbe/iperf3:3.6-r0 >/dev/null
+
+# Install everything we need in this image. Due to the bind-mount, if the host has already
+# up-to-date versions of everything built, this step will be a very quick copy
+RUN --mount=type=bind,target=/src make -C /src \
+  install \
+  install-firecracker \
+  install-runc \
+  install-default-vmlinux \
+  install-default-rootfs \
+  install-default-runc-jailer-config \
+  install-test-cni-bins \
+  demo-network
 
 COPY tools/docker/entrypoint.sh /entrypoint
-
 ENTRYPOINT ["/entrypoint"]
 CMD ["exec /bin/bash"]

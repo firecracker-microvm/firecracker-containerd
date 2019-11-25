@@ -20,6 +20,7 @@ SOURCES:=$(shell find . -name '*.go')
 GOMOD := $(shell go env GOMOD)
 GOSUM := $(GOMOD:.mod=.sum)
 DOCKER_IMAGE_TAG?=latest
+FIRECRACKER_CONTAINERD_TEST_IMAGE?=localhost/firecracker-containerd-test
 
 all: $(SUBDIRS)
 
@@ -39,8 +40,9 @@ integ-test:
 		--volume /dev:/dev \
 		--volume /sys:/sys \
 		--volume /run/udev/control:/run/udev/control \
-		--workdir="/firecracker-containerd/snapshotter" \
-		localhost/firecracker-containerd-test:${DOCKER_IMAGE_TAG} \
+		--volume $(CURDIR)/..:/src \
+		--workdir="/src/snapshotter" \
+		$(FIRECRACKER_CONTAINERD_TEST_IMAGE):${DOCKER_IMAGE_TAG} \
 		"go test ./... $(EXTRAGOARGS)"
 
 clean:

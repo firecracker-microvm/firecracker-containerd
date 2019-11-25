@@ -18,10 +18,18 @@ SOURCES:=$(shell find . -name '*.go')
 GOMOD := $(shell go env GOMOD)
 GOSUM := $(GOMOD:.mod=.sum)
 DOCKER_IMAGE_TAG?=latest
+GO_CACHE_VOLUME_NAME?=gocache
+FIRECRACKER_CONTAINERD_TEST_IMAGE?=localhost/firecracker-containerd-test
 
 INTEG_TEST_SUFFIX := _Isolated
-INTEG_TESTNAMES=$(shell go test -list . | sed '$$d' | grep $(INTEG_TEST_SUFFIX))
-
+INTEG_TESTNAMES=$(shell docker run --rm \
+	--network=none \
+	--volume $(CURDIR)/..:/src \
+	--volume $(GO_CACHE_VOLUME_NAME):/go \
+	--entrypoint=/bin/bash \
+	--workdir=/src/runtime \
+	$(FIRECRACKER_CONTAINERD_TEST_IMAGE):$(DOCKER_IMAGE_TAG) \
+	-c "go test -list . | sed '$$d' | grep $(INTEG_TEST_SUFFIX)")
 
 all: runtime
 
@@ -36,7 +44,8 @@ install: containerd-shim-aws-firecracker
 test:
 	go test ./... $(EXTRAGOARGS)
 
-integ-test: $(addprefix integ-test-,$(INTEG_TESTNAMES))
+integ-test:
+	$(MAKE) $(addprefix integ-test-,$(INTEG_TESTNAMES))
 
 integ-test-%: logs
 	$(CURDIR)/../tools/thinpool.sh reset "$(FICD_DM_POOL)"
@@ -47,15 +56,16 @@ integ-test-%: logs
 		--volume /dev:/dev \
 		--volume /run/udev/control:/run/udev/control \
 		--volume $(CURDIR)/logs:/var/log/firecracker-containerd-test \
-		--volume $(CURDIR)/..:/firecracker-containerd \
+		--volume $(CURDIR)/..:/src \
+		--volume $(GO_CACHE_VOLUME_NAME):/go \
 		--env ENABLE_ISOLATED_TESTS=1 \
 		--env FICD_SNAPSHOTTER=$(FICD_SNAPSHOTTER) \
 		--env FICD_DM_POOL=$(FICD_DM_POOL) \
 		--env GOPROXY=direct \
 		--env GOSUMDB=off \
-		--workdir="/firecracker-containerd/runtime" \
+		--workdir="/src/runtime" \
 		--init \
-		localhost/firecracker-containerd-integ-test-tiny:$(DOCKER_IMAGE_TAG) \
+		$(FIRECRACKER_CONTAINERD_TEST_IMAGE):$(DOCKER_IMAGE_TAG) \
 		"go test $(EXTRAGOARGS) -run '^$(subst integ-test-,,$@)$$'"
 
 logs:
@@ -87,6 +97,8 @@ perf-test:
 		--volume /dev:/dev \
 		--volume /run/udev/control:/run/udev/control \
 		--volume $(CURDIR)/logs:/var/log/firecracker-containerd-test \
+		--volume $(CURDIR)/..:/src \
+		--volume $(GO_CACHE_VOLUME_NAME):/go \
 		--env ENABLE_ISOLATED_TESTS=1 \
 		--env PERF_PLUGIN_NAME=$(PERF_PLUGIN_NAME) \
 		--env PERF_VMCOUNT=$(PERF_VMCOUNT) \
@@ -95,9 +107,11 @@ perf-test:
 		--env PERF_TARGET_BANDWIDTH=$(PERF_TARGET_BANDWIDTH) \
 		--env FICD_SNAPSHOTTER=$(FICD_SNAPSHOTTER) \
 		--env FICD_DM_POOL=$(FICD_DM_POOL) \
-		--workdir="/firecracker-containerd/runtime" \
+		--env GOPROXY=direct \
+		--env GOSUMDB=off \
+		--workdir="/src/runtime" \
 		--init \
-		localhost/firecracker-containerd-integ-test:$(DOCKER_IMAGE_TAG) \
+		$(FIRECRACKER_CONTAINERD_TEST_IMAGE):$(DOCKER_IMAGE_TAG) \
 		"go test -timeout 0 -v -count=1 -run \"^$(PERF_TESTNAME)$$\""
 
 clean:

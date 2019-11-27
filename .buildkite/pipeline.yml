@@ -102,3 +102,15 @@ steps:
     command:
       - make -C examples integ-test TEST_SS=devmapper TEST_POOL=build_${BUILDKITE_BUILD_NUMBER}_example
     timeout_in_minutes: 10
+
+  - label: ":rotating_light: :running_shirt_with_sash: runtime isolated tests"
+    agents:
+      queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
+    env:
+      DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
+      EXTRAGOARGS: "-v -count=1 -race"
+    artifact_paths:
+      - "runtime/logs/*"
+    command:
+      - make -C runtime integ-test FICD_SNAPSHOTTER=devmapper FICD_DM_POOL=build_${BUILDKITE_BUILD_NUMBER}_runtime_al2 FIRECRACKER_CONTAINERD_TEST_IMAGE=localhost/firecracker-containerd-test-al2
+    timeout_in_minutes: 10

@@ -143,7 +143,7 @@ $(INTEG_TEST_SUBDIRS): test-images
 
 test-images: test-images-stamp
 
-test-images-stamp: | image firecracker-containerd-test-image
+test-images-stamp: | image firecracker-containerd-test-image firecracker-containerd-test-image-al2
 	touch $@
 
 firecracker-containerd-test-image: all-in-docker firecracker runc test-cni-bins cni-bins default-vmlinux

@@ -44,8 +44,22 @@ install: containerd-shim-aws-firecracker
 test:
 	go test ./... $(EXTRAGOARGS)
 
-integ-test:
+integ-test: integ-test-deps
 	$(MAKE) $(addprefix integ-test-,$(INTEG_TESTNAMES))
+
+# Install dependencies in the Go cache volume
+integ-test-deps:
+	docker run --rm -it \
+		--volume $(CURDIR)/..:/src \
+		--volume $(GO_CACHE_VOLUME_NAME):/go \
+		--env GOPATH=/go \
+		--env GO111MODULES=on \
+		--env GOPROXY=direct \
+		--env GOSUMDB=off \
+		--workdir="/src/runtime" \
+		--init \
+		$(FIRECRACKER_CONTAINERD_TEST_IMAGE):$(DOCKER_IMAGE_TAG) \
+		"go test -c"
 
 integ-test-%: logs
 	$(CURDIR)/../tools/thinpool.sh reset "$(FICD_DM_POOL)"
@@ -122,4 +136,4 @@ clean:
 distclean: clean
 	- rm -rf logs
 
-.PHONY: all runtime clean distclean install test integ-test
+.PHONY: all runtime clean distclean install test integ-test integ-test-deps

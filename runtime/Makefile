@@ -61,6 +61,8 @@ integ-test-%: logs
 		--env ENABLE_ISOLATED_TESTS=1 \
 		--env FICD_SNAPSHOTTER=$(FICD_SNAPSHOTTER) \
 		--env FICD_DM_POOL=$(FICD_DM_POOL) \
+		--env GOPATH=/go \
+		--env GO111MODULES=on \
 		--env GOPROXY=direct \
 		--env GOSUMDB=off \
 		--workdir="/src/runtime" \

@@ -153,6 +153,13 @@ firecracker-containerd-test-image: all-in-docker firecracker runc test-cni-bins 
 		--build-arg FIRECRACKER_TARGET=$(FIRECRACKER_TARGET) \
 		--tag $(FIRECRACKER_CONTAINERD_TEST_IMAGE):${DOCKER_IMAGE_TAG} .
 
+firecracker-containerd-test-image-al2: all-in-docker firecracker runc test-cni-bins cni-bins default-vmlinux
+	DOCKER_BUILDKIT=1 docker build \
+		--progress=plain \
+		--file tools/docker/Dockerfile.integ-test-al2 \
+		--build-arg FIRECRACKER_TARGET=$(FIRECRACKER_TARGET) \
+		--tag $(FIRECRACKER_CONTAINERD_TEST_IMAGE)-al2:${DOCKER_IMAGE_TAG} .
+
 .PHONY: all $(SUBDIRS) clean proto deps lint install image test-images firecracker-container-test-image firecracker-containerd-integ-test-image test test-in-docker $(TEST_SUBDIRS) integ-test $(INTEG_TEST_SUBDIRS)
 
 ##########################

@@ -218,7 +218,6 @@ func (s *local) StopVM(requestCtx context.Context, req *proto.StopVMRequest) (*e
 
 	resp, err := client.StopVM(requestCtx, req)
 	if err != nil {
-		err = errors.Wrap(err, "shim client failed to stop VM")
 		s.logger.WithError(err).Error()
 		return nil, err
 	}

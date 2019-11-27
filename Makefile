@@ -20,10 +20,17 @@ export STATIC_AGENT
 
 export DOCKER_IMAGE_TAG?=latest
 
+GOMOD := $(shell go env GOMOD)
+GOSUM := $(GOMOD:.mod=.sum)
 GOPATH:=$(shell go env GOPATH)
 BINPATH:=$(abspath ./bin)
 SUBMODULES=_submodules
 UID:=$(shell id -u)
+GID:=$(shell id -g)
+
+FIRECRACKER_CONTAINERD_BUILDER_IMAGE?=golang:1.13-stretch
+export FIRECRACKER_CONTAINERD_TEST_IMAGE?=localhost/firecracker-containerd-test
+export GO_CACHE_VOLUME_NAME?=gocache
 
 FIRECRACKER_DIR=$(SUBMODULES)/firecracker
 FIRECRACKER_TARGET?=x86_64-unknown-linux-musl
@@ -41,10 +48,23 @@ PROTO_BUILDER_NAME?=proto-builder
 # Set this to pass additional commandline flags to the go compiler, e.g. "make test EXTRAGOARGS=-v"
 export EXTRAGOARGS?=
 
-all: $(SUBDIRS)
+all: $(SUBDIRS) $(GOMOD) $(GOSUM)
 
 $(SUBDIRS):
 	$(MAKE) -C $@ EXTRAGOARGS=$(EXTRAGOARGS)
+
+all-in-docker:
+	docker run --rm -it \
+		--user $(UID):$(GID) \
+		--volume $(CURDIR):/src \
+		--volume $(GO_CACHE_VOLUME_NAME):/go \
+		--env HOME=/tmp \
+		--env GOPATH=/go \
+		--env GO111MODULES=on \
+		--env STATIC_AGENT=on \
+		--workdir /src \
+		$(FIRECRACKER_CONTAINERD_BUILDER_IMAGE) \
+		$(MAKE) all test-cni-bins
 
 proto:
 	DOCKER_BUILDKIT=1 docker build \
@@ -60,6 +80,7 @@ clean:
 	$(MAKE) firecracker-clean
 	rm -f tools/*stamp *stamp
 	$(MAKE) -C tools/image-builder clean-in-docker
+	rm -f $(DEFAULT_VMLINUX_NAME)
 
 rmi-if-exists = $(if $(shell docker images -q $(1)),docker rmi $(1),true)
 distclean: clean
@@ -68,8 +89,8 @@ distclean: clean
 	$(call rmi-if-exists,localhost/$(RUNC_BUILDER_NAME):$(DOCKER_IMAGE_TAG))
 	$(call rmi-if-exists,localhost/$(FIRECRACKER_BUILDER_NAME):$(DOCKER_IMAGE_TAG))
 	docker volume rm -f $(CARGO_CACHE_VOLUME_NAME)
-	$(call rmi-if-exists,localhost/firecracker-containerd-integ-test:$(DOCKER_IMAGE_TAG))
-	$(call rmi-if-exists,localhost/firecracker-containerd-test:$(DOCKER_IMAGE_TAG))
+	docker volume rm -f $(GO_CACHE_VOLUME_NAME)
+	$(call rmi-if-exists,$(FIRECRACKER_CONTAINERD_TEST_IMAGE):$(DOCKER_IMAGE_TAG))
 	$(call rmi-if-exists,localhost/$(PROTO_BUILDER_NAME):$(DOCKER_IMAGE_TAG))
 
 lint:
@@ -86,25 +107,6 @@ deps:
 install:
 	for d in $(SUBDIRS); do $(MAKE) -C $$d install; done
 
-test: $(TEST_SUBDIRS)
-
-test-in-docker: firecracker-containerd-test-image
-	docker run --rm -it --user builder \
-		--env HOME=/home/builder \
-		--env GOPATH=/home/builder/go \
-		--env EXTRAGOARGS="$(EXTRAGOARGS)" \
-		--workdir /firecracker-containerd \
-		localhost/firecracker-containerd-test:$(DOCKER_IMAGE_TAG) \
-		"make test"
-
-$(TEST_SUBDIRS):
-	$(MAKE) -C $(patsubst test-%,%,$@) test
-
-integ-test: $(INTEG_TEST_SUBDIRS)
-
-$(INTEG_TEST_SUBDIRS): test-images
-	$(MAKE) -C $(patsubst integ-test-%,%,$@) integ-test
-
 image: $(RUNC_BIN) agent
 	mkdir -p tools/image-builder/files_ephemeral/usr/local/bin
 	mkdir -p tools/image-builder/files_ephemeral/var/firecracker-containerd-test/scripts
@@ -114,38 +116,85 @@ image: $(RUNC_BIN) agent
 	touch tools/image-builder/files_ephemeral
 	$(MAKE) -C tools/image-builder all-in-docker
 
+test: $(TEST_SUBDIRS)
+
+# test-in-docker runs all unit tests inside a docker container. Use "integ-test" to
+# run the integ-tests inside containers.
+test-in-docker:
+	docker run --rm -it \
+		--user $(UID):$(GID) \
+		--volume $(CURDIR):/src \
+		--volume $(GO_CACHE_VOLUME_NAME):/go \
+		--env HOME=/tmp \
+		--env GOPATH=/go \
+		--env EXTRAGOARGS="$(EXTRAGOARGS)" \
+		--entrypoint=/bin/bash \
+		--workdir /src \
+		$(FIRECRACKER_CONTAINERD_BUILDER_IMAGE) \
+		-c "make test"
+
+$(TEST_SUBDIRS):
+	$(MAKE) -C $(patsubst test-%,%,$@) test
+
+integ-test: $(INTEG_TEST_SUBDIRS)
+
+$(INTEG_TEST_SUBDIRS): test-images
+	$(MAKE) -C $(patsubst integ-test-%,%,$@) integ-test
+
 test-images: test-images-stamp
 
-test-images-stamp: | image firecracker-containerd-integ-test-image firecracker-containerd-test-image firecracker-containerd-integ-test-image-tiny
+test-images-stamp: | image firecracker-containerd-test-image
 	touch $@
 
-firecracker-containerd-test-image:
-	DOCKER_BUILDKIT=1 docker build \
-		--progress=plain \
-		--file tools/docker/Dockerfile \
-		--target firecracker-containerd-test \
-		--tag localhost/firecracker-containerd-test:${DOCKER_IMAGE_TAG} .
-
-firecracker-containerd-integ-test-image: $(RUNC_BIN) $(FIRECRACKER_BIN) $(JAILER_BIN)
-	DOCKER_BUILDKIT=1 docker build \
-		--progress=plain \
-		--file tools/docker/Dockerfile \
-		--target firecracker-containerd-integ-test \
-		--build-arg FIRECRACKER_TARGET=$(FIRECRACKER_TARGET) \
-		--tag localhost/firecracker-containerd-integ-test:${DOCKER_IMAGE_TAG} .
-
-firecracker-containerd-integ-test-image-tiny: all
-	mkdir -p $(CURDIR)/build/opt/cni/bin
-	make install-cni-bin CNI_BIN_ROOT=$(CURDIR)/build/opt/cni/bin
-	make -C internal test-bridged-tap
-	cp internal/test-bridged-tap $(CURDIR)/build/opt/cni/bin
+firecracker-containerd-test-image: all-in-docker firecracker runc test-cni-bins cni-bins default-vmlinux
 	DOCKER_BUILDKIT=1 docker build \
 		--progress=plain \
 		--file tools/docker/Dockerfile.integ-test \
 		--build-arg FIRECRACKER_TARGET=$(FIRECRACKER_TARGET) \
-		--tag localhost/firecracker-containerd-integ-test-tiny:${DOCKER_IMAGE_TAG} .
+		--tag $(FIRECRACKER_CONTAINERD_TEST_IMAGE):${DOCKER_IMAGE_TAG} .
 
 .PHONY: all $(SUBDIRS) clean proto deps lint install image test-images firecracker-container-test-image firecracker-containerd-integ-test-image test test-in-docker $(TEST_SUBDIRS) integ-test $(INTEG_TEST_SUBDIRS)
+
+##########################
+# Runtime config
+##########################
+
+FIRECRACKER_CONTAINERD_RUNTIME_DIR?=/var/lib/firecracker-containerd/runtime
+ETC_CONTAINERD?=/etc/containerd
+$(FIRECRACKER_CONTAINERD_RUNTIME_DIR) $(ETC_CONTAINERD):
+	mkdir --mode 0700 --parents $@
+
+DEFAULT_VMLINUX_NAME?=default-vmlinux.bin
+$(DEFAULT_VMLINUX_NAME):
+	curl --silent --show-error --retry 3 --max-time 30 --output $@ \
+		"https://s3.amazonaws.com/spec.ccfc.min/img/hello/kernel/hello-vmlinux.bin"
+	echo "882fa465c43ab7d92e31bd4167da3ad6a82cb9230f9b0016176df597c6014cef $@" | sha256sum -c -
+	chmod 0400 $@
+
+DEFAULT_VMLINUX_INSTALLPATH=$(FIRECRACKER_CONTAINERD_RUNTIME_DIR)/$(DEFAULT_VMLINUX_NAME)
+$(DEFAULT_VMLINUX_INSTALLPATH): $(DEFAULT_VMLINUX_NAME) $(FIRECRACKER_CONTAINERD_RUNTIME_DIR)
+	install -D -o root -g root -m400 $(DEFAULT_VMLINUX_NAME) $@
+
+DEFAULT_ROOTFS_INSTALLPATH=$(FIRECRACKER_CONTAINERD_RUNTIME_DIR)/default-rootfs.img
+$(DEFAULT_ROOTFS_INSTALLPATH): tools/image-builder/rootfs.img $(FIRECRACKER_CONTAINERD_RUNTIME_DIR)
+	install -D -o root -g root -m400 tools/image-builder/rootfs.img $@
+
+DEFAULT_RUNC_JAILER_CONFIG_INSTALLPATH?=/etc/containerd/firecracker-runc-config.json
+$(DEFAULT_RUNC_JAILER_CONFIG_INSTALLPATH): $(ETC_CONTAINERD) runtime/firecracker-runc-config.json.example
+	install -D -o root -g root -m400 runtime/firecracker-runc-config.json.example $@
+
+.PHONY: default-vmlinux
+default-vmlinux: $(DEFAULT_VMLINUX_NAME)
+
+.PHONY: install-default-vmlinux
+install-default-vmlinux: $(DEFAULT_VMLINUX_INSTALLPATH)
+
+.PHONY: install-default-rootfs
+install-default-rootfs: $(DEFAULT_ROOTFS_INSTALLPATH)
+
+.PHONY: install-default-runc-jailer-config
+install-default-runc-jailer-config: $(DEFAULT_RUNC_JAILER_CONFIG_INSTALLPATH)
+
 
 ##########################
 # CNI Network
@@ -153,32 +202,52 @@ firecracker-containerd-integ-test-image-tiny: all
 
 CNI_BIN_ROOT?=/opt/cni/bin
 $(CNI_BIN_ROOT):
-	mkdir -p $(CNI_BIN_ROOT)
+	mkdir --mode 0755 --parents $@
 
-PTP_BIN?=$(CNI_BIN_ROOT)/ptp
-$(PTP_BIN): $(CNI_BIN_ROOT)
-	GOBIN=$(CNI_BIN_ROOT) GO111MODULE=off go get -u github.com/containernetworking/plugins/plugins/main/ptp
+PTP_BIN?=$(BINPATH)/ptp
+$(PTP_BIN):
+	GOBIN=$(dir $@) GO111MODULE=off go get -u github.com/containernetworking/plugins/plugins/main/ptp
 
-HOSTLOCAL_BIN?=$(CNI_BIN_ROOT)/host-local
-$(HOSTLOCAL_BIN): $(CNI_BIN_ROOT)
-	GOBIN=$(CNI_BIN_ROOT) GO111MODULE=off go get -u github.com/containernetworking/plugins/plugins/ipam/host-local
+HOSTLOCAL_BIN?=$(BINPATH)/host-local
+$(HOSTLOCAL_BIN):
+	GOBIN=$(dir $@) GO111MODULE=off go get -u github.com/containernetworking/plugins/plugins/ipam/host-local
 
-FIREWALL_BIN?=$(CNI_BIN_ROOT)/firewall
-$(FIREWALL_BIN): $(CNI_BIN_ROOT)
-	GOBIN=$(CNI_BIN_ROOT) GO111MODULE=off go get -u github.com/containernetworking/plugins/plugins/meta/firewall
+FIREWALL_BIN?=$(BINPATH)/firewall
+$(FIREWALL_BIN):
+	GOBIN=$(dir $@) GO111MODULE=off go get -u github.com/containernetworking/plugins/plugins/meta/firewall
 
-TC_REDIRECT_TAP_BIN?=$(CNI_BIN_ROOT)/tc-redirect-tap
-$(TC_REDIRECT_TAP_BIN): $(CNI_BIN_ROOT)
-	GOBIN=$(CNI_BIN_ROOT) go install github.com/firecracker-microvm/firecracker-go-sdk/cni/cmd/tc-redirect-tap
+TC_REDIRECT_TAP_BIN?=$(BINPATH)/tc-redirect-tap
+$(TC_REDIRECT_TAP_BIN):
+	GOBIN=$(dir $@) go install github.com/firecracker-microvm/firecracker-go-sdk/cni/cmd/tc-redirect-tap
+
+TEST_BRIDGED_TAP_BIN?=$(BINPATH)/test-bridged-tap
+$(TEST_BRIDGED_TAP_BIN): $(shell find internal/cmd/test-bridged-tap -name *.go) $(GOMOD) $(GOSUM)
+	go build -o $@ $(CURDIR)/internal/cmd/test-bridged-tap
+
+.PHONY: cni-bins
+cni-bins: $(PTP_BIN) $(HOSTLOCAL_BIN) $(FIREWALL_BIN) $(TC_REDIRECT_TAP_BIN)
+
+.PHONY: test-cni-bins
+test-cni-bins: $(TEST_BRIDGED_TAP_BIN)
+
+.PHONY: install-cni-bins
+install-cni-bins: cni-bins $(CNI_BIN_ROOT)
+	install -D -o root -g root -m755 -t $(CNI_BIN_ROOT) $(PTP_BIN)
+	install -D -o root -g root -m755 -t $(CNI_BIN_ROOT) $(HOSTLOCAL_BIN)
+	install -D -o root -g root -m755 -t $(CNI_BIN_ROOT) $(FIREWALL_BIN)
+	install -D -o root -g root -m755 -t $(CNI_BIN_ROOT) $(TC_REDIRECT_TAP_BIN)
+
+.PHONY: install-test-cni-bins
+install-test-cni-bins: test-cni-bins $(CNI_BIN_ROOT)
+	install -D -o root -g root -m755 -t $(CNI_BIN_ROOT) $(TEST_BRIDGED_TAP_BIN)
 
 FCNET_CONFIG?=/etc/cni/conf.d/fcnet.conflist
 $(FCNET_CONFIG):
 	mkdir -p $(dir $(FCNET_CONFIG))
 	cp tools/demo/fcnet.conflist $(FCNET_CONFIG)
 
-.PHONY: demo-network install-cni-bin
-install-cni-bin: $(PTP_BIN) $(HOSTLOCAL_BIN) $(FIREWALL_BIN) $(TC_REDIRECT_TAP_BIN)
-demo-network: install-cni-bin $(FCNET_CONFIG)
+.PHONY: demo-network
+demo-network: install-cni-bins $(FCNET_CONFIG)
 
 ##########################
 # Firecracker submodule
@@ -245,3 +314,7 @@ $(RUNC_BIN): $(RUNC_DIR)/VERSION tools/runc-builder-stamp
 		--workdir /gopath/src/github.com/opencontainers/runc \
 		localhost/$(RUNC_BUILDER_NAME):$(DOCKER_IMAGE_TAG) \
 		make static
+
+.PHONY: install-runc
+install-runc: $(RUNC_BIN)
+	install -D -o root -g root -m755 -t $(INSTALLROOT)/bin $(RUNC_BIN)

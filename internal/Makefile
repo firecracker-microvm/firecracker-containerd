@@ -13,15 +13,7 @@
 
 EXTRAGOARGS?=
 
-GOMOD := $(shell go env GOMOD)
-GOSUM := $(GOMOD:.mod=.sum)
-SOURCES:=$(shell find . -name '*.go')
-DOCKER_IMAGE_TAG?=latest
-
 all:
-
-test-bridged-tap: cmd/test-bridged-tap $(GOMOD) $(GOSUM)
-	go build -o test-bridged-tap $(CURDIR)/cmd/test-bridged-tap
 
 test:
 	go test ./... $(EXTRAGOARGS)

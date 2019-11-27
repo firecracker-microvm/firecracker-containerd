@@ -64,7 +64,7 @@ all-in-docker:
 		--env STATIC_AGENT=on \
 		--workdir /src \
 		$(FIRECRACKER_CONTAINERD_BUILDER_IMAGE) \
-		$(MAKE) all test-cni-bins
+		$(MAKE) all cni-bins test-cni-bins
 
 proto:
 	DOCKER_BUILDKIT=1 docker build \

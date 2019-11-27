@@ -1,0 +1,4 @@
+#! /bin/sh
+# -ffxdq is BuildKite's default clean flags.
+# https://buildkite.com/docs/agent/v3/configuration
+sudo git clean -ffxdq

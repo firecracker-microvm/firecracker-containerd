@@ -926,22 +926,22 @@ func (s *service) Delete(requestCtx context.Context, req *taskAPI.DeleteRequest)
 	// Trying to release stub drive for further reuse
 	err = s.containerStubHandler.Release(requestCtx, req.ID, s.driveMountClient, s.machine)
 	if err != nil {
-		multierror.Append(result, errors.Wrapf(err, "failed to release stub drive for container: %s", req.ID))
+		result = multierror.Append(result, errors.Wrapf(err, "failed to release stub drive for container: %s", req.ID))
 	}
 
 	// Otherwise, delete the container
 	dir, err := s.shimDir.BundleLink(req.ID)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to find the bundle directory of the container: %s", req.ID)
+		result = multierror.Append(result, errors.Wrapf(err, "failed to find the bundle directory of the container: %s", req.ID))
 	}
 
 	_, err = os.Stat(dir.RootPath())
 	if os.IsNotExist(err) {
-		return nil, errors.Wrapf(err, "failed to find the bundle directory of the container: %s", dir.RootPath())
+		result = multierror.Append(result, errors.Wrapf(err, "failed to find the bundle directory of the container: %s", dir.RootPath()))
 	}
 
 	if err = os.Remove(dir.RootPath()); err != nil {
-		return nil, multierror.Append(result, errors.Wrapf(err, "failed to remove the bundle directory of the container: %s", dir.RootPath()))
+		result = multierror.Append(result, errors.Wrapf(err, "failed to remove the bundle directory of the container: %s", dir.RootPath()))
 	}
 
 	return resp, result.ErrorOrNil()

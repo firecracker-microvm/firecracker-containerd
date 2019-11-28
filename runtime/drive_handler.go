@@ -111,7 +111,7 @@ func (h *StubDriveHandler) Reserve(
 		return ErrDrivesExhausted
 	}
 	if _, ok := h.usedDrives[id]; ok {
-		// This case means that driver wasn't released or removed properly
+		// This case means that drive wasn't released or removed properly
 		return fmt.Errorf("drive with ID %s already in use, a previous attempt to remove it may have failed", id)
 	}
 
@@ -127,6 +127,7 @@ func (h *StubDriveHandler) Reserve(
 		filesystemType,
 		options,
 	)
+	freeDrive = &stubDrive
 
 	err = stubDrive.PatchAndMount(requestCtx, machine, driveMounter)
 	if err != nil {
@@ -161,7 +162,7 @@ func (h *StubDriveHandler) Release(
 		return errors.Wrap(err, "failed to unmount drive")
 	}
 
-	err = machine.UpdateGuestDrive(requestCtx, drive.driveID, drive.driveMount.HostPath)
+	err = machine.UpdateGuestDrive(requestCtx, drive.driveID, drive.stubPath)
 	if err != nil {
 		return errors.Wrap(err, "failed to patch drive")
 	}

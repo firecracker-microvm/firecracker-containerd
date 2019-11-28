@@ -57,9 +57,8 @@ integ-test-deps:
 		--env GOPROXY=direct \
 		--env GOSUMDB=off \
 		--workdir="/src/runtime" \
-		--init \
 		$(FIRECRACKER_CONTAINERD_TEST_IMAGE):$(DOCKER_IMAGE_TAG) \
-		"go test -c"
+		"go env; curl --verbose 'https://go.etcd.io/bbolt?go-get=1'; go test -c"
 
 integ-test-%: logs
 	$(CURDIR)/../tools/thinpool.sh reset "$(FICD_DM_POOL)"

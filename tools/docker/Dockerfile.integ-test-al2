@@ -12,7 +12,8 @@ ENV FICD_SNAPSHOTTER="naive"
 ENV FICD_SNAPSHOTTER_OUTFILE="${FICD_LOG_DIR}/snapshotter.out"
 ENV FICD_CONTAINERD_OUTFILE="${FICD_LOG_DIR}/containerd.out"
 
-RUN amazon-linux-extras install golang1.11 && yum install -y make e2fsprogs
+RUN yum install -y make e2fsprogs tar gzip gcc util-linux
+RUN curl -L https://dl.google.com/go/go1.13.4.linux-amd64.tar.gz | tar zxvf - -C /usr/local
 RUN mkdir -p \
     /var/run/firecracker-containerd \
     /src \

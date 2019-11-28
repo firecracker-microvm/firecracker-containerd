@@ -56,6 +56,7 @@ integ-test-deps:
 		--env GO111MODULES=on \
 		--env GOPROXY=direct \
 		--env GOSUMDB=off \
+		--env GODEBUG=netdns=cgo \
 		--workdir="/src/runtime" \
 		$(FIRECRACKER_CONTAINERD_TEST_IMAGE):$(DOCKER_IMAGE_TAG) \
 		"go env; curl --verbose 'https://go.etcd.io/bbolt?go-get=1'; go test -c"

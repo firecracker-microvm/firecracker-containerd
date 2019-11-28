@@ -82,7 +82,7 @@ integ-test-%: logs
 		--workdir="/src/runtime" \
 		--init \
 		$(FIRECRACKER_CONTAINERD_TEST_IMAGE):$(DOCKER_IMAGE_TAG) \
-		"go test $(EXTRAGOARGS) -run '^$(subst integ-test-,,$@)$$'"
+		"go env; go test $(EXTRAGOARGS) -run '^$(subst integ-test-,,$@)$$'"
 
 logs:
 	mkdir logs

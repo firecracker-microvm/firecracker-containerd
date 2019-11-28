@@ -48,12 +48,12 @@ PROTO_BUILDER_NAME?=proto-builder
 # Set this to pass additional commandline flags to the go compiler, e.g. "make test EXTRAGOARGS=-v"
 export EXTRAGOARGS?=
 
-all: $(SUBDIRS) $(GOMOD) $(GOSUM)
+all: $(SUBDIRS) $(GOMOD) $(GOSUM) cni-bins test-cni-bins
 
 $(SUBDIRS):
 	$(MAKE) -C $@ EXTRAGOARGS=$(EXTRAGOARGS)
 
-all-in-docker:
+%-in-docker:
 	docker run --rm -it \
 		--user $(UID):$(GID) \
 		--volume $(CURDIR):/src \
@@ -64,7 +64,7 @@ all-in-docker:
 		--env STATIC_AGENT=on \
 		--workdir /src \
 		$(FIRECRACKER_CONTAINERD_BUILDER_IMAGE) \
-		$(MAKE) all cni-bins test-cni-bins
+		$(MAKE) $(subst -in-docker,,$@)
 
 proto:
 	DOCKER_BUILDKIT=1 docker build \
@@ -107,7 +107,7 @@ deps:
 install:
 	for d in $(SUBDIRS); do $(MAKE) -C $$d install; done
 
-image: $(RUNC_BIN) agent
+image: $(RUNC_BIN) agent-in-docker
 	mkdir -p tools/image-builder/files_ephemeral/usr/local/bin
 	mkdir -p tools/image-builder/files_ephemeral/var/firecracker-containerd-test/scripts
 	for f in tools/docker/scripts/*; do test -f $$f && install -m 755 $$f tools/image-builder/files_ephemeral/var/firecracker-containerd-test/scripts; done

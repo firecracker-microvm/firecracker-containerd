@@ -55,17 +55,6 @@ steps:
       - make test-in-docker
     timeout_in_minutes: 10
 
-  - label: ":rotating_light: :hammer: snapshotter *root* tests"
-    agents:
-      queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
-    env:
-      DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
-      EXTRAGOARGS: "-v -count=1 -race"
-    command: 'make -C snapshotter integ-test'
-    timeout_in_minutes: 10
-    concurrency: 1
-    concurrency_group: 'loop-device test'
-
   - label: ":rotating_light: :running_shirt_with_sash: runtime isolated tests"
     agents:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
@@ -77,19 +66,6 @@ steps:
     command:
       - make -C runtime integ-test FICD_SNAPSHOTTER=devmapper FICD_DM_POOL=build_${BUILDKITE_BUILD_NUMBER}_runtime
     timeout_in_minutes: 10
-
-  - label: ":rotating_light: :exclamation: example tests (naive)"
-    agents:
-      queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
-    env:
-      DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
-      EXTRAGOARGS: "-v -count=1"
-    artifact_paths:
-      - "examples/logs/*"
-    command: 'make -C examples integ-test'
-    timeout_in_minutes: 10
-    concurrency: 1
-    concurrency_group: 'loop-device test'
 
   - label: ":rotating_light: :exclamation: example tests (devmapper)"
     agents:

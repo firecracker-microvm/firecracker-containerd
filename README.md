@@ -31,12 +31,6 @@ container standards such as the OCI image format.
 There are several components in this repository that enable containerd to use
 Firecracker microVMs to run containers:
 
-* A [snapshotter](snapshotter) that creates files used as block-devices for
-  pass-through into the microVM.  This snapshotter is used for providing the
-  container image to the microVM.  The snapshotter runs as an out-of-process
-  gRPC proxy plugin.  We currently have two implementations of a snapshotter: a
-  [naive](snapshotter/cmd/naive) copy-ahead implementation and a
-  [devmapper-based](snapshotter/cmd/devmapper) copy-on-write implementation.
 * A [control plugin](firecracker-control) managing the lifecycle of the
   runtime and implementing our [control API](proto/firecracker.proto) to
   manage the lifecycle of microVMs. The control plugin is compiled in to the

@@ -108,7 +108,12 @@ func main() {
 	}
 
 	group.Go(func() error {
-		return server.Serve(shimCtx, listener)
+		err := server.Serve(shimCtx, listener)
+		if err == ttrpc.ErrServerClosed {
+			// Calling server.Shutdown() from another goroutine will cause ErrServerClosed, which is fine.
+			return nil
+		}
+		return err
 	})
 
 	group.Go(func() error {

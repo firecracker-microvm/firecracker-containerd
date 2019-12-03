@@ -53,8 +53,14 @@ func TestBuildJailedRootHandler_Isolated(t *testing.T) {
 	defer firecrackerFd.Close()
 
 	l := logrus.NewEntry(logrus.New())
+	config := runcJailerConfig{
+		OCIBundlePath: dir,
+		RuncBinPath:   "bin-path",
+		UID:           123,
+		GID:           456,
+	}
 	vmID := "foo"
-	jailer, err := newRuncJailer(context.Background(), l, vmID, dir, "path/to/runc", 123, 456)
+	jailer, err := newRuncJailer(context.Background(), l, vmID, config)
 	require.NoError(t, err, "failed to create runc jailer")
 
 	cfg := Config{

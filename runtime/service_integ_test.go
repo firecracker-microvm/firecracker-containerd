@@ -782,7 +782,7 @@ func TestCreateContainerWithSameName_Isolated(t *testing.T) {
 	testCreateContainerWithSameName(t, vmID)
 }
 
-func TestCreateTooManyContainers_Isolated(t *testing.T) {
+func TestStubDriveReserveAndReleaseByContainers_Isolated(t *testing.T) {
 	prepareIntegTest(t)
 
 	assert := assert.New(t)
@@ -825,13 +825,9 @@ func TestCreateTooManyContainers_Isolated(t *testing.T) {
 		require.NoError(t, err, "failed to delete a container")
 	}()
 
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-
-	// When we reuse a VM explicitly, we cannot start multiple containers unless we pre-allocate stub drives.
-	_, err = c2.NewTask(ctx, cio.NewCreator(cio.WithStreams(nil, &stdout, &stderr)))
-	assert.Contains(err.Error(), "There are no remaining drives to be used")
-	require.Error(t, err)
+	// With the new behaviour, on previous task deletion, stub drive will be released
+	// and now can be reused by new container and task.
+	assert.Equal("hello", startAndWaitTask(ctx, t, c2))
 }
 
 func TestDriveMount_Isolated(t *testing.T) {

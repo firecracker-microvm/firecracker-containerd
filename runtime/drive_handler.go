@@ -162,7 +162,7 @@ func (h *StubDriveHandler) Release(
 		return errors.Wrap(err, "failed to unmount drive")
 	}
 
-	err = machine.UpdateGuestDrive(requestCtx, drive.driveID, drive.stubPath)
+	err = machine.UpdateGuestDrive(requestCtx, drive.driveID, filepath.Base(drive.stubPath))
 	if err != nil {
 		return errors.Wrap(err, "failed to patch drive")
 	}

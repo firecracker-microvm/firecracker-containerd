@@ -51,6 +51,7 @@ RUN --mount=type=bind,target=/src make -C /src \
   install-default-rootfs \
   install-default-runc-jailer-config \
   install-test-cni-bins \
+  install-test-rootfs \
   demo-network
 
 COPY tools/docker/entrypoint.sh /entrypoint

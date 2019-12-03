@@ -50,6 +50,9 @@ import (
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	fccontrol "github.com/firecracker-microvm/firecracker-containerd/proto/service/fccontrol/ttrpc"
 	"github.com/firecracker-microvm/firecracker-containerd/runtime/firecrackeroci"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -1303,32 +1306,63 @@ func TestStopVM_Isolated(t *testing.T) {
 	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
 	require.NoError(err, "failed to create ttrpc client")
 
-	vmID := testNameToVMID(t.Name())
+	tests := []struct {
+		name            string
+		createVMRequest proto.CreateVMRequest
+		errorCode       codes.Code
+	}{
+		{
+			name:            "Successful",
+			createVMRequest: proto.CreateVMRequest{},
+			errorCode:       codes.OK,
+		},
 
-	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
-	_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{VMID: vmID})
-	require.NoError(err)
+		// Firecracker is too fast to test a case where we hit the timeout on a StopVMRequest.
+		// The rootfs below explicitly sleeps 60 seconds after shutting down the agent to simulate the case.
+		{
+			name: "Timeout",
+			createVMRequest: proto.CreateVMRequest{
+				RootDrive: &proto.FirecrackerRootDrive{
+					HostPath: "/var/lib/firecracker-containerd/runtime/rootfs-slow-reboot.img",
+				},
+			},
+			errorCode: codes.DeadlineExceeded,
+		},
+	}
 
-	c, err := client.NewContainer(ctx,
-		"container",
-		containerd.WithSnapshotter(defaultSnapshotterName()),
-		containerd.WithNewSnapshot("snapshot", image),
-		containerd.WithNewSpec(oci.WithProcessArgs("/bin/echo", "-n", "hello"), firecrackeroci.WithVMID(vmID)),
-	)
-	require.NoError(err)
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			vmID := testNameToVMID(t.Name())
+			createVMRequest := test.createVMRequest
+			createVMRequest.VMID = vmID
 
-	stdout := startAndWaitTask(ctx, t, c)
-	require.Equal("hello", stdout)
+			fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
+			_, err = fcClient.CreateVM(ctx, &createVMRequest)
+			require.NoError(err)
 
-	shimProcesses, err := internal.WaitForProcessToExist(ctx, time.Second, findShim)
-	require.NoError(err, "failed waiting for expected shim process %q to come up", shimProcessName)
-	require.Len(shimProcesses, 1, "expected only one shim process to exist")
+			c, err := client.NewContainer(ctx,
+				"container-"+vmID,
+				containerd.WithSnapshotter(defaultSnapshotterName()),
+				containerd.WithNewSnapshot("snapshot-"+vmID, image),
+				containerd.WithNewSpec(oci.WithProcessArgs("/bin/echo", "-n", "hello"), firecrackeroci.WithVMID(vmID)),
+			)
+			require.NoError(err)
 
-	_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
-	require.NoError(err)
+			stdout := startAndWaitTask(ctx, t, c)
+			require.Equal("hello", stdout)
 
-	err = internal.WaitForPidToExit(ctx, time.Second, shimProcesses[0].Pid)
-	require.NoError(err, "shim hasn't been terminated")
+			shimProcesses, err := internal.WaitForProcessToExist(ctx, time.Second, findShim)
+			require.NoError(err, "failed waiting for expected shim process %q to come up", shimProcessName)
+			require.Len(shimProcesses, 1, "expected only one shim process to exist")
+
+			_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
+			require.Equal(status.Code(err), test.errorCode)
+
+			err = internal.WaitForPidToExit(ctx, time.Second, shimProcesses[0].Pid)
+			require.NoError(err, "shim hasn't been terminated")
+		})
+	}
 }
 
 func findShim(ctx context.Context, p *process.Process) (bool, error) {

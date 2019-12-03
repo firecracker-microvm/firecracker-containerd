@@ -12,7 +12,7 @@
 # permissions and limitations under the License.
 
 UID        := $(shell id -u)
-WORKDIR    := rootfs
+WORKDIR    := tmp/rootfs
 WORKDIRLOC := $(shell readlink -f $(WORKDIR))
 IMAGE_DIRS := /dev /bin /etc /etc/init.d /tmp /var /run /proc /sys /container/rootfs /agent /rom /overlay
 DIRS       := $(foreach dir,$(IMAGE_DIRS),"$(WORKDIR)$(dir)")
@@ -37,7 +37,7 @@ fi
 touch --reference=debootstrap_stamp --no-create "$(WORKDIR)"
 endef
 
-all: rootfs.img
+all: rootfs.img rootfs-slow-reboot.img
 
 $(WORKDIR):
 	mkdir $(WORKDIR)
@@ -67,6 +67,13 @@ endif
 rootfs.img: files_common_stamp files_debootstrap_stamp files_ephemeral_stamp
 	mksquashfs "$(WORKDIR)" rootfs.img -noappend
 
+# Intentionally break the rootfs to simulate the case where StopVM is taking longer than the minimal timeout
+rootfs-slow-reboot.img: files_common_stamp files_debootstrap_stamp files_ephemeral_stamp
+	rm -fr tmp/$@
+	cp -a "$(WORKDIR)" tmp/$@
+	echo 'ExecStop=/bin/sleep 60' >> tmp/$@/etc/systemd/system/firecracker-agent.service
+	mksquashfs tmp/$@ $@ -noappend
+
 builder: builder_stamp
 
 builder_stamp:
@@ -81,7 +88,9 @@ builder_stamp:
 %-in-docker: builder_stamp
 	docker run --rm \
 		--security-opt=apparmor=unconfined \
-		-it --volume $(CURDIR):/src \
+		-it \
+		--volume $(CURDIR):/src \
+		--volume /src/tmp \
 		--cap-add=sys_admin \
 		--cap-add=sys_chroot \
 		--env=DEBMIRROR \
@@ -89,13 +98,10 @@ builder_stamp:
 
 clean:
 	-rm -f *stamp
-	if [ -d $(WORKDIR) ] || [ -e rootfs.img ]; then \
-	  if [ $(UID) -eq 0 ]; then \
-	    rm -rf $(WORKDIR) \
-	    rm -f rootfs.img ;\
-	   else \
-	     $(MAKE) clean-in-docker ;\
-	   fi ; \
+	if [ $(UID) -eq 0 ]; then \
+	  rm -f rootfs.img rootfs-slow-reboot.img ;\
+	else \
+	  $(MAKE) clean-in-docker ;\
 	fi
 
 distclean: clean

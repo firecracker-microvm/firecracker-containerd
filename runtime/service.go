@@ -1186,6 +1186,7 @@ func (s *service) shutdown(requestCtx, shutdownCtx context.Context, req *taskAPI
 		}
 		s.logger.WithError(shutdownErr).Error("the VM returns unknown error")
 	case <-shutdownCtx.Done():
+		shutdownErr = status.Errorf(codes.DeadlineExceeded, "the VM %q will be killed forcebily", req.ID)
 		s.logger.Error("the VM hasn't been stopped before the context's deadline")
 	}
 

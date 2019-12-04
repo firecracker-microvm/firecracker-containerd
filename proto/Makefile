@@ -37,4 +37,4 @@ clean:
 	- $(MAKE) -C service/fccontrol clean
 	- $(MAKE) -C service/drivemount clean
 
-.PHONY: clean proto
+.PHONY: clean proto proto-docker

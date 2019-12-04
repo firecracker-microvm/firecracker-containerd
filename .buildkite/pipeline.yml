@@ -45,6 +45,16 @@ steps:
   - label: 'git log validation'
     command: './.buildkite/logcheck.sh'
 
+  - label: ":protractor: verify proto"
+    agents:
+      queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
+    env:
+      DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
+    command:
+      - make proto
+      - test -z "$(git status --porcelain)" && exit 0 || git status && echo -e '\nGenerated protobuf code differs from committed, please run "make proto" and commit the updated files.\n' && exit 1
+    timeout_in_minutes: 1
+
   - label: ":gear: unit tests"
     agents:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
@@ -78,3 +88,4 @@ steps:
     command:
       - make -C examples integ-test TEST_SS=devmapper TEST_POOL=build_${BUILDKITE_BUILD_NUMBER}_example
     timeout_in_minutes: 10
+

@@ -6,11 +6,16 @@ option go_package = "drivemount";
 
 service DriveMounter {
     rpc MountDrive(MountDriveRequest) returns (google.protobuf.Empty);
+    rpc UnmountDrive(UnmountDriveRequest) returns (google.protobuf.Empty);
 }
 
 message MountDriveRequest {
+     string DriveID = 1;
+     string DestinationPath = 2;
+     string FilesytemType = 3;
+     repeated string Options = 4;
+}
+
+message UnmountDriveRequest {
     string DriveID = 1;
-    string DestinationPath = 2;
-    string FilesytemType = 3;
-    repeated string Options = 4;
 }

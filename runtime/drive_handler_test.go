@@ -92,18 +92,6 @@ func TestContainerStubs(t *testing.T) {
 		fsType := "foo4"
 		fsOptions := []string{"blah", "bleg"}
 
-		mountableStubDrive, err := stubDriveHandler.Reserve(
-			id, hostPath, vmPath, fsType, fsOptions)
-		assert.NoError(t, err, "failed to reserve stub drive")
-
-		stub := mountableStubDrive.(stubDrive)
-		assert.Equal(t, hostPath, stub.driveMount.HostPath)
-		assert.Equal(t, vmPath, stub.driveMount.VMPath)
-		assert.Equal(t, fsType, stub.driveMount.FilesystemType)
-		assert.Equal(t, append(fsOptions, "rw"), stub.driveMount.Options)
-		assert.True(t, stub.driveMount.IsWritable)
-		assert.Nil(t, stub.driveMount.RateLimiter)
-
 		mockMachine, err := firecracker.NewMachine(ctx, firecracker.Config{}, firecracker.WithClient(
 			firecracker.NewClient("/path/to/socket", nil, false, firecracker.WithOpsClient(&fctesting.MockClient{
 				PatchGuestDriveByIDFn: func(params *ops.PatchGuestDriveByIDParams) (*ops.PatchGuestDriveByIDNoContent, error) {
@@ -120,8 +108,18 @@ func TestContainerStubs(t *testing.T) {
 			expectedOptions:         append(fsOptions, "rw"),
 		}
 
-		err = mountableStubDrive.PatchAndMount(ctx, mockMachine, mockDriveMounter)
-		assert.NoError(t, err, "failed to patch and mount stub drive")
+		err = stubDriveHandler.Reserve(
+			ctx, id, hostPath, vmPath, fsType, fsOptions, mockDriveMounter, mockMachine)
+		assert.NoError(t, err, "failed to reserve stub drive")
+
+		stub, ok := stubDriveHandler.usedDrives[id]
+		assert.True(t, ok)
+		assert.Equal(t, hostPath, stub.driveMount.HostPath)
+		assert.Equal(t, vmPath, stub.driveMount.VMPath)
+		assert.Equal(t, fsType, stub.driveMount.FilesystemType)
+		assert.Equal(t, append(fsOptions, "rw"), stub.driveMount.Options)
+		assert.True(t, stub.driveMount.IsWritable)
+		assert.Nil(t, stub.driveMount.RateLimiter)
 	}
 }
 

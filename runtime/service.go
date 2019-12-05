@@ -174,7 +174,7 @@ func NewService(shimCtx context.Context, id string, remotePublisher shim.Publish
 	if vmID != "" {
 		logger = logger.WithField("vmID", vmID)
 
-		shimDir, err = vm.ShimDir(namespace, vmID)
+		shimDir, err = vm.ShimDir(cfg.ShimBaseDir, namespace, vmID)
 		if err != nil {
 			return nil, errors.Wrap(err, "invalid shim directory")
 		}

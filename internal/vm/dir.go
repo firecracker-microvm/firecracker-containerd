@@ -22,16 +22,17 @@ import (
 	"github.com/containerd/containerd/identifiers"
 	"github.com/containerd/containerd/runtime/v2/shim"
 	"github.com/containerd/fifo"
-	"github.com/firecracker-microvm/firecracker-containerd/internal"
-	"github.com/firecracker-microvm/firecracker-containerd/internal/bundle"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
+
+	"github.com/firecracker-microvm/firecracker-containerd/internal"
+	"github.com/firecracker-microvm/firecracker-containerd/internal/bundle"
 )
 
 // ShimDir holds files, sockets and FIFOs scoped to a single shim managing the
 // VM with the given VMID. It is unique per-VM and containerd namespace.
-func ShimDir(namespace, vmID string) (Dir, error) {
-	return shimDir("/var/run/firecracker-containerd/", namespace, vmID)
+func ShimDir(shimBaseDir, namespace, vmID string) (Dir, error) {
+	return shimDir(shimBaseDir, namespace, vmID)
 }
 
 func shimDir(varRunDir, namespace, vmID string) (Dir, error) {

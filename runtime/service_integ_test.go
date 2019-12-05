@@ -553,7 +553,7 @@ func TestLongUnixSocketPath_Isolated(t *testing.T) {
 
 	// double-check that the sockets are at the expected path and that their absolute
 	// length exceeds 108 bytes
-	shimDir, err := vm.ShimDir("default", vmID)
+	shimDir, err := vm.ShimDir(cfg.ShimBaseDir, "default", vmID)
 	require.NoError(t, err, "failed to get shim dir")
 
 	_, err = os.Stat(shimDir.FirecrackerSockPath())

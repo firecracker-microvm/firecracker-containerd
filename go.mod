@@ -6,7 +6,7 @@ require (
 	github.com/containerd/cgroups v0.0.0-20181105182409-82cb49fc1779 // indirect
 	github.com/containerd/console v0.0.0-20181022165439-0650fd9eeb50 // indirect
 	github.com/containerd/containerd v1.3.1
-	github.com/containerd/continuity v0.0.0-20181027224239-bea7585dbfac
+	github.com/containerd/continuity v0.0.0-20181027224239-bea7585dbfac // indirect
 	github.com/containerd/fifo v0.0.0-20190816180239-bda0ff6ed73c
 	github.com/containerd/go-runc v0.0.0-20190226155025-7d11b49dc076 // indirect
 	github.com/containerd/ttrpc v0.0.0-20190613183316-1fb3814edf44
@@ -17,7 +17,6 @@ require (
 	github.com/docker/distribution v2.7.1+incompatible // indirect
 	github.com/docker/go-events v0.0.0-20170721190031-9461782956ad // indirect
 	github.com/docker/go-metrics v0.0.0-20181218153428-b84716841b82 // indirect
-	github.com/docker/go-units v0.3.3
 	github.com/firecracker-microvm/firecracker-go-sdk v0.19.1-0.20191114205152-9e2ff62839b2
 	github.com/go-ole/go-ole v1.2.4 // indirect
 	github.com/godbus/dbus v0.0.0-20181025153459-66d97aec3384 // indirect
@@ -43,7 +42,7 @@ require (
 	github.com/syndtr/gocapability v0.0.0-20180916011248-d98352740cb2 // indirect
 	github.com/urfave/cli v1.20.0 // indirect
 	github.com/vishvananda/netlink v0.0.0-20181108222139-023a6dafdcdf
-	go.etcd.io/bbolt v1.3.1-etcd.8
+	go.etcd.io/bbolt v1.3.1-etcd.8 // indirect
 	golang.org/x/sync v0.0.0-20181108010431-42b317875d0f
 	golang.org/x/sys v0.0.0-20190616124812-15dcb6c0061f
 	google.golang.org/genproto v0.0.0-20181109154231-b5d43981345b // indirect

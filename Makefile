@@ -98,6 +98,9 @@ lint:
 	$(BINPATH)/git-validation -run DCO,short-subject -range HEAD~20..HEAD
 	$(BINPATH)/golangci-lint run
 
+tidy:
+	go mod tidy
+
 deps:
 	curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b $(BINPATH) v1.21.0
 	$(BINPATH)/golangci-lint --version
@@ -153,7 +156,7 @@ firecracker-containerd-test-image: all-in-docker firecracker runc test-cni-bins 
 		--build-arg FIRECRACKER_TARGET=$(FIRECRACKER_TARGET) \
 		--tag $(FIRECRACKER_CONTAINERD_TEST_IMAGE):${DOCKER_IMAGE_TAG} .
 
-.PHONY: all $(SUBDIRS) clean proto deps lint install image test-images firecracker-container-test-image firecracker-containerd-integ-test-image test test-in-docker $(TEST_SUBDIRS) integ-test $(INTEG_TEST_SUBDIRS)
+.PHONY: all $(SUBDIRS) clean proto deps lint install image test-images firecracker-container-test-image firecracker-containerd-integ-test-image test test-in-docker $(TEST_SUBDIRS) integ-test $(INTEG_TEST_SUBDIRS) tidy
 
 ##########################
 # Runtime config

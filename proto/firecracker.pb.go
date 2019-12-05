@@ -534,11 +534,24 @@ func (m *GetVMMetadataResponse) GetMetadata() string {
 
 type JailerConfig struct {
 	NetNS string `protobuf:"bytes,1,opt,name=NetNS,json=netNS,proto3" json:"NetNS,omitempty"`
-	// The list of CPUs to run the jailed application on. This field can only
-	// be used on numa architectures
+	// List of the physical numbers of the CPUs on which processes in that
+	// cpuset are allowed to execute.  See List Format below for a description
+	// of the format of cpus.
+	//
+	// The CPUs allowed to a cpuset may be changed by writing a new list to its
+	// cpus file.
+	// Taken from http://man7.org/linux/man-pages/man7/cpuset.7.html
+	//
+	// This is formatted as specified in the cpuset man page under "List Format"
+	// http://man7.org/linux/man-pages/man7/cpuset.7.html
 	CPUs string `protobuf:"bytes,2,opt,name=CPUs,json=cPUs,proto3" json:"CPUs,omitempty"`
-	// The list of memory nodes to run with the jailed application on. This
-	// field can only be used on numa architectures
+	// List of memory nodes on which processes in this cpuset are allowed to
+	// allocate memory.  See List Format below for a description of the format
+	// of mems.
+	// Taken from http://man7.org/linux/man-pages/man7/cpuset.7.html
+	//
+	// This is formatted as specified in the cpuset man page under "List Format"
+	// http://man7.org/linux/man-pages/man7/cpuset.7.html
 	Mems                 string   `protobuf:"bytes,3,opt,name=Mems,json=mems,proto3" json:"Mems,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`

@@ -86,7 +86,9 @@ curl -fsSL -o hello-vmlinux.bin https://s3.amazonaws.com/spec.ccfc.min/img/hello
 # separate storage from the default containerd binary
 sudo mkdir -p /etc/firecracker-containerd
 sudo mkdir -p /var/lib/firecracker-containerd/containerd
-sudo mkdir -p /run/firecracker-containerd
+# Create the shim base directory for which firecracker-containerd will run the
+# shim from
+sudo mkdir -p /var/lib/firecracker-containerd
 sudo tee /etc/firecracker-containerd/config.toml <<EOF
 disabled_plugins = ["cri"]
 root = "/var/lib/firecracker-containerd/containerd"
@@ -96,7 +98,7 @@ state = "/run/firecracker-containerd"
 [proxy_plugins]
   [proxy_plugins.firecracker-naive]
     type = "snapshot"
-    address = "/var/run/firecracker-containerd/naive-snapshotter.sock"
+    address = "/var/lib/firecracker-containerd/naive-snapshotter.sock"
 
 [debug]
   level = "debug"
@@ -134,9 +136,9 @@ EOF
    foreground
 
 ```bash
-sudo mkdir -p /var/run/firecracker-containerd /var/lib/firecracker-containerd/naive
+sudo mkdir -p /var/lib/firecracker-containerd /var/lib/firecracker-containerd/naive
 sudo naive_snapshotter \
-     -address /var/run/firecracker-containerd/naive-snapshotter.sock \
+     -address /var/lib/firecracker-containerd/naive-snapshotter.sock \
      -path /var/lib/firecracker-containerd/naive \
      -debug
 ```

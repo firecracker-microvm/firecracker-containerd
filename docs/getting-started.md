@@ -241,6 +241,8 @@ configuration file has the following fields:
   a VM with if no list of network interfaces is provided with a CreateVM call. Defaults
   to an empty list. The structure of the items in the list is the same as the Go API
   FirecrackerNetworkInterface defined [in protobuf here](../proto/types.proto).
+* `shim_base_dir` - (optional) Set the path to which Firecracker will run the
+  shim from. Defaults to /var/lib/firecracker-containerd/shim-base
 
 <details>
 <summary>A reasonable example configuration</summary>
@@ -260,6 +262,12 @@ configuration file has the following fields:
 </details>
 
 ## Usage
+
+Ensure that /var/lib/firecracker-containerd exists as the default shim base
+directory used is /var/lib/firecracker-containerd/shim-base
+```bash
+mkdir -p /var/lib/firecracker-containerd
+```
 
 Start containerd
 

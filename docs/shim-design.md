@@ -140,7 +140,7 @@ How many Host Shims will we run? One per-VM? One for all VMs? How do we map a gi
 
 In this option, a single Host Shim process will handle all microVMs. Similar to our snapshotter implementations, it can just be started as a daemon alongside containerd.
 
-Every “shim start” routine will just return the pid/address of the single Host Shim process, which will be stored at a known location `/var/run/firecracker-containerd/{shim.pid, shim.sock}`.
+Every “shim start” routine will just return the pid/address of the single Host Shim process, which will be stored at a known location `/var/lib/firecracker-containerd/shim-base/{shim.pid, shim.sock}`.
 
 * **Pros**
     * **Lifecycle Complexity** - Can just start Host Shim when the EC2 host starts; do not have to spin up/down as workloads come in/out
@@ -154,7 +154,7 @@ Every “shim start” routine will just return the pid/address of the single Ho
 
 In this option, each VM will have a single Host Shim process dedicated to managing all the containers within it; there is a 1-to-1 mapping between `vm_id` and Host Shim process.
 
-Every “shim start” routine will return the pid/address of a Host Shim process for the given `vm_id`, which will be stored at a known location like `/var/run/firecracker-containerd/<vm_id>/{shim.pid, shim.sock}`. Race conditions related to creation of `<vm_id>/shim.pid` can be dealt with by using [open(2) with the O_EXCL flag.](http://man7.org/linux/man-pages/man2/open.2.html)
+Every “shim start” routine will return the pid/address of a Host Shim process for the given `vm_id`, which will be stored at a known location like `/var/lib/firecracker-containerd/shim-base/<vm_id>/{shim.pid, shim.sock}`. Race conditions related to creation of `<vm_id>/shim.pid` can be dealt with by using [open(2) with the O_EXCL flag.](http://man7.org/linux/man-pages/man2/open.2.html)
 
 * **Pros**
     * **Security/Resilience** - A single runtime shim manages a single customer's workload; if one runtime shim crashes (for whatever reason), others are unaffected
@@ -169,7 +169,7 @@ Every “shim start” routine will return the pid/address of a Host Shim proces
 
 In this option each container will have a single Host Shim process dedicated to managing it; there is a 1-to-1 mapping between `container_id` and Host Shim process.
 
-Every “shim start” routine will just continue running, returning to containerd a new shim.pid/shim.sock, which will be stored at a known location like `/var/run/firecracker-containerd/<container_id>/{shim.pid, shim.sock}`.
+Every “shim start” routine will just continue running, returning to containerd a new shim.pid/shim.sock, which will be stored at a known location like `/var/lib/firecracker-containerd/shim-base/<container_id>/{shim.pid, shim.sock}`.
 
 * **Pros**
     * **Security/Resilience** - A single Host Shim manages not just a single customer's workload but also a single container within that workload; if one Host Shim crashes (for whatever reason), other customers and other containers in the VM are unaffected
@@ -246,7 +246,7 @@ The proposed solution is to
 ![firecracker-containerd shim flow diagram](img/firecracker-containerd-shim-flow.png)
 
 1. The orchestrator sends a CreateVM request with a given `vm_id` to our containerd GRPC plugin
-2. Our plugin creates the VM, placing the firecracker socket at path `/var/run/firecracker-containerd/<vm_id>/firecracker.sock`
+2. Our plugin creates the VM, placing the firecracker socket at path `/var/lib/firecracker-containerd/shim-base/<vm_id>/firecracker.sock`
     1. The single Guest Shim is started with the VM, it either listens on a vsock addr or begins trying to connect to the host (depending on what our final vsock implementation ends up looking like; out of scope for this doc)
 3. The plugin returns the CreateVM response back to the orchestrator
 4. The orchestrator creates the Container definition, including both the `container_id` and `vm_id` in the request

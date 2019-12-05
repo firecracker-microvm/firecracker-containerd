@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/firecracker-microvm/firecracker-containerd/config"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 )
 
@@ -35,13 +36,13 @@ const (
 func TestMachineConfigurationFromProto(t *testing.T) {
 	testcases := []struct {
 		name                  string
-		config                *Config
+		config                *config.Config
 		proto                 *proto.FirecrackerMachineConfiguration
 		expectedMachineConfig models.MachineConfiguration
 	}{
 		{
 			name:   "ProtoOnly",
-			config: &Config{},
+			config: &config.Config{},
 			proto: &proto.FirecrackerMachineConfiguration{
 				CPUTemplate: string(models.CPUTemplateC3),
 				VcpuCount:   vcpuCount,
@@ -57,7 +58,7 @@ func TestMachineConfigurationFromProto(t *testing.T) {
 		},
 		{
 			name: "ConfigOnly",
-			config: &Config{
+			config: &config.Config{
 				CPUTemplate: "C3",
 				CPUCount:    vcpuCount,
 			},
@@ -71,7 +72,7 @@ func TestMachineConfigurationFromProto(t *testing.T) {
 		},
 		{
 			name: "NilProto",
-			config: &Config{
+			config: &config.Config{
 				CPUTemplate: "C3",
 				CPUCount:    vcpuCount,
 			},
@@ -84,7 +85,7 @@ func TestMachineConfigurationFromProto(t *testing.T) {
 		},
 		{
 			name: "Overrides",
-			config: &Config{
+			config: &config.Config{
 				CPUTemplate: "T2",
 				CPUCount:    vcpuCount + 1,
 			},

@@ -31,6 +31,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 
+	"github.com/firecracker-microvm/firecracker-containerd/config"
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
 )
@@ -114,7 +115,7 @@ func (j *runcJailer) JailPath() vm.Dir {
 // BuildJailedMachine will return the needed options for a jailed Firecracker
 // instance. In addition, some configuration values will be overwritten to the
 // jailed values, like SocketPath in the machineConfig.
-func (j *runcJailer) BuildJailedMachine(cfg *Config, machineConfig *firecracker.Config, vmID string) ([]firecracker.Opt, error) {
+func (j *runcJailer) BuildJailedMachine(cfg *config.Config, machineConfig *firecracker.Config, vmID string) ([]firecracker.Opt, error) {
 	handler := j.BuildJailedRootHandler(cfg, machineConfig, vmID)
 	fifoHandler := j.BuildLinkFifoHandler()
 	// Build a new client since BuildJailedRootHandler modifies the socket path value.
@@ -146,7 +147,7 @@ func (j *runcJailer) BuildJailedMachine(cfg *Config, machineConfig *firecracker.
 
 // BuildJailedRootHandler will populate the jail with the necessary files, which may be
 // device nodes, hard links, and/or bind-mount targets
-func (j *runcJailer) BuildJailedRootHandler(cfg *Config, machineConfig *firecracker.Config, vmID string) firecracker.Handler {
+func (j *runcJailer) BuildJailedRootHandler(cfg *config.Config, machineConfig *firecracker.Config, vmID string) firecracker.Handler {
 	ociBundlePath := j.OCIBundlePath()
 	rootPath := j.RootPath()
 	machineConfig.SocketPath = filepath.Join(rootPath, "api.socket")
@@ -379,7 +380,7 @@ func (j *runcJailer) jailerCommand(containerName string, isDebug bool) *exec.Cmd
 }
 
 // overwriteConfig will set the proper default values if a field had not been set.
-func (j *runcJailer) overwriteConfig(cfg *Config, machineConfig *firecracker.Config, socketPath, configPath string) error {
+func (j *runcJailer) overwriteConfig(cfg *config.Config, machineConfig *firecracker.Config, socketPath, configPath string) error {
 	spec := j.configSpec
 	if spec.Process.User.UID != 0 ||
 		spec.Process.User.GID != 0 {
@@ -435,7 +436,7 @@ func (j runcJailer) CgroupPath() string {
 
 // setDefaultConfigValues will process the spec file provided and allow any
 // empty/zero values to be replaced with default values.
-func (j *runcJailer) setDefaultConfigValues(cfg *Config, socketPath string, spec specs.Spec) specs.Spec {
+func (j *runcJailer) setDefaultConfigValues(cfg *config.Config, socketPath string, spec specs.Spec) specs.Spec {
 	if spec.Process == nil {
 		spec.Process = &specs.Process{}
 	}

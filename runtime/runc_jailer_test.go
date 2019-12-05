@@ -27,6 +27,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/firecracker-microvm/firecracker-containerd/config"
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 )
 
@@ -53,17 +54,17 @@ func TestBuildJailedRootHandler_Isolated(t *testing.T) {
 	defer firecrackerFd.Close()
 
 	l := logrus.NewEntry(logrus.New())
-	config := runcJailerConfig{
+	runcConfig := runcJailerConfig{
 		OCIBundlePath: dir,
 		RuncBinPath:   "bin-path",
 		UID:           123,
 		GID:           456,
 	}
 	vmID := "foo"
-	jailer, err := newRuncJailer(context.Background(), l, vmID, config)
+	jailer, err := newRuncJailer(context.Background(), l, vmID, runcConfig)
 	require.NoError(t, err, "failed to create runc jailer")
 
-	cfg := Config{
+	cfg := config.Config{
 		FirecrackerBinaryPath: firecrackerPath,
 		KernelImagePath:       kernelImagePath,
 		RootDrive:             rootDrivePath,

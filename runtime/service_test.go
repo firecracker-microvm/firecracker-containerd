@@ -21,13 +21,15 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
-	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	"github.com/firecracker-microvm/firecracker-go-sdk"
 	models "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/firecracker-microvm/firecracker-containerd/config"
+	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
+	"github.com/firecracker-microvm/firecracker-containerd/proto"
 )
 
 const (
@@ -40,14 +42,14 @@ func TestBuildVMConfiguration(t *testing.T) {
 	testcases := []struct {
 		name                   string
 		request                *proto.CreateVMRequest
-		config                 *Config
+		config                 *config.Config
 		expectedCfg            *firecracker.Config
 		expectedStubDriveCount int
 	}{
 		{
 			name:    "Only Config",
 			request: &proto.CreateVMRequest{},
-			config: &Config{
+			config: &config.Config{
 				KernelArgs:      "KERNEL ARGS",
 				KernelImagePath: "KERNEL IMAGE",
 				RootDrive:       "ROOT DRIVE",
@@ -88,7 +90,7 @@ func TestBuildVMConfiguration(t *testing.T) {
 					VcpuCount:   2,
 				},
 			},
-			config: &Config{},
+			config: &config.Config{},
 			expectedCfg: &firecracker.Config{
 				KernelArgs:      "REQUEST KERNEL ARGS",
 				KernelImagePath: "REQUEST KERNEL IMAGE",
@@ -123,7 +125,7 @@ func TestBuildVMConfiguration(t *testing.T) {
 					VcpuCount:   3,
 				},
 			},
-			config: &Config{
+			config: &config.Config{
 				KernelArgs:      "KERNEL ARGS",
 				KernelImagePath: "KERNEL IMAGE",
 				CPUTemplate:     "C3",
@@ -159,7 +161,7 @@ func TestBuildVMConfiguration(t *testing.T) {
 				},
 				MachineCfg: &proto.FirecrackerMachineConfiguration{},
 			},
-			config: &Config{
+			config: &config.Config{
 				KernelArgs:      "KERNEL ARGS",
 				KernelImagePath: "KERNEL IMAGE",
 				CPUTemplate:     "C3",
@@ -188,7 +190,7 @@ func TestBuildVMConfiguration(t *testing.T) {
 		{
 			name:    "Container Count affects StubDriveCount",
 			request: &proto.CreateVMRequest{ContainerCount: 2},
-			config: &Config{
+			config: &config.Config{
 				KernelArgs:      "KERNEL ARGS",
 				KernelImagePath: "KERNEL IMAGE",
 				RootDrive:       "ROOT DRIVE",
@@ -274,14 +276,14 @@ func TestDebugConfig(t *testing.T) {
 			name: "empty",
 			service: &service{
 				logger: logrus.NewEntry(logrus.New()),
-				config: &Config{},
+				config: &config.Config{},
 			},
 		},
 		{
 			name: "LogLevel set",
 			service: &service{
 				logger: logrus.NewEntry(logrus.New()),
-				config: &Config{
+				config: &config.Config{
 					LogLevel: "foo",
 				},
 			},
@@ -290,7 +292,7 @@ func TestDebugConfig(t *testing.T) {
 			name: "Debug set",
 			service: &service{
 				logger: logrus.NewEntry(logrus.New()),
-				config: &Config{
+				config: &config.Config{
 					Debug: true,
 				},
 			},
@@ -299,7 +301,7 @@ func TestDebugConfig(t *testing.T) {
 			name: "Both set",
 			service: &service{
 				logger: logrus.NewEntry(logrus.New()),
-				config: &Config{
+				config: &config.Config{
 					LogLevel: "foo",
 					Debug:    true,
 				},

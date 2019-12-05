@@ -33,6 +33,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/firecracker-microvm/firecracker-containerd/config"
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	fccontrol "github.com/firecracker-microvm/firecracker-containerd/proto/service/fccontrol/ttrpc"
@@ -360,8 +361,8 @@ func writeCNIConf(path, chainedPluginName, networkName, nameserver string) error
 }`, networkName, nameserver, chainedPluginName)), 0644)
 }
 
-func withDefaultNetwork() func(c *Config) {
-	return func(c *Config) {
+func withDefaultNetwork() func(c *config.Config) {
+	return func(c *config.Config) {
 		c.DefaultNetworkInterfaces = []proto.FirecrackerNetworkInterface{
 			{
 				CNIConfig: &proto.CNIConfiguration{

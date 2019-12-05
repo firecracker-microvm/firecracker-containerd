@@ -18,8 +18,10 @@ import (
 	"os"
 
 	"github.com/firecracker-microvm/firecracker-go-sdk"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
+	"github.com/firecracker-microvm/firecracker-containerd/config"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 )
@@ -47,7 +49,7 @@ type jailer interface {
 	// BuildJailedMachine will modify the firecracker.Config and provide
 	// firecracker.Opt to be passed into firecracker.NewMachine which will allow
 	// for the VM to be jailed.
-	BuildJailedMachine(cfg *Config, machineCfg *firecracker.Config, vmID string) ([]firecracker.Opt, error)
+	BuildJailedMachine(cfg *config.Config, machineCfg *firecracker.Config, vmID string) ([]firecracker.Opt, error)
 	// ExposeFileToJail will expose the given file to the jailed filesystem, including
 	// regular files and block devices. An error is returned if provided a path to a file
 	// with type that is not supported.
@@ -79,6 +81,10 @@ func newJailer(
 	if request == nil || request.JailerConfig == nil {
 		l := logger.WithField("jailer", "noop")
 		return newNoopJailer(ctx, l, service.shimDir), nil
+	}
+
+	if err := os.MkdirAll(ociBundlePath, 0700); err != nil {
+		return nil, errors.Wrapf(err, "failed to create oci bundle path: %s", ociBundlePath)
 	}
 
 	l := logger.WithField("jailer", "runc")

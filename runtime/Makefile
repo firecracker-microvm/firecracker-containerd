@@ -13,6 +13,7 @@
 
 # Set this to pass additional commandline flags to the go compiler, e.g. "make test EXTRAGOARGS=-v"
 EXTRAGOARGS?=
+NUMBER_OF_VMS?=
 
 SOURCES:=$(shell find . -name '*.go')
 GOMOD := $(shell go env GOMOD)
@@ -63,6 +64,7 @@ integ-test-%: logs
 		--env FICD_DM_POOL=$(FICD_DM_POOL) \
 		--env GOPROXY=direct \
 		--env GOSUMDB=off \
+		--env NUMBER_OF_VMS=$(NUMBER_OF_VMS) \
 		--workdir="/src/runtime" \
 		--init \
 		$(FIRECRACKER_CONTAINERD_TEST_IMAGE):$(DOCKER_IMAGE_TAG) \

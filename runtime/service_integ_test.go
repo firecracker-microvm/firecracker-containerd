@@ -66,6 +66,9 @@ const (
 	defaultVMRootfsPath = "/var/lib/firecracker-containerd/runtime/default-rootfs.img"
 	defaultVMNetDevName = "eth0"
 	varRunDir           = "/run/firecracker-containerd"
+
+	numberOfVmsEnvName = "NUMBER_OF_VMS"
+	defaultNumberOfVms = 5
 )
 
 // Images are presumed by the isolated tests to have already been pulled
@@ -220,24 +223,20 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 	netns, err := ns.GetCurrentNS()
 	require.NoError(t, err, "failed to get a namespace")
 
+	// numberOfVmsEnvName = NUMBER_OF_VMS ENV and is configurable from buildkite
+	numberOfVms, err := strconv.Atoi(os.Getenv(numberOfVmsEnvName))
+	require.NoError(t, err, "failed to get NUMBER_OF_VMS env")
+	if numberOfVms == 0 {
+		numberOfVms = defaultNumberOfVms
+	}
+	t.Logf("TestMultipleVMs_Isolated: will run %d vm's", numberOfVms)
+
 	cases := []struct {
 		MaxContainers int32
 		JailerConfig  *proto.JailerConfig
 	}{
 		{
 			MaxContainers: 5,
-		},
-		{
-			MaxContainers: 5,
-		},
-		{
-			MaxContainers: 5,
-		},
-		{
-			MaxContainers: 3,
-			JailerConfig: &proto.JailerConfig{
-				NetNS: netns.Path(),
-			},
 		},
 		{
 			MaxContainers: 3,
@@ -265,7 +264,9 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 	// container ends up in the right VM by assigning each VM a network device with a unique mac address and having each container
 	// print the mac address it sees inside its VM.
 	var vmWg sync.WaitGroup
-	for vmID, c := range cases {
+	for i := 0; i < numberOfVms; i++ {
+		caseTypeNumber := i % len(cases)
+		c := cases[caseTypeNumber]
 		vmWg.Add(1)
 		go func(vmID int, containerCount int32, jailerConfig *proto.JailerConfig) {
 			defer vmWg.Done()
@@ -338,7 +339,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 
 			_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: strconv.Itoa(vmID), TimeoutSeconds: 5})
 			require.NoError(t, err, "failed to stop VM %d", vmID)
-		}(vmID, c.MaxContainers, c.JailerConfig)
+		}(i, c.MaxContainers, c.JailerConfig)
 	}
 
 	vmWg.Wait()

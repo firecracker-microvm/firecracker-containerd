@@ -80,6 +80,7 @@ steps:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
     env:
       DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
+      NUMBER_OF_VMS: 100
       EXTRAGOARGS: "-v -count=1 -race"
     artifact_paths:
       - "runtime/logs/*"

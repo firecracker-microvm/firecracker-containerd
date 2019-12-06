@@ -43,6 +43,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/firecracker-microvm/firecracker-containerd/config"
 	_ "github.com/firecracker-microvm/firecracker-containerd/firecracker-control"
 	fcClient "github.com/firecracker-microvm/firecracker-containerd/firecracker-control/client"
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
@@ -65,10 +66,8 @@ const (
 
 	defaultVMRootfsPath = "/var/lib/firecracker-containerd/runtime/default-rootfs.img"
 	defaultVMNetDevName = "eth0"
-	varRunDir           = "/run/firecracker-containerd"
-
-	numberOfVmsEnvName = "NUMBER_OF_VMS"
-	defaultNumberOfVms = 5
+	numberOfVmsEnvName  = "NUMBER_OF_VMS"
+	defaultNumberOfVms  = 5
 )
 
 // Images are presumed by the isolated tests to have already been pulled
@@ -172,10 +171,12 @@ func TestShimExitsUponContainerDelete_Isolated(t *testing.T) {
 		err = internal.WaitForPidToExit(testCtx, time.Second, shimProcess.Pid)
 		require.NoError(t, err, "failed waiting for shim process \"%s\" to exit", shimProcessName)
 
-		namespaceVarRunDir := filepath.Join(varRunDir, namespaces.Default)
-		varRunFCContents, err := ioutil.ReadDir(namespaceVarRunDir)
-		require.NoError(t, err, `failed to list directory "%s"`, namespaceVarRunDir)
-		require.Len(t, varRunFCContents, 0, "expect %s to be cleared after shims shutdown", namespaceVarRunDir)
+		cfg, err := config.LoadConfig("")
+		require.NoError(t, err, "failed to load config")
+		namespaceShimBaseDir := filepath.Join(cfg.ShimBaseDir, namespaces.Default)
+		varRunFCContents, err := ioutil.ReadDir(namespaceShimBaseDir)
+		require.NoError(t, err, `failed to list directory "%s"`, namespaceShimBaseDir)
+		require.Len(t, varRunFCContents, 0, "expect %s to be cleared after shims shutdown", namespaceShimBaseDir)
 	case err = <-exitEventErrCh:
 		require.Fail(t, "unexpected error", "unexpectedly received on task exit error channel: %s", err.Error())
 	case <-testCtx.Done():
@@ -311,7 +312,15 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 				containerWg.Add(1)
 				go func(containerID int) {
 					defer containerWg.Done()
-					testMultipleExecs(ctx, t, vmID, containerID, client, image, jailerConfig, resp.CgroupPath)
+					testMultipleExecs(
+						ctx,
+						t,
+						vmID,
+						containerID,
+						client, image,
+						jailerConfig,
+						resp.CgroupPath,
+					)
 				}(containerID)
 			}
 
@@ -323,9 +332,12 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 			vmInfoResp, err := fcClient.GetVMInfo(ctx, &proto.GetVMInfoRequest{VMID: strconv.Itoa(vmID)})
 			require.NoError(t, err, "failed to get VM Info for VM %d", vmID)
 			require.Equal(t, vmInfoResp.VMID, strconv.Itoa(vmID))
-			require.Equal(t, vmInfoResp.SocketPath, filepath.Join(varRunDir, defaultNamespace, strconv.Itoa(vmID), "firecracker.sock"))
-			require.Equal(t, vmInfoResp.LogFifoPath, filepath.Join(varRunDir, defaultNamespace, strconv.Itoa(vmID), "fc-logs.fifo"))
-			require.Equal(t, vmInfoResp.MetricsFifoPath, filepath.Join(varRunDir, defaultNamespace, strconv.Itoa(vmID), "fc-metrics.fifo"))
+
+			cfg, err := config.LoadConfig("")
+			require.NoError(t, err, "failed to load config")
+			require.Equal(t, vmInfoResp.SocketPath, filepath.Join(cfg.ShimBaseDir, defaultNamespace, strconv.Itoa(vmID), "firecracker.sock"))
+			require.Equal(t, vmInfoResp.LogFifoPath, filepath.Join(cfg.ShimBaseDir, defaultNamespace, strconv.Itoa(vmID), "fc-logs.fifo"))
+			require.Equal(t, vmInfoResp.MetricsFifoPath, filepath.Join(cfg.ShimBaseDir, defaultNamespace, strconv.Itoa(vmID), "fc-metrics.fifo"))
 
 			// just verify that updating the metadata doesn't return an error, a separate test case is needed
 			// to very the MMDS update propagates to the container correctly
@@ -345,7 +357,16 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 	vmWg.Wait()
 }
 
-func testMultipleExecs(ctx context.Context, t *testing.T, vmID int, containerID int, client *containerd.Client, image containerd.Image, jailerConfig *proto.JailerConfig, cgroupPath string) {
+func testMultipleExecs(
+	ctx context.Context,
+	t *testing.T,
+	vmID int,
+	containerID int,
+	client *containerd.Client,
+	image containerd.Image,
+	jailerConfig *proto.JailerConfig,
+	cgroupPath string,
+) {
 	vmIDStr := strconv.Itoa(vmID)
 	testTimeout := 600 * time.Second
 
@@ -406,12 +427,9 @@ func testMultipleExecs(ctx context.Context, t *testing.T, vmID int, containerID 
 	close(execStdouts)
 
 	if jailerConfig != nil {
-		shimDir, err := vm.ShimDir("default", strconv.Itoa(vmID))
-		require.NoError(t, err, "failed to get shim dir")
-
 		jailer := &runcJailer{
 			Config: runcJailerConfig{
-				OCIBundlePath: string(shimDir),
+				OCIBundlePath: filepath.Join(shimBaseDir, vmIDStr),
 			},
 			vmID: vmIDStr,
 		}
@@ -509,6 +527,9 @@ func getMountNamespace(ctx context.Context, t *testing.T, client *containerd.Cli
 func TestLongUnixSocketPath_Isolated(t *testing.T) {
 	prepareIntegTest(t)
 
+	cfg, err := config.LoadConfig("")
+	require.NoError(t, err, "failed to load config")
+
 	// Verify that if the absolute path of the Firecracker unix sockets are longer
 	// than the max length enforced by the kernel (UNIX_PATH_MAX, usually 108), we
 	// don't fail (due to the internal implementation using relative paths).
@@ -532,7 +553,7 @@ func TestLongUnixSocketPath_Isolated(t *testing.T) {
 
 	// double-check that the sockets are at the expected path and that their absolute
 	// length exceeds 108 bytes
-	shimDir, err := vm.ShimDir("default", vmID)
+	shimDir, err := vm.ShimDir(cfg.ShimBaseDir, "default", vmID)
 	require.NoError(t, err, "failed to get shim dir")
 
 	_, err = os.Stat(shimDir.FirecrackerSockPath())
@@ -745,8 +766,11 @@ func testCreateContainerWithSameName(t *testing.T, vmID string) {
 	_, err = os.Stat(containerPath)
 	require.True(t, os.IsNotExist(err))
 
+	cfg, err := config.LoadConfig("")
+	require.NoError(t, err, "failed to load config")
+
 	if len(vmID) != 0 {
-		shimPath := fmt.Sprintf("%s/default/%s/%s", varRunDir, vmID, containerName)
+		shimPath := fmt.Sprintf("%s/default/%s/%s", cfg.ShimBaseDir, vmID, containerName)
 		_, err = os.Stat(shimPath)
 		require.True(t, os.IsNotExist(err))
 	}
@@ -768,7 +792,7 @@ func testCreateContainerWithSameName(t *testing.T, vmID string) {
 	require.True(t, os.IsNotExist(err))
 
 	if len(vmID) != 0 {
-		shimPath := fmt.Sprintf("%s/default/%s/%s", varRunDir, vmID, containerName)
+		shimPath := fmt.Sprintf("%s/default/%s/%s", cfg.ShimBaseDir, vmID, containerName)
 		_, err = os.Stat(shimPath)
 		require.True(t, os.IsNotExist(err))
 	}
@@ -832,7 +856,7 @@ func TestStubDriveReserveAndReleaseByContainers_Isolated(t *testing.T) {
 }
 
 func TestDriveMount_Isolated(t *testing.T) {
-	prepareIntegTest(t, func(cfg *Config) {
+	prepareIntegTest(t, func(cfg *config.Config) {
 		cfg.JailerConfig.RuncBinaryPath = "/usr/local/bin/runc"
 	})
 

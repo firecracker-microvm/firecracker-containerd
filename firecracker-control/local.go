@@ -35,6 +35,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/firecracker-microvm/firecracker-containerd/config"
 	fcclient "github.com/firecracker-microvm/firecracker-containerd/firecracker-control/client"
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	fcShim "github.com/firecracker-microvm/firecracker-containerd/internal/shim"
@@ -62,6 +63,7 @@ func init() {
 type local struct {
 	containerdAddress string
 	logger            *logrus.Entry
+	config            *config.Config
 }
 
 func newLocal(ic *plugin.InitContext) (*local, error) {
@@ -69,9 +71,15 @@ func newLocal(ic *plugin.InitContext) (*local, error) {
 		return nil, errors.Wrapf(err, "failed to create root directory: %s", ic.Root)
 	}
 
+	cfg, err := config.LoadConfig("")
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to load config")
+	}
+
 	return &local{
 		containerdAddress: ic.Address,
 		logger:            log.G(ic.Context),
+		config:            cfg,
 	}, nil
 }
 
@@ -117,8 +125,12 @@ func (s *local) CreateVM(requestCtx context.Context, req *proto.CreateVMRequest)
 
 	// If we're here, there is no pre-existing shim for this VMID, so we spawn a new one
 	defer shimSocket.Close()
+	if err := os.Mkdir(s.config.ShimBaseDir, 0700); err != nil && !os.IsExist(err) {
+		s.logger.WithError(err).Error()
+		return nil, errors.Wrapf(err, "failed to make shim base directory: %s", s.config.ShimBaseDir)
+	}
 
-	shimDir, err := vm.ShimDir(ns, id)
+	shimDir, err := vm.ShimDir(s.config.ShimBaseDir, ns, id)
 	if err != nil {
 		err = errors.Wrapf(err, "failed to build shim path")
 		s.logger.WithError(err).Error()
@@ -310,7 +322,7 @@ func (s *local) newShim(ns, vmID, containerdAddress string, shimSocket *net.Unix
 
 	cmd := exec.Command(internal.ShimBinaryName, args...)
 
-	shimDir, err := vm.ShimDir(ns, vmID)
+	shimDir, err := vm.ShimDir(s.config.ShimBaseDir, ns, vmID)
 	if err != nil {
 		err = errors.Wrap(err, "failed to create shim dir")
 		logger.WithError(err).Error()

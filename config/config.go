@@ -11,7 +11,7 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package main
+package config
 
 import (
 	"encoding/json"
@@ -33,7 +33,7 @@ const (
 	defaultRootfsPath  = defaultFilesPath + "default-rootfs.img"
 	defaultCPUCount    = 1
 	defaultCPUTemplate = models.CPUTemplateT2
-	defaultMemSizeMb   = 128
+	defaultShimBaseDir = "/var/lib/firecracker-containerd/shim-base"
 )
 
 // Config represents runtime configuration parameters
@@ -51,7 +51,11 @@ type Config struct {
 	// the VM will default to using the network interfaces as specified here. This is especially
 	// useful when a CNI-based network interface is provided in DefaultNetworkInterfaces.
 	DefaultNetworkInterfaces []proto.FirecrackerNetworkInterface `json:"default_network_interfaces"`
-	JailerConfig             JailerConfig                        `json:"jailer"`
+	// ShimBaseDir is the base directory which shim dirs will be created for each
+	// VM. In addition to this if jailing is enabled the jail will also use this
+	// directory.
+	ShimBaseDir  string       `json:"shim_base_dir"`
+	JailerConfig JailerConfig `json:"jailer"`
 }
 
 // JailerConfig houses a set of configurable values for jailing
@@ -81,6 +85,7 @@ func LoadConfig(path string) (*Config, error) {
 		RootDrive:       defaultRootfsPath,
 		CPUCount:        defaultCPUCount,
 		CPUTemplate:     string(defaultCPUTemplate),
+		ShimBaseDir:     defaultShimBaseDir,
 	}
 
 	if err := json.Unmarshal(data, cfg); err != nil {

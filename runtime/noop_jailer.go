@@ -16,9 +16,11 @@ package main
 import (
 	"context"
 
-	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
 	"github.com/firecracker-microvm/firecracker-go-sdk"
 	"github.com/sirupsen/logrus"
+
+	"github.com/firecracker-microvm/firecracker-containerd/config"
+	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
 )
 
 // noopJailer is a jailer that returns only successful responses and performs
@@ -37,7 +39,7 @@ func newNoopJailer(ctx context.Context, logger *logrus.Entry, shimDir vm.Dir) no
 	}
 }
 
-func (j noopJailer) BuildJailedMachine(cfg *Config, machineConfig *firecracker.Config, vmID string) ([]firecracker.Opt, error) {
+func (j noopJailer) BuildJailedMachine(cfg *config.Config, machineConfig *firecracker.Config, vmID string) ([]firecracker.Opt, error) {
 	if len(cfg.FirecrackerBinaryPath) == 0 {
 		return []firecracker.Opt{}, nil
 	}

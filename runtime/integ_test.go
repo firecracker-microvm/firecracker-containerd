@@ -22,13 +22,16 @@ import (
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/cio"
-	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/pkg/errors"
+
+	"github.com/firecracker-microvm/firecracker-containerd/config"
+	"github.com/firecracker-microvm/firecracker-containerd/internal"
 )
 
 const runtimeConfigPath = "/etc/containerd/firecracker-runtime.json"
+const shimBaseDir = "/srv/firecracker_containerd_tests"
 
-var defaultRuntimeConfig = Config{
+var defaultRuntimeConfig = config.Config{
 	FirecrackerBinaryPath: "/usr/local/bin/firecracker",
 	KernelImagePath:       "/var/lib/firecracker-containerd/runtime/default-vmlinux.bin",
 	KernelArgs:            "ro console=ttyS0 noapic reboot=k panic=1 pci=off nomodules systemd.journald.forward_to_console systemd.log_color=false systemd.unit=firecracker.target init=/sbin/overlay-init",
@@ -37,6 +40,7 @@ var defaultRuntimeConfig = Config{
 	CPUTemplate:           "T2",
 	LogLevel:              "Debug",
 	Debug:                 true,
+	ShimBaseDir:           shimBaseDir,
 }
 
 func defaultSnapshotterName() string {
@@ -48,7 +52,7 @@ func defaultSnapshotterName() string {
 	return name
 }
 
-func prepareIntegTest(t *testing.T, options ...func(*Config)) {
+func prepareIntegTest(t *testing.T, options ...func(*config.Config)) {
 	t.Helper()
 
 	internal.RequiresIsolation(t)
@@ -59,13 +63,13 @@ func prepareIntegTest(t *testing.T, options ...func(*Config)) {
 	}
 }
 
-func writeRuntimeConfig(options ...func(*Config)) error {
+func writeRuntimeConfig(options ...func(*config.Config)) error {
 	config := defaultRuntimeConfig
 	for _, option := range options {
 		option(&config)
 	}
 
-	file, err := os.Create(runtimeConfigPath)
+	file, err := os.OpenFile(runtimeConfigPath, os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
 		return err
 	}
@@ -84,8 +88,8 @@ func writeRuntimeConfig(options ...func(*Config)) error {
 	return nil
 }
 
-func withJailer() func(*Config) {
-	return func(c *Config) {
+func withJailer() func(*config.Config) {
+	return func(c *config.Config) {
 		c.JailerConfig.RuncBinaryPath = "/usr/local/bin/runc"
 	}
 }

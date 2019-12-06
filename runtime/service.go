@@ -20,6 +20,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -53,6 +54,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/firecracker-microvm/firecracker-containerd/config"
 	"github.com/firecracker-microvm/firecracker-containerd/eventbridge"
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/bundle"
@@ -117,7 +119,7 @@ type service struct {
 	vmID    string
 	shimDir vm.Dir
 
-	config *Config
+	config *config.Config
 
 	// vmReady is closed once CreateVM has been successfully called
 	vmReady                  chan struct{}
@@ -147,18 +149,18 @@ func shimOpts(shimCtx context.Context) (*shim.Opts, error) {
 
 // NewService creates new runtime shim.
 func NewService(shimCtx context.Context, id string, remotePublisher shim.Publisher, shimCancel func()) (shim.Shim, error) {
-	config, err := LoadConfig("")
+	cfg, err := config.LoadConfig("")
 	if err != nil {
 		return nil, err
 	}
 
-	if !config.Debug {
+	if !cfg.Debug {
 		opts, err := shimOpts(shimCtx)
 		if err != nil {
 			return nil, err
 		}
 
-		config.Debug = opts.Debug
+		cfg.Debug = opts.Debug
 	}
 
 	namespace, ok := namespaces.Namespace(shimCtx)
@@ -172,13 +174,13 @@ func NewService(shimCtx context.Context, id string, remotePublisher shim.Publish
 	if vmID != "" {
 		logger = logger.WithField("vmID", vmID)
 
-		shimDir, err = vm.ShimDir(namespace, vmID)
+		shimDir, err = vm.ShimDir(cfg.ShimBaseDir, namespace, vmID)
 		if err != nil {
 			return nil, errors.Wrap(err, "invalid shim directory")
 		}
 	}
 
-	if config.Debug {
+	if cfg.Debug {
 		logrus.SetLevel(logrus.DebugLevel)
 		logger.Logger.SetLevel(logrus.DebugLevel)
 	}
@@ -195,7 +197,7 @@ func NewService(shimCtx context.Context, id string, remotePublisher shim.Publish
 		vmID:    vmID,
 		shimDir: shimDir,
 
-		config: config,
+		config: cfg,
 
 		vmReady: make(chan struct{}),
 		jailer:  newNoopJailer(shimCtx, logger, shimDir),
@@ -471,7 +473,7 @@ func (s *service) createVM(requestCtx context.Context, request *proto.CreateVMRe
 	}()
 
 	s.logger.Info("creating new VM")
-	s.jailer, err = newJailer(s.shimCtx, s.logger, string(s.shimDir), s, request)
+	s.jailer, err = newJailer(s.shimCtx, s.logger, filepath.Join(s.config.ShimBaseDir, s.vmID), s, request)
 	if err != nil {
 		return errors.Wrap(err, "failed to create jailer")
 	}

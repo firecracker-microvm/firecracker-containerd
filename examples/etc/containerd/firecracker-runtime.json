@@ -6,6 +6,7 @@
   "cpu_count": 1,
   "cpu_template": "T2",
   "log_level": "Debug",
+  "debug": true,
   "jailer": {
     "runc_binary_path": "/usr/local/bin/runc"
   }

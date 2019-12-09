@@ -16,10 +16,10 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime/debug"
 	"strconv"
@@ -122,7 +122,10 @@ type service struct {
 	config *config.Config
 
 	// vmReady is closed once CreateVM has been successfully called
-	vmReady                  chan struct{}
+	vmReady chan struct{}
+	// vmExitErr is set with the error returned by machine.Wait(). It should
+	// only be read after shimCtx.Done() is closed
+	vmExitErr                error
 	vmStartOnce              sync.Once
 	agentClient              taskAPI.TaskService
 	eventBridgeClient        eventbridge.Getter
@@ -554,16 +557,13 @@ func (s *service) StopVM(requestCtx context.Context, request *proto.StopVMReques
 		timeout = time.Duration(request.TimeoutSeconds) * time.Second
 	}
 
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), timeout)
-	defer shutdownCancel()
-
 	defer s.shimCancel()
 	err = s.waitVMReady()
 	if err != nil {
 		return nil, err
 	}
 
-	if err = s.shutdown(requestCtx, shutdownCtx, &taskAPI.ShutdownRequest{Now: true}); err != nil {
+	if err = s.shutdown(requestCtx, timeout, &taskAPI.ShutdownRequest{Now: true}); err != nil {
 		return nil, err
 	}
 	return &empty.Empty{}, nil
@@ -1148,54 +1148,61 @@ func (s *service) Shutdown(requestCtx context.Context, req *taskAPI.ShutdownRequ
 		return &ptypes.Empty{}, nil
 	}
 
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), defaultShutdownTimeout*time.Second)
-	defer shutdownCancel()
-
-	if err := s.shutdown(requestCtx, shutdownCtx, req); err != nil {
+	if err := s.shutdown(requestCtx, defaultShutdownTimeout, req); err != nil {
 		return &ptypes.Empty{}, err
 	}
 
 	return &ptypes.Empty{}, nil
 }
 
-// shutdown will shutdown the VMM. requestCtx is used to issue requests and shutdownCtx is used for waiting a graceful shutdown procedure.
-// When shutdownCtx's Done channel is closed during the graceful shutdown procedure, the VMM is forcefully killed.
-func (s *service) shutdown(requestCtx, shutdownCtx context.Context, req *taskAPI.ShutdownRequest) error {
-	// cancel the shim at the end, in case even the last StopVMM() doesn't work
-	defer s.shimCancel()
-
-	s.logger.Info("stopping the VM")
-	if _, err := s.agentClient.Shutdown(requestCtx, req); err != nil {
-		return err
-	}
-
-	shutdownCh := make(chan error)
+// shutdown will stop the VMM within the provided timeout. It attempts to shutdown gracefully by having
+// agent stop (which is presumed to cause the VM to begin a reboot) and then waiting for the VMM process
+// to exit (via the s.shimCtx.Done() channel). If that fails, StopVMM will be called to force a shutdown (currently
+// via sending SIGTERM). If that fails, the VMM will still be killed via SIGKILL when the shimCtx is canceled.
+func (s *service) shutdown(
+	requestCtx context.Context,
+	timeout time.Duration,
+	req *taskAPI.ShutdownRequest,
+) error {
+	shutdownCtx, cancel := context.WithTimeout(requestCtx, timeout)
+	defer cancel()
 	go func() {
-		defer close(shutdownCh)
-		err := s.machine.Wait(shutdownCtx)
-		shutdownCh <- err
+		// Once the shutdown procedure is done, the shim needs to shutdown too.
+		// This also ensures that if the VMM is still alive, it will receive a
+		// SIGKILL via exec.CommandContext
+		<-shutdownCtx.Done()
+		s.shimCancel()
 	}()
 
-	var shutdownErr error
-	select {
-	case shutdownErr = <-shutdownCh:
-		if shutdownErr == nil {
-			s.logger.Info("the VM has been stopped successfully")
-			return nil
-		} else if exitErr, ok := shutdownErr.(*exec.ExitError); ok {
-			s.logger.WithError(exitErr).Error("the VM has been stopped, but not successfully")
-			return exitErr
+	s.logger.Info("stopping the VM")
+
+	// Try to tell agent to exit, causing the VM to begin a reboot. If that
+	// fails, try to forcibly stop the VMM. If that too fails, just cancel
+	// the shutdownCtx to fast-path to the VMM getting SIGKILL.
+	_, shutdownErr := s.agentClient.Shutdown(shutdownCtx, req)
+	if shutdownErr != nil {
+		s.logger.WithError(shutdownErr).Error("failed to shutdown VM agent")
+		stopVMMErr := s.machine.StopVMM()
+		if stopVMMErr != nil {
+			s.logger.WithError(stopVMMErr).Error("failed to forcibly stop VMM")
+			cancel()
 		}
-		s.logger.WithError(shutdownErr).Error("the VM returns unknown error")
-	case <-shutdownCtx.Done():
-		shutdownErr = status.Errorf(codes.DeadlineExceeded, "the VM %q will be killed forcebily", req.ID)
-		s.logger.Error("the VM hasn't been stopped before the context's deadline")
 	}
 
-	if err := s.machine.StopVMM(); err != nil {
-		return err
+	// wait for the shimCtx to be done, which means the VM has exited and we're ready
+	// to shutdown
+	<-s.shimCtx.Done()
+	if shutdownCtx.Err() == context.DeadlineExceeded {
+		return status.Error(codes.DeadlineExceeded,
+			"timed out waiting for VM shutdown, VMM was sent SIGKILL")
 	}
-	return shutdownErr
+
+	if s.vmExitErr != nil {
+		return status.Error(codes.Internal,
+			fmt.Sprintf("VMM exit errors: %v", s.vmExitErr))
+	}
+
+	return nil
 }
 
 func (s *service) Stats(requestCtx context.Context, req *taskAPI.StatsRequest) (*taskAPI.StatsResponse, error) {
@@ -1259,9 +1266,9 @@ func (s *service) monitorVMExit() {
 	defer s.shimCancel()
 
 	// Block until the VM exits
-	waitErr := s.machine.Wait(s.shimCtx)
-	if waitErr != nil && waitErr != context.Canceled {
-		s.logger.WithError(waitErr).Error("error returned from VM wait")
+	s.vmExitErr = s.machine.Wait(s.shimCtx)
+	if s.vmExitErr != nil && s.vmExitErr != context.Canceled {
+		s.logger.WithError(s.vmExitErr).Error("error returned from VM wait")
 	}
 
 	publishErr := s.publishVMStop()

@@ -119,7 +119,12 @@ func main() {
 	group.Go(func() error {
 		defer func() {
 			log.G(shimCtx).Info("stopping ttrpc server")
-			if err := server.Shutdown(shimCtx); err != nil {
+			// use context.Background() instead of the canceled shimCtx, which should allow shutdown to
+			// flush any pending responses before actually stopping the server. We're choosing to not
+			// use any timeouts here, deferring instead to the the higher-level runtime shim's shutdown
+			// timeouts. If we get blocked here, the runtime shim will eventually force the VM to shutdown
+			// after its timeouts.
+			if err := server.Shutdown(context.Background()); err != nil {
 				log.G(shimCtx).WithError(err).Errorf("failed to close ttrpc server")
 			}
 		}()

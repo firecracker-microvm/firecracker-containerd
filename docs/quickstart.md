@@ -41,7 +41,8 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get \
   git \
   curl \
   e2fsprogs \
-  util-linux
+  util-linux \
+  bc
 
 cd ~
 
@@ -61,7 +62,6 @@ sudo usermod -aG docker $(whoami)
 cd ~
 
 # Check out firecracker-containerd and build it.  This includes:
-# * block-device snapshotter gRPC proxy plugins
 # * firecracker-containerd runtime, a containerd v2 runtime
 # * firecracker-containerd agent, an inside-VM component
 # * runc, to run containers inside the VM
@@ -95,14 +95,53 @@ root = "/var/lib/firecracker-containerd/containerd"
 state = "/run/firecracker-containerd"
 [grpc]
   address = "/run/firecracker-containerd/containerd.sock"
-[proxy_plugins]
-  [proxy_plugins.firecracker-naive]
-    type = "snapshot"
-    address = "/var/lib/firecracker-containerd/naive-snapshotter.sock"
+[plugins]
+  [plugins.devmapper]
+    pool_name = "fc-dev-thinpool"
+    base_image_size = "10GB"
+    root_path = "/var/lib/firecracker-containerd/snapshotter/devmapper"
 
 [debug]
   level = "debug"
 EOF
+
+# Setup device mapper thin pool
+sudo mkdir -p /var/lib/firecracker-containerd/snapshotter/devmapper
+cd /var/lib/firecracker-containerd/snapshotter/devmapper
+DIR=/var/lib/firecracker-containerd/snapshotter/devmapper
+POOL=fc-dev-thinpool
+
+if [[ ! -f "${DIR}/data" ]]; then
+    sudo touch "${DIR}/data"
+    sudo truncate -s 100G "${DIR}/data"
+fi
+
+if [[ ! -f "${DIR}/metadata" ]]; then
+    sudo touch "${DIR}/metadata"
+    sudo truncate -s 2G "${DIR}/metadata"
+fi
+
+DATADEV="$(sudo losetup --output NAME --noheadings --associated ${DIR}/data)"
+if [[ -z "${DATADEV}" ]]; then
+    DATADEV="$(sudo losetup --find --show ${DIR}/data)"
+fi
+
+METADEV="$(sudo losetup --output NAME --noheadings --associated ${DIR}/metadata)"
+if [[ -z "${METADEV}" ]]; then
+    METADEV="$(sudo losetup --find --show ${DIR}/metadata)"
+fi
+
+SECTORSIZE=512
+DATASIZE="$(sudo blockdev --getsize64 -q ${DATADEV})"
+LENGTH_SECTORS=$(bc <<< "${DATASIZE}/${SECTORSIZE}")
+DATA_BLOCK_SIZE=128
+LOW_WATER_MARK=32768
+THINP_TABLE="0 ${LENGTH_SECTORS} thin-pool ${METADEV} ${DATADEV} ${DATA_BLOCK_SIZE} ${LOW_WATER_MARK} 1 skip_block_zeroing"
+echo "${THINP_TABLE}"
+
+if ! $(sudo dmsetup reload "${POOL}" --table "${THINP_TABLE}"); then
+    sudo dmsetup create "${POOL}" --table "${THINP_TABLE}"
+fi
 
 cd ~
 
@@ -132,33 +171,22 @@ sudo tee /etc/containerd/firecracker-runtime.json <<EOF
 EOF
 ```
 
-4. Open a new terminal and start the `naive_snapshotter` program in the
-   foreground
-
-```bash
-sudo mkdir -p /var/lib/firecracker-containerd /var/lib/firecracker-containerd/naive
-sudo naive_snapshotter \
-     -address /var/lib/firecracker-containerd/naive-snapshotter.sock \
-     -path /var/lib/firecracker-containerd/naive \
-     -debug
-```
-
-5. Open a new terminal and start `firecracker-containerd` in the foreground
+4. Open a new terminal and start `firecracker-containerd` in the foreground
 
 ```bash
 sudo firecracker-containerd --config /etc/firecracker-containerd/config.toml
 ```
 
-6. Open a new terminal, pull an image, and run a container!
+5. Open a new terminal, pull an image, and run a container!
 
 ```bash
 sudo firecracker-ctr --address /run/firecracker-containerd/containerd.sock \
      image pull \
-     --snapshotter firecracker-naive \
+     --snapshotter devmapper \
      docker.io/library/debian:latest
 sudo firecracker-ctr --address /run/firecracker-containerd/containerd.sock \
      run \
-     --snapshotter firecracker-naive \
+     --snapshotter devmapper \
      --runtime aws.firecracker \
      --rm --tty --net-host \
      docker.io/library/debian:latest \

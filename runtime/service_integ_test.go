@@ -61,13 +61,19 @@ const (
 
 	containerdSockPath = "/run/containerd/containerd.sock"
 
-	firecrackerRuntime = "aws.firecracker"
-	shimProcessName    = "containerd-shim-aws-firecracker"
+	firecrackerRuntime     = "aws.firecracker"
+	shimProcessName        = "containerd-shim-aws-firecracker"
+	firecrackerProcessName = "firecracker"
 
 	defaultVMRootfsPath = "/var/lib/firecracker-containerd/runtime/default-rootfs.img"
 	defaultVMNetDevName = "eth0"
 	numberOfVmsEnvName  = "NUMBER_OF_VMS"
 	defaultNumberOfVms  = 5
+)
+
+var (
+	findShim        = findProcWithName(shimProcessName)
+	findFirecracker = findProcWithName(firecrackerProcessName)
 )
 
 // Images are presumed by the isolated tests to have already been pulled
@@ -1317,9 +1323,7 @@ func TestStopVM_Isolated(t *testing.T) {
 	require.NoError(err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
 	defer client.Close()
 
-	timeout, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-	ctx := namespaces.WithNamespace(timeout, "default")
+	ctx := namespaces.WithNamespace(context.Background(), "default")
 
 	image, err := alpineImage(ctx, client, defaultSnapshotterName())
 	require.NoError(err, "failed to get alpine image")
@@ -1330,12 +1334,15 @@ func TestStopVM_Isolated(t *testing.T) {
 	tests := []struct {
 		name            string
 		createVMRequest proto.CreateVMRequest
-		errorCode       codes.Code
+		stopFunc        func(ctx context.Context, fcClient fccontrol.FirecrackerService, vmID string)
 	}{
 		{
 			name:            "Successful",
 			createVMRequest: proto.CreateVMRequest{},
-			errorCode:       codes.OK,
+			stopFunc: func(ctx context.Context, fcClient fccontrol.FirecrackerService, vmID string) {
+				_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
+				require.Equal(status.Code(err), codes.OK)
+			},
 		},
 
 		// Firecracker is too fast to test a case where we hit the timeout on a StopVMRequest.
@@ -1347,13 +1354,63 @@ func TestStopVM_Isolated(t *testing.T) {
 					HostPath: "/var/lib/firecracker-containerd/runtime/rootfs-slow-reboot.img",
 				},
 			},
-			errorCode: codes.DeadlineExceeded,
+			stopFunc: func(ctx context.Context, fcClient fccontrol.FirecrackerService, vmID string) {
+				_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
+				require.Equal(status.Code(err), codes.DeadlineExceeded)
+			},
+		},
+
+		// Test that the shim shuts down if the VM stops unexpectedly
+		{
+			name:            "SIGKILLFirecracker",
+			createVMRequest: proto.CreateVMRequest{},
+			stopFunc: func(ctx context.Context, _ fccontrol.FirecrackerService, _ string) {
+				firecrackerProcesses, err := internal.WaitForProcessToExist(ctx, time.Second, findFirecracker)
+				require.NoError(err, "failed waiting for expected firecracker process %q to come up", firecrackerProcessName)
+				require.Len(firecrackerProcesses, 1, "expected only one firecracker process to exist")
+				firecrackerProcess := firecrackerProcesses[0]
+
+				err = firecrackerProcess.KillWithContext(ctx)
+				require.NoError(err, "failed to kill firecracker process")
+			},
+		},
+
+		// Test that StopVM returns the expected error when the VMM exits with an error (simulated by sending
+		// SIGKILL to the VMM in the middle of a StopVM call).
+		{
+			name: "ErrorExit",
+			createVMRequest: proto.CreateVMRequest{
+				RootDrive: &proto.FirecrackerRootDrive{
+					HostPath: "/var/lib/firecracker-containerd/runtime/rootfs-slow-reboot.img",
+				},
+			},
+			stopFunc: func(ctx context.Context, fcClient fccontrol.FirecrackerService, vmID string) {
+				firecrackerProcesses, err := internal.WaitForProcessToExist(ctx, time.Second, findFirecracker)
+				require.NoError(err, "failed waiting for expected firecracker process %q to come up", firecrackerProcessName)
+				require.Len(firecrackerProcesses, 1, "expected only one firecracker process to exist")
+				firecrackerProcess := firecrackerProcesses[0]
+
+				go func() {
+					time.Sleep(5 * time.Second)
+					err := firecrackerProcess.KillWithContext(ctx)
+					require.NoError(err, "failed to kill firecracker process")
+				}()
+
+				_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{
+					VMID:           vmID,
+					TimeoutSeconds: 10,
+				})
+				require.Contains(err.Error(), "signal: killed", "unexpected error from StopVM")
+			},
 		},
 	}
 
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+			defer cancel()
+
 			vmID := testNameToVMID(t.Name())
 			createVMRequest := test.createVMRequest
 			createVMRequest.VMID = vmID
@@ -1376,21 +1433,25 @@ func TestStopVM_Isolated(t *testing.T) {
 			shimProcesses, err := internal.WaitForProcessToExist(ctx, time.Second, findShim)
 			require.NoError(err, "failed waiting for expected shim process %q to come up", shimProcessName)
 			require.Len(shimProcesses, 1, "expected only one shim process to exist")
+			shimProcess := shimProcesses[0]
 
-			_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
-			require.Equal(status.Code(err), test.errorCode)
+			if test.stopFunc != nil {
+				test.stopFunc(ctx, fcClient, vmID)
+			}
 
-			err = internal.WaitForPidToExit(ctx, time.Second, shimProcesses[0].Pid)
+			err = internal.WaitForPidToExit(ctx, time.Second, shimProcess.Pid)
 			require.NoError(err, "shim hasn't been terminated")
 		})
 	}
 }
 
-func findShim(ctx context.Context, p *process.Process) (bool, error) {
-	processExecutable, err := p.ExeWithContext(ctx)
-	if err != nil {
-		return false, err
-	}
+func findProcWithName(name string) func(context.Context, *process.Process) (bool, error) {
+	return func(ctx context.Context, p *process.Process) (bool, error) {
+		processExecutable, err := p.ExeWithContext(ctx)
+		if err != nil {
+			return false, err
+		}
 
-	return filepath.Base(processExecutable) == shimProcessName, nil
+		return filepath.Base(processExecutable) == name, nil
+	}
 }

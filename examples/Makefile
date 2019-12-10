@@ -51,7 +51,7 @@ integ-test:
 TEST_GATEWAY?=172.16.0.1
 TEST_IP?=172.16.0.2
 TEST_SUBNET?=/24
-TEST_SS?=naive
+TEST_SS?=devmapper
 TEST_POOL?=
 testtap:
 	ip link add br0 type bridge

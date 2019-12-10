@@ -44,12 +44,11 @@ var defaultRuntimeConfig = config.Config{
 }
 
 func defaultSnapshotterName() string {
-	name := os.Getenv("FICD_SNAPSHOTTER")
-	if name == "" || name == "naive" {
-		return "firecracker-naive"
+	if name := os.Getenv("FICD_SNAPSHOTTER"); name != "" {
+		return name
 	}
 
-	return name
+	return "devmapper"
 }
 
 func prepareIntegTest(t *testing.T, options ...func(*config.Config)) {

@@ -46,14 +46,10 @@ const (
 func main() {
 	var containerCIDR = flag.String("ip", "", "ip address and subnet assigned to the container in CIDR notation. Example: -ip 172.16.0.2/24")
 	var gatewayIP = flag.String("gw", "", "gateway ip address. Example: -gw 172.16.0.1")
-	var snapshotter = flag.String("ss", "", "snapshotter")
+	var snapshotter = flag.String("ss", "devmapper", "snapshotter")
 
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
 	flag.Parse()
-
-	if *snapshotter == "naive" {
-		*snapshotter = "firecracker-naive"
-	}
 
 	if *containerCIDR != "" && *gatewayIP == "" {
 		log.Fatal("Incorrect usage. 'gw' needs to be specified when 'ip' is specified")

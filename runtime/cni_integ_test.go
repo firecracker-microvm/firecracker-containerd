@@ -82,6 +82,8 @@ func TestCNISupport_Isolated(t *testing.T) {
 	}()
 
 	var vmGroup sync.WaitGroup
+	const jailerUID = 300000
+	const jailerGID = 300000
 	for _, vmID := range vmIDs {
 		vmGroup.Add(1)
 		go func(vmID string) {
@@ -113,7 +115,10 @@ func TestCNISupport_Isolated(t *testing.T) {
 						},
 					},
 				}},
-				JailerConfig: &proto.JailerConfig{},
+				JailerConfig: &proto.JailerConfig{
+					UID: jailerUID,
+					GID: jailerGID,
+				},
 			})
 			require.NoError(t, err, "failed to create vm")
 

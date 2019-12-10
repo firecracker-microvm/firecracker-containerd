@@ -248,6 +248,8 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 		{
 			MaxContainers: 3,
 			JailerConfig: &proto.JailerConfig{
+				UID:   300000,
+				GID:   300000,
 				NetNS: netns.Path(),
 			},
 		},
@@ -967,9 +969,12 @@ func TestDriveMount_Isolated(t *testing.T) {
 	}
 
 	_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
-		VMID:         vmID,
-		DriveMounts:  vmDriveMounts,
-		JailerConfig: &proto.JailerConfig{},
+		VMID:        vmID,
+		DriveMounts: vmDriveMounts,
+		JailerConfig: &proto.JailerConfig{
+			UID: 300000,
+			GID: 300000,
+		},
 	})
 	require.NoError(t, err, "failed to create vm")
 

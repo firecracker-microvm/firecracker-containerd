@@ -72,34 +72,35 @@ message UpdateVMMetadataRequest {
 }
 
 message GetVMMetadataRequest {
-	string VMID = 1;
+    string VMID = 1;
 }
 
 message GetVMMetadataResponse {
-	string Metadata = 1;
+    string Metadata = 1;
 }
 
 message JailerConfig {
     string NetNS = 1;
-
-	// List of the physical numbers of the CPUs on which processes in that
-	// cpuset are allowed to execute.  See List Format below for a description
-	// of the format of cpus.
-	//
-	// The CPUs allowed to a cpuset may be changed by writing a new list to its
-	// cpus file.
-	// Taken from http://man7.org/linux/man-pages/man7/cpuset.7.html
-	//
-	// This is formatted as specified in the cpuset man page under "List Format"
-	// http://man7.org/linux/man-pages/man7/cpuset.7.html
+    // List of the physical numbers of the CPUs on which processes in that
+    // cpuset are allowed to execute.  See List Format below for a description
+    // of the format of cpus.
+    //
+    // The CPUs allowed to a cpuset may be changed by writing a new list to its
+    // cpus file.
+    // Taken from http://man7.org/linux/man-pages/man7/cpuset.7.html
+    //
+    // This is formatted as specified in the cpuset man page under "List Format"
+    // http://man7.org/linux/man-pages/man7/cpuset.7.html
     string CPUs = 2;
-	// List of memory nodes on which processes in this cpuset are allowed to
-	// allocate memory.  See List Format below for a description of the format
-	// of mems.
-	// Taken from http://man7.org/linux/man-pages/man7/cpuset.7.html
-	//
-	// This is formatted as specified in the cpuset man page under "List Format"
-	// http://man7.org/linux/man-pages/man7/cpuset.7.html
+    // List of memory nodes on which processes in this cpuset are allowed to
+    // allocate memory.  See List Format below for a description of the format
+    // of mems.
+    // Taken from http://man7.org/linux/man-pages/man7/cpuset.7.html
+    //
+    // This is formatted as specified in the cpuset man page under "List Format"
+    // http://man7.org/linux/man-pages/man7/cpuset.7.html
     string Mems = 3;
+    uint32 UID = 4;
+    uint32 GID = 5;
 }
 

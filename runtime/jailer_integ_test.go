@@ -36,7 +36,10 @@ func TestJailer_Isolated(t *testing.T) {
 		testJailer(t, nil)
 	})
 	t.Run("With Jailer", func(t *testing.T) {
-		testJailer(t, &proto.JailerConfig{})
+		testJailer(t, &proto.JailerConfig{
+			UID: 300001,
+			GID: 300001,
+		})
 	})
 }
 
@@ -90,6 +93,8 @@ func TestJailerCPUSet_Isolated(t *testing.T) {
 		config := &proto.JailerConfig{
 			CPUs: cset.CPUs(),
 			Mems: cset.Mems(),
+			UID:  300000,
+			GID:  300000,
 		}
 		testJailer(t, config)
 	})

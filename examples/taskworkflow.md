@@ -1,6 +1,6 @@
 ### About
 The `taskworkfow.go` file contains code to pull and unpack a container image
-using the `naive` snaphotter, create a container and execute a task using the
+using the `devmapper` snaphotter, create a container and execute a task using the
 `firecracker-containerd` runtime.
 
 ### Building

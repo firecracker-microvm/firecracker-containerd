@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:experimental
-# Test image that starts up containerd and the naive snapshotter. The default CMD will drop to a bash shell. Overrides
+# Test image that starts up containerd and the devmapper snapshotter. The default CMD will drop to a bash shell. Overrides
 # to CMD will be provided appended to /bin/bash -c
 FROM golang:1.13-stretch
 ENV PATH="/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin:/usr/local/sbin:/usr/local/go/bin"
@@ -8,7 +8,7 @@ ENV DEBIAN_FRONTEND="noninteractive"
 
 ARG FIRECRACKER_TARGET=x86_64-unknown-linux-musl
 ENV FICD_LOG_DIR="/var/log/firecracker-containerd-test"
-ENV FICD_SNAPSHOTTER="naive"
+ENV FICD_SNAPSHOTTER="devmapper"
 ENV FICD_SNAPSHOTTER_OUTFILE="${FICD_LOG_DIR}/snapshotter.out"
 ENV FICD_CONTAINERD_OUTFILE="${FICD_LOG_DIR}/containerd.out"
 
@@ -26,7 +26,6 @@ RUN apt-get update && apt-get install --yes --no-install-recommends \
 RUN mkdir -p \
     /var/run/firecracker-containerd \
     /src \
-    /var/lib/firecracker-containerd/naive \
     /srv/firecracker_containerd_tests \
     ${FICD_LOG_DIR}
 

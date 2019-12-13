@@ -16,6 +16,7 @@ package vm
 import (
 	"context"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
@@ -129,7 +130,12 @@ func (connectorPair *IOConnectorPair) proxy(
 
 		_, err := io.CopyBuffer(writer, reader, make([]byte, internal.DefaultBufferSize))
 		if err != nil {
-			logger.WithError(err).Error("error copying io")
+			if strings.Contains(err.Error(), "use of closed network connection") ||
+				strings.Contains(err.Error(), "file already closed") {
+				logger.Infof("connection was closed: %v", err)
+			} else {
+				logger.WithError(err).Error("error copying io")
+			}
 			copyDone <- err
 		}
 	}()

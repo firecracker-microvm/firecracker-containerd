@@ -15,6 +15,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"github.com/firecracker-microvm/firecracker-go-sdk"
@@ -31,11 +32,6 @@ const (
 	jailerHandlerName     = "firecracker-containerd-jail-handler"
 	jailerFifoHandlerName = "firecracker-containerd-jail-fifo-handler"
 	rootfsFolder          = "rootfs"
-
-	// TODO evenetually we can get rid of this when we add usernamespaces to
-	// jailing.
-	jailerUID = 300000
-	jailerGID = 300000
 )
 
 var (
@@ -83,6 +79,14 @@ func newJailer(
 		return newNoopJailer(ctx, l, service.shimDir), nil
 	}
 
+	if request.JailerConfig.UID == 0 || request.JailerConfig.GID == 0 {
+		return nil, fmt.Errorf(
+			"attempting to run as %d:%d. 0 cannot be used for the UID or GID",
+			request.JailerConfig.UID,
+			request.JailerConfig.GID,
+		)
+	}
+
 	if err := os.MkdirAll(ociBundlePath, 0700); err != nil {
 		return nil, errors.Wrapf(err, "failed to create oci bundle path: %s", ociBundlePath)
 	}
@@ -91,8 +95,8 @@ func newJailer(
 	config := runcJailerConfig{
 		OCIBundlePath: ociBundlePath,
 		RuncBinPath:   service.config.JailerConfig.RuncBinaryPath,
-		UID:           jailerUID,
-		GID:           jailerGID,
+		UID:           request.JailerConfig.UID,
+		GID:           request.JailerConfig.GID,
 		CPUs:          request.JailerConfig.CPUs,
 		Mems:          request.JailerConfig.Mems,
 	}

@@ -14,10 +14,14 @@
 package main
 
 import (
+	"context"
 	"os"
 	"testing"
 
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/firecracker-microvm/firecracker-containerd/proto"
 )
 
 func TestCopyFile_simple(t *testing.T) {
@@ -40,4 +44,12 @@ func TestCopyFile_invalidPaths(t *testing.T) {
 
 	err := copyFile(srcPath, dstPath, 0600)
 	assert.Error(t, err, "copyFile should have returned an error")
+}
+
+func TestJailer_invalidUIDGID(t *testing.T) {
+	req := proto.CreateVMRequest{
+		JailerConfig: &proto.JailerConfig{},
+	}
+	_, err := newJailer(context.Background(), logrus.NewEntry(logrus.New()), "/foo", &service{}, &req)
+	assert.Error(t, err, "expected invalid uid and gid error, but received none")
 }

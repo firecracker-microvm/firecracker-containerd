@@ -16,7 +16,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -42,6 +46,7 @@ var defaultRuntimeConfig = config.Config{
 	ShimBaseDir:           shimBaseDir,
 	JailerConfig: config.JailerConfig{
 		RuncBinaryPath: "/usr/local/bin/runc",
+		RuncConfigPath: "/etc/containerd/firecracker-runc-config.json",
 	},
 }
 
@@ -58,19 +63,19 @@ func prepareIntegTest(t *testing.T, options ...func(*config.Config)) {
 
 	internal.RequiresIsolation(t)
 
-	err := writeRuntimeConfig(options...)
+	err := writeRuntimeConfig(runtimeConfigPath, options...)
 	if err != nil {
 		t.Error(err)
 	}
 }
 
-func writeRuntimeConfig(options ...func(*config.Config)) error {
+func writeRuntimeConfig(path string, options ...func(*config.Config)) error {
 	config := defaultRuntimeConfig
 	for _, option := range options {
 		option(&config)
 	}
 
-	file, err := os.OpenFile(runtimeConfigPath, os.O_CREATE|os.O_WRONLY, 0600)
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
 		return err
 	}
@@ -139,4 +144,160 @@ func runTask(ctx context.Context, c containerd.Container) (*commandResult, error
 	case <-ctx.Done():
 		return nil, errors.New("context cancelled")
 	}
+}
+
+// setupBareMetalTest will run firecracker-containerd, the runtime shim, and
+// snapshotter. This will return the cleanup function needed to kill each
+// process.
+func setupBareMetalTest(dir, uuid string, options ...func(*config.Config)) (func(), error) {
+	if err := os.MkdirAll(filepath.Join(dir, "firecracker-containerd", "containerd"), 0644); err != nil {
+		return nil, errors.Wrap(err, "failed to create shim base directory")
+	}
+	cleanupFns := func() {
+		os.RemoveAll(dir)
+	}
+
+	if err := os.MkdirAll(filepath.Join(dir, "state"), 0644); err != nil {
+		return cleanupFns, errors.Wrap(err, "failed to create state folder")
+	}
+
+	devmapperPath := filepath.Join(dir, "devmapper")
+	if err := os.MkdirAll(devmapperPath, 0644); err != nil {
+		return cleanupFns, errors.Wrap(err, "failed to create devmapper folder")
+	}
+
+	binPath := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(binPath, 0644); err != nil {
+		return cleanupFns, errors.Wrap(err, "failed to create bin folder")
+	}
+
+	paths := os.Getenv("PATH")
+	os.Setenv("PATH", binPath+":"+paths)
+
+	runtimeConfigPath := filepath.Join(dir, "firecracker-runtime.json")
+	if err := writeRuntimeConfig(runtimeConfigPath, options...); err != nil {
+		return cleanupFns, errors.Wrap(err, "failed to create runtime config")
+	}
+
+	thinPoolName := uuid
+	thinPoolCmd := exec.Command("../tools/thinpool.sh", "reset", thinPoolName)
+	thinPoolCmd.Stdout = os.Stdout
+	thinPoolCmd.Stderr = os.Stderr
+
+	if err := thinPoolCmd.Run(); err != nil {
+		return cleanupFns, errors.Wrap(err, "failed to create thin pool")
+	}
+
+	cleanupFns = func() {
+		os.RemoveAll(dir)
+		exec.Command("../tools/thinpool.sh", "remove", thinPoolName).Run()
+	}
+
+	os.Setenv(config.ConfigPathEnvName, runtimeConfigPath)
+	os.Setenv("INSTALLROOT", dir)
+	os.Setenv("FIRECRACKER_CONTAINERD_RUNTIME_DIR", dir)
+
+	cmd := exec.Command("make")
+	cmd.Dir = filepath.Join(cmd.Dir, "..")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return cleanupFns, errors.Wrap(err, "failed running make")
+	}
+
+	cmd = exec.Command("make", "install")
+	cmd.Dir = filepath.Join(cmd.Dir, "..")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return cleanupFns, errors.Wrap(err, "failed running make install")
+	}
+
+	cmd = exec.Command("make", "install-default-vmlinux")
+	cmd.Dir = filepath.Join(cmd.Dir, "..")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return cleanupFns, errors.Wrap(err, "failed running make install-default-vmlinux")
+	}
+
+	cmd = exec.Command("make", "image")
+	cmd.Dir = filepath.Join(cmd.Dir, "..")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return cleanupFns, errors.Wrap(err, "failed running make image")
+	}
+
+	cmd = exec.Command("make", "install-default-rootfs")
+	cmd.Dir = filepath.Join(cmd.Dir, "..")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return cleanupFns, errors.Wrap(err, "failed running make install-default-rootfs")
+	}
+
+	const configTomlFormat = `disabled_plugins = ["cri"]
+root = "%s"
+state = "%s/state"
+[grpc]
+  address = "%s/containerd.sock"
+[plugins]
+  [plugins.devmapper]
+    pool_name = "fcci--vg-%s"
+    base_image_size = "10GB"
+    root_path = "%s/devmapper"
+[debug]
+  level = "debug"`
+
+	configToml := fmt.Sprintf(configTomlFormat, dir, dir, dir, thinPoolName, dir)
+	if err := ioutil.WriteFile(filepath.Join(dir, "config.toml"), []byte(configToml), 0644); err != nil {
+		return cleanupFns, errors.Wrap(err, "faiiled to write config.toml")
+	}
+
+	cpCmd := exec.Command("cp", "firecracker-runc-config.json.example", filepath.Join(dir, "config.json"))
+	cpCmd.Stdout = os.Stdout
+	cpCmd.Stderr = os.Stderr
+	if err := cpCmd.Run(); err != nil {
+		return cleanupFns, errors.Wrap(err, "failed to copy runc config")
+	}
+
+	cpCmd = exec.Command("cp", "../_submodules/runc/runc", binPath)
+	cpCmd.Stdout = os.Stdout
+	cpCmd.Stderr = os.Stderr
+	if err := cpCmd.Run(); err != nil {
+		return cleanupFns, errors.Wrap(err, "failed to copy runc")
+	}
+
+	containerdBin := filepath.Join(binPath, "firecracker-containerd")
+	containerdProcess := exec.Command(containerdBin, "--config", filepath.Join(dir, "config.toml"))
+	containerdProcess.Stdout = os.Stdout
+	containerdProcess.Stderr = os.Stderr
+	if err := containerdProcess.Start(); err != nil {
+		return cleanupFns, errors.Wrap(err, "failed to run containerd")
+	}
+
+	cleanupFns = func() {
+		if containerdProcess != nil && containerdProcess.Process != nil {
+			containerdProcess.Process.Kill()
+		}
+		exec.Command("../tools/thinpool.sh", "remove", thinPoolName).Run()
+		os.RemoveAll(dir)
+	}
+
+	containerdAddress := filepath.Join(dir, "containerd.sock")
+	ctrFetch := exec.Command(
+		filepath.Join(binPath, "firecracker-ctr"),
+		"--address",
+		containerdAddress,
+		"content",
+		"fetch",
+		"docker.io/library/alpine:3.10.1")
+	ctrFetch.Stdout = os.Stdout
+	ctrFetch.Stderr = os.Stderr
+	if err := ctrFetch.Run(); err != nil {
+		return cleanupFns, errors.Wrap(err, "failed to fetch alpine image")
+	}
+
+	return cleanupFns, nil
 }

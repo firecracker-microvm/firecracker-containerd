@@ -224,9 +224,25 @@ func createTapDevice(ctx context.Context, tapName string) error {
 	return nil
 }
 
+func deleteTapDevice(ctx context.Context, tapName string) error {
+	if err := exec.CommandContext(ctx, "ip", "link", "delete", tapName).Run(); err != nil {
+		return err
+	}
+
+	if err := exec.CommandContext(ctx, "ip", "tuntap", "del", tapName, "mode", "tap").Run(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func TestMultipleVMs_Isolated(t *testing.T) {
 	prepareIntegTest(t)
+	testMultipleVMs_Isolated(t, containerdSockPath, defaultVMRootfsPath)
+}
 
+// TODO containerdSockPath needs to be configurable
+func testMultipleVMs_Isolated(t *testing.T, socketPath, rootfsPath string) {
 	netns, err := ns.GetCurrentNS()
 	require.NoError(t, err, "failed to get a namespace")
 
@@ -259,14 +275,14 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 	ctx, cancel := context.WithTimeout(namespaces.WithNamespace(context.Background(), defaultNamespace), testTimeout)
 	defer cancel()
 
-	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	client, err := containerd.New(socketPath, containerd.WithDefaultRuntime(firecrackerRuntime))
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
 	defer client.Close()
 
 	image, err := alpineImage(ctx, client, defaultSnapshotterName())
 	require.NoError(t, err, "failed to get alpine image")
 
-	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
+	pluginClient, err := ttrpcutil.NewClient(socketPath + ".ttrpc")
 	require.NoError(t, err, "failed to create ttrpc client")
 
 	// This test spawns separate VMs in parallel and ensures containers are spawned within each expected VM. It asserts each
@@ -282,10 +298,9 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 
 			tapName := fmt.Sprintf("tap%d", vmID)
 			err := createTapDevice(ctx, tapName)
+			defer deleteTapDevice(ctx, tapName)
 
 			require.NoError(t, err, "failed to create tap device for vm %d", vmID)
-
-			rootfsPath := defaultVMRootfsPath
 
 			vmIDStr := strconv.Itoa(vmID)
 			fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
@@ -315,6 +330,8 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 			resp, err := fcClient.CreateVM(ctx, req)
 			require.NoError(t, err, "failed to create vm")
 
+			cfg, err := config.LoadConfig("")
+			require.NoError(t, err, "failed to load config")
 			var containerWg sync.WaitGroup
 			for containerID := 0; containerID < int(containerCount); containerID++ {
 				containerWg.Add(1)
@@ -328,6 +345,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 						client, image,
 						jailerConfig,
 						resp.CgroupPath,
+						cfg,
 					)
 				}(containerID)
 			}
@@ -341,8 +359,6 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 			require.NoError(t, err, "failed to get VM Info for VM %d", vmID)
 			require.Equal(t, vmInfoResp.VMID, strconv.Itoa(vmID))
 
-			cfg, err := config.LoadConfig("")
-			require.NoError(t, err, "failed to load config")
 			require.Equal(t, vmInfoResp.SocketPath, filepath.Join(cfg.ShimBaseDir, defaultNamespace, strconv.Itoa(vmID), "firecracker.sock"))
 			require.Equal(t, vmInfoResp.LogFifoPath, filepath.Join(cfg.ShimBaseDir, defaultNamespace, strconv.Itoa(vmID), "fc-logs.fifo"))
 			require.Equal(t, vmInfoResp.MetricsFifoPath, filepath.Join(cfg.ShimBaseDir, defaultNamespace, strconv.Itoa(vmID), "fc-metrics.fifo"))
@@ -374,6 +390,7 @@ func testMultipleExecs(
 	image containerd.Image,
 	jailerConfig *proto.JailerConfig,
 	cgroupPath string,
+	cfg *config.Config,
 ) {
 	vmIDStr := strconv.Itoa(vmID)
 	testTimeout := 600 * time.Second
@@ -437,7 +454,7 @@ func testMultipleExecs(
 	if jailerConfig != nil {
 		jailer := &runcJailer{
 			Config: runcJailerConfig{
-				OCIBundlePath: filepath.Join(shimBaseDir, vmIDStr),
+				OCIBundlePath: filepath.Join(cfg.ShimBaseDir, vmIDStr),
 			},
 			vmID: vmIDStr,
 		}

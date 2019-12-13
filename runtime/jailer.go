@@ -34,10 +34,6 @@ const (
 	rootfsFolder          = "rootfs"
 )
 
-var (
-	runcConfigPath = "/etc/containerd/firecracker-runc-config.json"
-)
-
 // jailer will allow modification and provide options to the the Firecracker VM
 // to allow for jailing. In addition, this will allow for given files to be exposed
 // to the jailed filesystem.
@@ -93,12 +89,13 @@ func newJailer(
 
 	l := logger.WithField("jailer", "runc")
 	config := runcJailerConfig{
-		OCIBundlePath: ociBundlePath,
-		RuncBinPath:   service.config.JailerConfig.RuncBinaryPath,
-		UID:           request.JailerConfig.UID,
-		GID:           request.JailerConfig.GID,
-		CPUs:          request.JailerConfig.CPUs,
-		Mems:          request.JailerConfig.Mems,
+		OCIBundlePath:  ociBundlePath,
+		RuncBinPath:    service.config.JailerConfig.RuncBinaryPath,
+		RuncConfigPath: service.config.JailerConfig.RuncConfigPath,
+		UID:            request.JailerConfig.UID,
+		GID:            request.JailerConfig.GID,
+		CPUs:           request.JailerConfig.CPUs,
+		Mems:           request.JailerConfig.Mems,
 	}
 	return newRuncJailer(ctx, l, service.vmID, config)
 }

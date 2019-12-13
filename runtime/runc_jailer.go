@@ -52,12 +52,13 @@ type runcJailer struct {
 const firecrackerFileName = "firecracker"
 
 type runcJailerConfig struct {
-	OCIBundlePath string
-	RuncBinPath   string
-	UID           uint32
-	GID           uint32
-	CPUs          string
-	Mems          string
+	OCIBundlePath  string
+	RuncBinPath    string
+	RuncConfigPath string
+	UID            uint32
+	GID            uint32
+	CPUs           string
+	Mems           string
 }
 
 func newRuncJailer(ctx context.Context, logger *logrus.Entry, vmID string, cfg runcJailerConfig) (*runcJailer, error) {
@@ -73,13 +74,13 @@ func newRuncJailer(ctx context.Context, logger *logrus.Entry, vmID string, cfg r
 
 	spec := specs.Spec{}
 	var configBytes []byte
-	configBytes, err := ioutil.ReadFile(runcConfigPath)
+	configBytes, err := ioutil.ReadFile(cfg.RuncConfigPath)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to read %s", runcConfigPath)
+		return nil, errors.Wrapf(err, "failed to read %s", cfg.RuncConfigPath)
 	}
 
 	if err = json.Unmarshal(configBytes, &spec); err != nil {
-		return nil, errors.Wrapf(err, "failed to unmarshal %s", runcConfigPath)
+		return nil, errors.Wrapf(err, "failed to unmarshal %s", cfg.RuncConfigPath)
 	}
 
 	j.configSpec = spec
@@ -158,8 +159,8 @@ func (j *runcJailer) BuildJailedRootHandler(cfg *config.Config, machineConfig *f
 
 			rootPathToConfig := filepath.Join(ociBundlePath, "config.json")
 			j.logger.WithField("rootPathToConfig", rootPathToConfig).Debug("Copying config")
-			if err := copyFile(runcConfigPath, rootPathToConfig, 0400); err != nil {
-				return errors.Wrapf(err, "failed to copy config from %v to %v", runcConfigPath, rootPathToConfig)
+			if err := copyFile(j.Config.RuncConfigPath, rootPathToConfig, 0400); err != nil {
+				return errors.Wrapf(err, "failed to copy config from %v to %v", j.Config.RuncConfigPath, rootPathToConfig)
 			}
 
 			j.logger.Debug("Overwritting process args of config")

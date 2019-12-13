@@ -33,7 +33,6 @@ import (
 
 func TestBuildJailedRootHandler_Isolated(t *testing.T) {
 	internal.RequiresIsolation(t)
-	runcConfigPath = "./firecracker-runc-config.json.example"
 	dir, err := ioutil.TempDir("", "TestBuildJailedRootHandler")
 	require.NoError(t, err, "failed to create temporary directory")
 
@@ -55,10 +54,11 @@ func TestBuildJailedRootHandler_Isolated(t *testing.T) {
 
 	l := logrus.NewEntry(logrus.New())
 	runcConfig := runcJailerConfig{
-		OCIBundlePath: dir,
-		RuncBinPath:   "bin-path",
-		UID:           123,
-		GID:           456,
+		OCIBundlePath:  dir,
+		RuncBinPath:    "bin-path",
+		RuncConfigPath: "./firecracker-runc-config.json.example",
+		UID:            123,
+		GID:            456,
 	}
 	vmID := "foo"
 	jailer, err := newRuncJailer(context.Background(), l, vmID, runcConfig)

@@ -213,6 +213,10 @@ CNI_BIN_ROOT?=/opt/cni/bin
 $(CNI_BIN_ROOT):
 	mkdir --mode 0755 --parents $@
 
+BRIDGE_BIN?=$(BINPATH)/bridge
+$(BRIDGE_BIN):
+	GOBIN=$(dir $@) GO111MODULE=off go get -u github.com/containernetworking/plugins/plugins/main/bridge
+
 PTP_BIN?=$(BINPATH)/ptp
 $(PTP_BIN):
 	GOBIN=$(dir $@) GO111MODULE=off go get -u github.com/containernetworking/plugins/plugins/main/ptp
@@ -234,13 +238,14 @@ $(TEST_BRIDGED_TAP_BIN): $(shell find internal/cmd/test-bridged-tap -name *.go) 
 	go build -o $@ $(CURDIR)/internal/cmd/test-bridged-tap
 
 .PHONY: cni-bins
-cni-bins: $(PTP_BIN) $(HOSTLOCAL_BIN) $(FIREWALL_BIN) $(TC_REDIRECT_TAP_BIN)
+cni-bins: $(BRIDGE_BIN) $(PTP_BIN) $(HOSTLOCAL_BIN) $(FIREWALL_BIN) $(TC_REDIRECT_TAP_BIN)
 
 .PHONY: test-cni-bins
 test-cni-bins: $(TEST_BRIDGED_TAP_BIN)
 
 .PHONY: install-cni-bins
 install-cni-bins: cni-bins $(CNI_BIN_ROOT)
+	install -D -o root -g root -m755 -t $(CNI_BIN_ROOT) $(BRIDGE_BIN)
 	install -D -o root -g root -m755 -t $(CNI_BIN_ROOT) $(PTP_BIN)
 	install -D -o root -g root -m755 -t $(CNI_BIN_ROOT) $(HOSTLOCAL_BIN)
 	install -D -o root -g root -m755 -t $(CNI_BIN_ROOT) $(FIREWALL_BIN)
@@ -253,7 +258,12 @@ install-test-cni-bins: test-cni-bins $(CNI_BIN_ROOT)
 FCNET_CONFIG?=/etc/cni/conf.d/fcnet.conflist
 $(FCNET_CONFIG):
 	mkdir -p $(dir $(FCNET_CONFIG))
-	cp tools/demo/fcnet.conflist $(FCNET_CONFIG)
+	install -o root -g root -m644 tools/demo/fcnet.conflist $(FCNET_CONFIG)
+
+FCNET_BRIDGE_CONFIG?=/etc/network/interfaces.d/fc-br0
+$(FCNET_BRIDGE_CONFIG):
+	mkdir -p $(dir $(FCNET_BRIDGE_CONFIG))
+	install -o root -g root -m644 tools/demo/fc-br0.interface $(FCNET_BRIDGE_CONFIG)
 
 .PHONY: demo-network
 demo-network: install-cni-bins $(FCNET_CONFIG)

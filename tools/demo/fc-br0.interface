@@ -1,0 +1,11 @@
+# This interfaces(5) configuration file is intended to work with the
+# ifupdown interface management framework provided by Debian 10.  It
+# may require modification to work elsewhere.
+auto fc-br0
+iface fc-br0 inet static
+      address 192.168.1.1
+      network 192.168.1.0
+      netmask 255.255.255.0
+      broadcast 192.168.1.255
+      gateway 192.168.1.1
+      bridge_ports none

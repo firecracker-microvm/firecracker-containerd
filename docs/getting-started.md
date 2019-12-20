@@ -321,18 +321,28 @@ pre-created tap devices and with tap devices created automatically by
 [CNI](https://github.com/containernetworking/cni) plugins.
 
 ### CNI Setup
-CNI-configured networks offer the quickest way to get VMs up and running with 
-connectivity to external networks. Setting one up requires a few extra steps in 
-addition to the above Setup steps.
+
+CNI-configured networks offer the quickest way to get VMs up and running with
+connectivity between MicroVMs and to external networks. Setting one up requires
+a few extra steps in addition to the above Setup steps.
+
+Production deployments should be sure to choose a network configuration suitale
+to the specifics of the environment and workloads being hosting, with particular
+attention being given to network isolation between tasks.
 
 To install the required CNI dependencies, run the following make target from the 
 previously cloned firecracker-containerd repository:
+
 ```bash
 $ sudo make demo-network
 ```
 
 You can check the Makefile to see exactly what is installed and where, but for a
 quick summary:
+* [`bridge` CNI plugin](https://github.com/containernetworking/plugins/tree/master/plugins/main/bridge)
+  - Creates a [veth](http://man7.org/linux/man-pages/man4/veth.4.html) pair with
+  one end in a private network namespace and the other end attached to a bridge
+  device in the host's network namespace.
 * [`ptp` CNI plugin](https://github.com/containernetworking/plugins/tree/master/plugins/main/ptp)
   - Creates a [veth](http://man7.org/linux/man-pages/man4/veth.4.html) pair with
   one end in a private network namespace and the other end in the host's network

@@ -28,12 +28,13 @@ import (
 
 const (
 	defaultMemSizeMb = 128
+	defaultCPUCount  = 1
 )
 
 func machineConfigurationFromProto(cfg *config.Config, req *proto.FirecrackerMachineConfiguration) models.MachineConfiguration {
 	config := models.MachineConfiguration{
 		CPUTemplate: models.CPUTemplate(cfg.CPUTemplate),
-		VcpuCount:   firecracker.Int64(int64(cfg.CPUCount)),
+		VcpuCount:   firecracker.Int64(defaultCPUCount),
 		MemSizeMib:  firecracker.Int64(defaultMemSizeMb),
 		HtEnabled:   firecracker.Bool(cfg.HtEnabled),
 	}

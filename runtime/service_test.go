@@ -54,7 +54,6 @@ func TestBuildVMConfiguration(t *testing.T) {
 				KernelImagePath: "KERNEL IMAGE",
 				RootDrive:       "ROOT DRIVE",
 				CPUTemplate:     "C3",
-				CPUCount:        2,
 			},
 			expectedCfg: &firecracker.Config{
 				KernelArgs:      "KERNEL ARGS",
@@ -69,7 +68,7 @@ func TestBuildVMConfiguration(t *testing.T) {
 				},
 				MachineCfg: models.MachineConfiguration{
 					CPUTemplate: models.CPUTemplateC3,
-					VcpuCount:   firecracker.Int64(2),
+					VcpuCount:   firecracker.Int64(defaultCPUCount),
 					MemSizeMib:  firecracker.Int64(defaultMemSizeMb),
 					HtEnabled:   firecracker.Bool(false),
 				},
@@ -129,7 +128,6 @@ func TestBuildVMConfiguration(t *testing.T) {
 				KernelArgs:      "KERNEL ARGS",
 				KernelImagePath: "KERNEL IMAGE",
 				CPUTemplate:     "C3",
-				CPUCount:        2,
 			},
 			expectedCfg: &firecracker.Config{
 				KernelArgs:      "REQUEST KERNEL ARGS",
@@ -165,7 +163,6 @@ func TestBuildVMConfiguration(t *testing.T) {
 				KernelArgs:      "KERNEL ARGS",
 				KernelImagePath: "KERNEL IMAGE",
 				CPUTemplate:     "C3",
-				CPUCount:        2,
 			},
 			expectedCfg: &firecracker.Config{
 				KernelArgs:      "REQUEST KERNEL ARGS",
@@ -180,7 +177,7 @@ func TestBuildVMConfiguration(t *testing.T) {
 				},
 				MachineCfg: models.MachineConfiguration{
 					CPUTemplate: models.CPUTemplateC3,
-					VcpuCount:   firecracker.Int64(2),
+					VcpuCount:   firecracker.Int64(defaultCPUCount),
 					MemSizeMib:  firecracker.Int64(defaultMemSizeMb),
 					HtEnabled:   firecracker.Bool(false),
 				},
@@ -195,7 +192,6 @@ func TestBuildVMConfiguration(t *testing.T) {
 				KernelImagePath: "KERNEL IMAGE",
 				RootDrive:       "ROOT DRIVE",
 				CPUTemplate:     "C3",
-				CPUCount:        2,
 			},
 			expectedCfg: &firecracker.Config{
 				KernelArgs:      "KERNEL ARGS",
@@ -210,7 +206,7 @@ func TestBuildVMConfiguration(t *testing.T) {
 				},
 				MachineCfg: models.MachineConfiguration{
 					CPUTemplate: models.CPUTemplateC3,
-					VcpuCount:   firecracker.Int64(2),
+					VcpuCount:   firecracker.Int64(defaultCPUCount),
 					MemSizeMib:  firecracker.Int64(defaultMemSizeMb),
 					HtEnabled:   firecracker.Bool(false),
 				},

@@ -16,6 +16,8 @@ steps:
   - label: ":docker: Build"
     agents:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
+      distro: "${BUILDKITE_AGENT_META_DATA_DISTRO}"
+      hostname: "${BUILDKITE_AGENT_META_DATA_HOSTNAME}"
     env:
       DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
       EXTRAGOARGS: "-race"
@@ -33,6 +35,8 @@ steps:
   - label: ":lint-roller: loop device cleanup"
     agents:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
+      distro: "${BUILDKITE_AGENT_META_DATA_DISTRO}"
+      hostname: "${BUILDKITE_AGENT_META_DATA_HOSTNAME}"
     command: 'sudo losetup -D'
     concurrency: 1
     concurrency_group: 'loop-device test'
@@ -44,10 +48,16 @@ steps:
   # from running in the event of a validation failure.
   - label: 'git log validation'
     command: './.buildkite/logcheck.sh'
+    # This should run in the same queue, but we don't care whether it runs on
+    # the same host.
+    agents:
+      queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
 
   - label: ":protractor: verify proto"
     agents:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
+      distro: "${BUILDKITE_AGENT_META_DATA_DISTRO}"
+      hostname: "${BUILDKITE_AGENT_META_DATA_HOSTNAME}"
     env:
       DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
     command:
@@ -58,6 +68,8 @@ steps:
   - label: ":golang: go mod tidy"
     agents:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
+      distro: "${BUILDKITE_AGENT_META_DATA_DISTRO}"
+      hostname: "${BUILDKITE_AGENT_META_DATA_HOSTNAME}"
     env:
       DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
     command:
@@ -68,6 +80,8 @@ steps:
   - label: ":gear: unit tests"
     agents:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
+      distro: "${BUILDKITE_AGENT_META_DATA_DISTRO}"
+      hostname: "${BUILDKITE_AGENT_META_DATA_HOSTNAME}"
     env:
       EXTRAGOARGS: "-v -count=1 -race"
     command:
@@ -78,6 +92,8 @@ steps:
   - label: ":rotating_light: :running_shirt_with_sash: runtime isolated tests"
     agents:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
+      distro: "${BUILDKITE_AGENT_META_DATA_DISTRO}"
+      hostname: "${BUILDKITE_AGENT_META_DATA_HOSTNAME}"
     env:
       DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
       NUMBER_OF_VMS: 100
@@ -91,6 +107,8 @@ steps:
   - label: ":rotating_light: :exclamation: example tests (devmapper)"
     agents:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
+      distro: "${BUILDKITE_AGENT_META_DATA_DISTRO}"
+      hostname: "${BUILDKITE_AGENT_META_DATA_HOSTNAME}"
     env:
       DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
       EXTRAGOARGS: "-v -count=1"

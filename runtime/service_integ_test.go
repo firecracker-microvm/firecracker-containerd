@@ -1350,6 +1350,20 @@ func TestStopVM_Isolated(t *testing.T) {
 			},
 		},
 
+		{
+			name: "Jailer",
+			createVMRequest: proto.CreateVMRequest{
+				JailerConfig: &proto.JailerConfig{
+					UID: 300000,
+					GID: 300000,
+				},
+			},
+			stopFunc: func(ctx context.Context, fcClient fccontrol.FirecrackerService, vmID string) {
+				_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
+				require.Equal(status.Code(err), codes.OK)
+			},
+		},
+
 		// Firecracker is too fast to test a case where we hit the timeout on a StopVMRequest.
 		// The rootfs below explicitly sleeps 60 seconds after shutting down the agent to simulate the case.
 		{

@@ -31,7 +31,6 @@ const (
 	defaultFilesPath   = "/var/lib/firecracker-containerd/runtime/"
 	defaultKernelPath  = defaultFilesPath + "default-vmlinux.bin"
 	defaultRootfsPath  = defaultFilesPath + "default-rootfs.img"
-	defaultCPUCount    = 1
 	defaultCPUTemplate = models.CPUTemplateT2
 	defaultShimBaseDir = "/var/lib/firecracker-containerd/shim-base"
 )
@@ -42,7 +41,6 @@ type Config struct {
 	KernelImagePath       string `json:"kernel_image_path"`
 	KernelArgs            string `json:"kernel_args"`
 	RootDrive             string `json:"root_drive"`
-	CPUCount              int    `json:"cpu_count"`
 	CPUTemplate           string `json:"cpu_template"`
 	LogLevel              string `json:"log_level"`
 	HtEnabled             bool   `json:"ht_enabled"`
@@ -83,7 +81,6 @@ func LoadConfig(path string) (*Config, error) {
 		KernelArgs:      defaultKernelArgs,
 		KernelImagePath: defaultKernelPath,
 		RootDrive:       defaultRootfsPath,
-		CPUCount:        defaultCPUCount,
 		CPUTemplate:     string(defaultCPUTemplate),
 		ShimBaseDir:     defaultShimBaseDir,
 	}

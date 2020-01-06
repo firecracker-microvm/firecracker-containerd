@@ -32,7 +32,6 @@ func TestLoadConfigDefaults(t *testing.T) {
 	assert.Equal(t, defaultKernelArgs, cfg.KernelArgs, "expected default kernel args")
 	assert.Equal(t, defaultKernelPath, cfg.KernelImagePath, "expected default kernel path")
 	assert.Equal(t, defaultRootfsPath, cfg.RootDrive, "expected default rootfs path")
-	assert.Equal(t, defaultCPUCount, cfg.CPUCount, "expected default CPU count")
 	assert.Equal(t, string(defaultCPUTemplate), cfg.CPUTemplate, "expected default CPU template")
 }
 
@@ -58,7 +57,6 @@ func TestLoadConfigOverrides(t *testing.T) {
 	assert.Equal(t, overrideKernelArgs, cfg.KernelArgs, "expected overridden kernel args")
 	assert.Equal(t, overrideKernelPath, cfg.KernelImagePath, "expected overridden kernel path")
 	assert.Equal(t, overrideRootfsPath, cfg.RootDrive, "expected overridden rootfs path")
-	assert.Equal(t, overrideCPUCount, cfg.CPUCount, "expected overridden CPU count")
 	assert.Equal(t, overrideCPUTemplate, cfg.CPUTemplate, "expected overridden CPU template")
 }
 

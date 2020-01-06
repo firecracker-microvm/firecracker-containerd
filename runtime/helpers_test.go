@@ -60,12 +60,11 @@ func TestMachineConfigurationFromProto(t *testing.T) {
 			name: "ConfigOnly",
 			config: &config.Config{
 				CPUTemplate: "C3",
-				CPUCount:    vcpuCount,
 			},
 			proto: &proto.FirecrackerMachineConfiguration{},
 			expectedMachineConfig: models.MachineConfiguration{
 				CPUTemplate: models.CPUTemplateC3,
-				VcpuCount:   firecracker.Int64(vcpuCount),
+				VcpuCount:   firecracker.Int64(defaultCPUCount),
 				MemSizeMib:  firecracker.Int64(defaultMemSizeMb),
 				HtEnabled:   firecracker.Bool(false),
 			},
@@ -74,11 +73,10 @@ func TestMachineConfigurationFromProto(t *testing.T) {
 			name: "NilProto",
 			config: &config.Config{
 				CPUTemplate: "C3",
-				CPUCount:    vcpuCount,
 			},
 			expectedMachineConfig: models.MachineConfiguration{
 				CPUTemplate: models.CPUTemplateC3,
-				VcpuCount:   firecracker.Int64(vcpuCount),
+				VcpuCount:   firecracker.Int64(defaultCPUCount),
 				MemSizeMib:  firecracker.Int64(defaultMemSizeMb),
 				HtEnabled:   firecracker.Bool(false),
 			},
@@ -87,7 +85,6 @@ func TestMachineConfigurationFromProto(t *testing.T) {
 			name: "Overrides",
 			config: &config.Config{
 				CPUTemplate: "T2",
-				CPUCount:    vcpuCount + 1,
 			},
 			proto: &proto.FirecrackerMachineConfiguration{
 				CPUTemplate: string(models.CPUTemplateC3),

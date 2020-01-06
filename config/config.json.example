@@ -3,7 +3,6 @@
   "kernel_image_path": "vmlinux",
   "kernel_args": "console=ttyS0 noapic reboot=k panic=1 pci=off nomodules rw",
   "root_drive": "./vsock.img",
-  "cpu_count": 1,
   "cpu_template": "T2",
   "log_level": "Debug",
   "ht_enabled": false

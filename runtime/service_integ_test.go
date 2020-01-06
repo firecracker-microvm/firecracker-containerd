@@ -225,7 +225,7 @@ func createTapDevice(ctx context.Context, tapName string) error {
 }
 
 func TestMultipleVMs_Isolated(t *testing.T) {
-	prepareIntegTest(t, withJailer())
+	prepareIntegTest(t)
 
 	netns, err := ns.GetCurrentNS()
 	require.NoError(t, err, "failed to get a namespace")

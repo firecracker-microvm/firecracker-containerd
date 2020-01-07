@@ -225,7 +225,7 @@ func createTapDevice(ctx context.Context, tapName string) error {
 }
 
 func TestMultipleVMs_Isolated(t *testing.T) {
-	prepareIntegTest(t, withJailer())
+	prepareIntegTest(t)
 
 	netns, err := ns.GetCurrentNS()
 	require.NoError(t, err, "failed to get a namespace")
@@ -1344,6 +1344,20 @@ func TestStopVM_Isolated(t *testing.T) {
 		{
 			name:            "Successful",
 			createVMRequest: proto.CreateVMRequest{},
+			stopFunc: func(ctx context.Context, fcClient fccontrol.FirecrackerService, vmID string) {
+				_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
+				require.Equal(status.Code(err), codes.OK)
+			},
+		},
+
+		{
+			name: "Jailer",
+			createVMRequest: proto.CreateVMRequest{
+				JailerConfig: &proto.JailerConfig{
+					UID: 300000,
+					GID: 300000,
+				},
+			},
 			stopFunc: func(ctx context.Context, fcClient fccontrol.FirecrackerService, vmID string) {
 				_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
 				require.Equal(status.Code(err), codes.OK)

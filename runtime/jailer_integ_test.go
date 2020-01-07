@@ -31,7 +31,7 @@ import (
 )
 
 func TestJailer_Isolated(t *testing.T) {
-	prepareIntegTest(t, withJailer())
+	prepareIntegTest(t)
 	t.Run("Without Jailer", func(t *testing.T) {
 		testJailer(t, nil)
 	})
@@ -85,7 +85,7 @@ func testJailer(t *testing.T, jailerConfig *proto.JailerConfig) {
 }
 
 func TestJailerCPUSet_Isolated(t *testing.T) {
-	prepareIntegTest(t, withJailer())
+	prepareIntegTest(t)
 
 	t.Run("TestJailerCPUSet_Isolated", func(t *testing.T) {
 		b := cpuset.Builder{}

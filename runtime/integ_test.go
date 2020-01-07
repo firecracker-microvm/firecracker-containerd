@@ -40,6 +40,9 @@ var defaultRuntimeConfig = config.Config{
 	LogLevel:              "Debug",
 	Debug:                 true,
 	ShimBaseDir:           shimBaseDir,
+	JailerConfig: config.JailerConfig{
+		RuncBinaryPath: "/usr/local/bin/runc",
+	},
 }
 
 func defaultSnapshotterName() string {
@@ -84,12 +87,6 @@ func writeRuntimeConfig(options ...func(*config.Config)) error {
 	}
 
 	return nil
-}
-
-func withJailer() func(*config.Config) {
-	return func(c *config.Config) {
-		c.JailerConfig.RuncBinaryPath = "/usr/local/bin/runc"
-	}
 }
 
 var testNameToVMIDReplacer = strings.NewReplacer("/", "_")

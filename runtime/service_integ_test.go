@@ -1463,6 +1463,76 @@ func TestStopVM_Isolated(t *testing.T) {
 		})
 	}
 }
+func TestEvents_Isolated(t *testing.T) {
+	prepareIntegTest(t)
+	require := require.New(t)
+
+	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	defer client.Close()
+
+	ctx := namespaces.WithNamespace(context.Background(), "default")
+
+	eventCh, errCh := client.Subscribe(ctx, "topic")
+
+	var events []string
+
+	go func() {
+		for {
+			select {
+			case event := <-eventCh:
+				events = append(events, event.Topic)
+			case err = <-errCh:
+				require.NoError(err)
+			}
+		}
+	}()
+
+	image, err := alpineImage(ctx, client, defaultSnapshotterName())
+	require.NoError(err, "failed to get alpine image")
+
+	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
+	require.NoError(err, "failed to create ttrpc client")
+
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+
+	vmID := testNameToVMID(t.Name())
+
+	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
+	_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{VMID: vmID})
+	require.NoError(err)
+
+	c, err := client.NewContainer(ctx,
+		"container-"+vmID,
+		containerd.WithSnapshotter(defaultSnapshotterName()),
+		containerd.WithNewSnapshot("snapshot-"+vmID, image),
+		containerd.WithNewSpec(oci.WithProcessArgs("/bin/echo", "-n", "hello"), firecrackeroci.WithVMID(vmID)),
+	)
+	require.NoError(err)
+
+	stdout := startAndWaitTask(ctx, t, c)
+	require.Equal("hello", stdout)
+
+	_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
+	require.Equal(status.Code(err), codes.OK)
+
+	// We should wait the goroutine above, instead of just sleeping...
+	time.Sleep(10 * time.Second)
+
+	require.Equal([]string{
+		"/snapshot/prepare",
+		"/snapshot/commit",
+		"/firecracker-vm/start",
+		"/snapshot/prepare",
+		"/containers/create",
+		"/tasks/create",
+		"/tasks/start",
+		"/tasks/exit",
+		"/tasks/delete",
+		"/firecracker-vm/stop",
+	}, events)
+}
 
 func findProcWithName(name string) func(context.Context, *process.Process) (bool, error) {
 	return func(ctx context.Context, p *process.Process) (bool, error) {

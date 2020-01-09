@@ -332,10 +332,6 @@ func (s *service) StartShim(shimCtx context.Context, containerID, containerdBina
 		// task is deleted
 		containerCount = 1
 		exitAfterAllTasksDeleted = true
-
-		log.Info("will start a single-task VM since no VMID has been provided")
-	} else {
-		log.WithField("vmID", s.vmID).Info("will start a persistent VM")
 	}
 
 	client, err := ttrpcutil.NewClient(containerdTTRPCAddress)
@@ -357,6 +353,16 @@ func (s *service) StartShim(shimCtx context.Context, containerID, containerdBina
 			return "", errors.Wrap(err, "unexpected error from CreateVM")
 		}
 	}
+
+	// The shim cannot support traditional -version/-v flag because
+	// - shim.Run() will call flag.Parse(). So our main cannot call flag.Parse() before that.
+	// - -address is required and NewService() won't be called if the flag is missing.
+	// So we log the version informaion here instead
+	str := ""
+	if exitAfterAllTasksDeleted {
+		str = " The VM will be torn down after serving a single task."
+	}
+	log.WithField("vmID", s.vmID).Infof("successfully started shim (%s).%s", revision, str)
 
 	return fcShim.SocketAddress(shimCtx, s.vmID)
 }

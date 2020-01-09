@@ -16,6 +16,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -47,18 +48,29 @@ const (
 	enableSubreaper = 1
 )
 
+var (
+	revision string
+)
+
 func main() {
 	var (
-		port  int
-		debug bool
+		port    int
+		debug   bool
+		version bool
 	)
 
 	flag.IntVar(&port, "port", defaultPort, "Vsock port to listen to")
 	flag.BoolVar(&debug, "debug", false, "Turn on debug mode")
+	flag.BoolVar(&version, "version", false, "Show the version")
 	flag.Parse()
 
 	if debug {
 		logrus.SetLevel(logrus.DebugLevel)
+	}
+
+	if version {
+		showVersion()
+		return
 	}
 
 	signals := make(chan os.Signal, 32)
@@ -154,4 +166,10 @@ func main() {
 		log.G(shimCtx).WithError(err).Error("shim error")
 		panic(err)
 	}
+}
+
+func showVersion() {
+	// Once https://github.com/golang/go/issues/29814 is resolved,
+	// we can use runtime/debug.BuildInfo instead of calling git(1) from Makefile
+	fmt.Printf("containerd Firecracker agent %s\n", revision)
 }

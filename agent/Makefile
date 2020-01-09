@@ -17,14 +17,15 @@ GOMOD := $(shell go env GOMOD)
 GOSUM := $(GOMOD:.mod=.sum)
 SOURCES:=$(shell find . -name '*.go')
 DOCKER_IMAGE_TAG?=latest
+REVISION := $(shell git rev-parse HEAD)
 
 all: agent
 
 agent: *.go $(GOMOD) $(GOSUM)
 ifneq ($(STATIC_AGENT),)
-	CGO_ENABLED=0 go build -installsuffix cgo -a -ldflags "-s" $(EXTRAGOARGS) -o agent
+	CGO_ENABLED=0 go build -installsuffix cgo -a -ldflags "-s -X main.revision=$(REVISION)" $(EXTRAGOARGS) -o agent
 else
-	go build $(EXTRAGOARGS) -o agent
+	go build $(EXTRAGOARGS) -ldflags "-X main.revision=$(REVISION)" -o agent
 endif
 
 test:

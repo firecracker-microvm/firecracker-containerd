@@ -218,17 +218,23 @@ func NewService(shimCtx context.Context, id string, remotePublisher shim.Publish
 }
 
 func (s *service) startEventForwarders(remotePublisher shim.Publisher) {
+	ns, ok := namespaces.Namespace(s.shimCtx)
+	if !ok {
+		s.logger.Error("failed to fetch the namespace from the context")
+	}
+	ctx := namespaces.WithNamespace(context.Background(), ns)
+
 	// Republish each event received on our exchange to the provided remote publisher.
 	// TODO ideally we would be forwarding events instead of re-publishing them, which would
 	// preserve the events' original timestamps and namespaces. However, as of this writing,
 	// the containerd v2 runtime model only provides a shim with a publisher, not a forwarder.
-	republishCh := eventbridge.Republish(s.shimCtx, s.eventExchange, remotePublisher)
+	republishCh := eventbridge.Republish(ctx, s.eventExchange, remotePublisher)
 
 	go func() {
 		<-s.vmReady
 
 		// Once the VM is ready, also start forwarding events from it to our exchange
-		attachCh := eventbridge.Attach(s.shimCtx, s.eventBridgeClient, s.eventExchange)
+		attachCh := eventbridge.Attach(ctx, s.eventBridgeClient, s.eventExchange)
 
 		err := <-attachCh
 		if err != nil && err != context.Canceled {

@@ -1476,29 +1476,16 @@ func TestEvents_Isolated(t *testing.T) {
 
 	ctx := namespaces.WithNamespace(context.Background(), "default")
 
-	eventCh, errCh := client.Subscribe(ctx, "topic")
-
-	var events []string
-
-	go func() {
-		for {
-			select {
-			case event := <-eventCh:
-				events = append(events, event.Topic)
-			case err = <-errCh:
-				require.NoError(err)
-			}
-		}
-	}()
+	// If we don't have enough events within 30 seconds, the context will be cancelled and the loop below will be interrupted
+	subscribeCtx, subscribeCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer subscribeCancel()
+	eventCh, errCh := client.Subscribe(subscribeCtx, "topic")
 
 	image, err := alpineImage(ctx, client, defaultSnapshotterName())
 	require.NoError(err, "failed to get alpine image")
 
 	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
 	require.NoError(err, "failed to create ttrpc client")
-
-	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
-	defer cancel()
 
 	vmID := testNameToVMID(t.Name())
 
@@ -1520,10 +1507,7 @@ func TestEvents_Isolated(t *testing.T) {
 	_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
 	require.Equal(status.Code(err), codes.OK)
 
-	// We should wait the goroutine above, instead of just sleeping...
-	time.Sleep(10 * time.Second)
-
-	require.Equal([]string{
+	expected := []string{
 		"/snapshot/prepare",
 		"/snapshot/commit",
 		"/firecracker-vm/start",
@@ -1534,7 +1518,20 @@ func TestEvents_Isolated(t *testing.T) {
 		"/tasks/exit",
 		"/tasks/delete",
 		"/firecracker-vm/stop",
-	}, events)
+	}
+	var actual []string
+
+loop:
+	for len(actual) < len(expected) {
+		select {
+		case event := <-eventCh:
+			actual = append(actual, event.Topic)
+		case err := <-errCh:
+			assert.NoError(t, err)
+			break loop
+		}
+	}
+	require.Equal(expected, actual)
 }
 
 func findProcWithName(name string) func(context.Context, *process.Process) (bool, error) {

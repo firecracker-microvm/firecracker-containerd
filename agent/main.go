@@ -171,5 +171,5 @@ func main() {
 func showVersion() {
 	// Once https://github.com/golang/go/issues/29814 is resolved,
 	// we can use runtime/debug.BuildInfo instead of calling git(1) from Makefile
-	fmt.Printf("containerd Firecracker agent %s\n", revision)
+	fmt.Printf("containerd Firecracker agent (git commit: %s)\n", revision)
 }

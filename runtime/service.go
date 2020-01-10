@@ -362,7 +362,7 @@ func (s *service) StartShim(shimCtx context.Context, containerID, containerdBina
 	if exitAfterAllTasksDeleted {
 		str = " The VM will be torn down after serving a single task."
 	}
-	log.WithField("vmID", s.vmID).Infof("successfully started shim (%s).%s", revision, str)
+	log.WithField("vmID", s.vmID).Infof("successfully started shim (git commit: %s).%s", revision, str)
 
 	return fcShim.SocketAddress(shimCtx, s.vmID)
 }

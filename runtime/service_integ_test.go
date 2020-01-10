@@ -1323,6 +1323,7 @@ func TestRandomness_Isolated(t *testing.T) {
 func TestStopVM_Isolated(t *testing.T) {
 	prepareIntegTest(t)
 	require := require.New(t)
+	assert := assert.New(t)
 
 	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
 	require.NoError(err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
@@ -1375,7 +1376,9 @@ func TestStopVM_Isolated(t *testing.T) {
 			},
 			stopFunc: func(ctx context.Context, fcClient fccontrol.FirecrackerService, vmID string) {
 				_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
-				require.Equal(status.Code(err), codes.DeadlineExceeded)
+				errCode := status.Code(err)
+				assert.NotEqual(codes.Unknown, errCode, "the error code must not be Unknown")
+				assert.Equal(codes.DeadlineExceeded, errCode, "the error code must be DeadlineExceeded")
 			},
 		},
 

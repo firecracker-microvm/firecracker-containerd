@@ -33,7 +33,6 @@ import (
 	"math/rand" // #nosec
 
 	"github.com/containerd/containerd/errdefs"
-	"github.com/containerd/containerd/events"
 	"github.com/containerd/containerd/events/exchange"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/namespaces"
@@ -218,25 +217,30 @@ func NewService(shimCtx context.Context, id string, remotePublisher shim.Publish
 	return s, nil
 }
 
-func (s *service) startEventForwarders(remotePublisher events.Publisher) {
+func (s *service) startEventForwarders(remotePublisher shim.Publisher) {
 	// Republish each event received on our exchange to the provided remote publisher.
 	// TODO ideally we would be forwarding events instead of re-publishing them, which would
 	// preserve the events' original timestamps and namespaces. However, as of this writing,
 	// the containerd v2 runtime model only provides a shim with a publisher, not a forwarder.
-	go func() {
-		err := <-eventbridge.Republish(s.shimCtx, s.eventExchange, remotePublisher)
-		if err != nil && err != context.Canceled {
-			s.logger.WithError(err).Error("error while republishing events")
-		}
-	}()
+	republishCh := eventbridge.Republish(s.shimCtx, s.eventExchange, remotePublisher)
 
-	// Once the VM is ready, also start forwarding events from it to our exchange
 	go func() {
 		<-s.vmReady
-		err := <-eventbridge.Attach(s.shimCtx, s.eventBridgeClient, s.eventExchange)
+
+		// Once the VM is ready, also start forwarding events from it to our exchange
+		attachCh := eventbridge.Attach(s.shimCtx, s.eventBridgeClient, s.eventExchange)
+
+		err := <-attachCh
 		if err != nil && err != context.Canceled {
 			s.logger.WithError(err).Error("error while forwarding events from VM agent")
 		}
+
+		err = <-republishCh
+		if err != nil && err != context.Canceled {
+			s.logger.WithError(err).Error("error while republishing events")
+		}
+
+		remotePublisher.Close()
 	}()
 }
 

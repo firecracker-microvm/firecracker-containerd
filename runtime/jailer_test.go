@@ -15,11 +15,15 @@ package main
 
 import (
 	"context"
+	"io/ioutil"
 	"os"
+	"path/filepath"
+	"syscall"
 	"testing"
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 )
@@ -36,6 +40,45 @@ func TestCopyFile_simple(t *testing.T) {
 	info, err := os.Stat(dstPath)
 	assert.NoError(t, err, "failed to stat file")
 	assert.Equal(t, os.FileMode(expectedMode), info.Mode())
+	assert.NotEqual(t, 0, int(info.Size()))
+}
+
+func createSparseFile(path string, size int) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	err = f.Truncate(int64(size))
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+func TestCopyFile_sparse(t *testing.T) {
+	dir, err := ioutil.TempDir("", t.Name())
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	expectedSize := 1024
+
+	src := filepath.Join(dir, "original-sparse-file")
+	err = createSparseFile(src, expectedSize)
+	require.NoError(t, err)
+
+	dst := filepath.Join(dir, "copied-as-sparse")
+	err = copyFile(src, dst, 0600)
+	require.NoError(t, err, "failed to copy file")
+
+	stat, err := os.Stat(dst)
+	require.NoError(t, err)
+	assert.Equal(t, expectedSize, int(stat.Size()), "metadata-wise, the file is not empty")
+
+	unixStat, ok := (stat.Sys()).(*syscall.Stat_t)
+	require.True(t, ok)
+	assert.Equal(t, int64(0), unixStat.Blocks, "it doesn't allocate any blocks, since the file is empty")
 }
 
 func TestCopyFile_invalidPaths(t *testing.T) {

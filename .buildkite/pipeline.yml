@@ -16,7 +16,7 @@ steps:
   - label: ":docker: Build"
     agents:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
-      distro: "debian"
+      distro: "${BUILDKITE_AGENT_META_DATA_DISTRO}"
       hostname: "${BUILDKITE_AGENT_META_DATA_HOSTNAME}"
     env:
       DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
@@ -35,7 +35,7 @@ steps:
   - label: ":lint-roller: loop device cleanup"
     agents:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
-      distro: "debian"
+      distro: "${BUILDKITE_AGENT_META_DATA_DISTRO}"
       hostname: "${BUILDKITE_AGENT_META_DATA_HOSTNAME}"
     command: 'sudo losetup -D'
     concurrency: 1
@@ -56,7 +56,7 @@ steps:
   - label: ":protractor: verify proto"
     agents:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
-      distro: "debian"
+      distro: "${BUILDKITE_AGENT_META_DATA_DISTRO}"
       hostname: "${BUILDKITE_AGENT_META_DATA_HOSTNAME}"
     env:
       DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
@@ -68,7 +68,7 @@ steps:
   - label: ":golang: go mod tidy"
     agents:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
-      distro: "debian"
+      distro: "${BUILDKITE_AGENT_META_DATA_DISTRO}"
       hostname: "${BUILDKITE_AGENT_META_DATA_HOSTNAME}"
     env:
       DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
@@ -80,7 +80,7 @@ steps:
   - label: ":gear: unit tests"
     agents:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
-      distro: "debian"
+      distro: "${BUILDKITE_AGENT_META_DATA_DISTRO}"
       hostname: "${BUILDKITE_AGENT_META_DATA_HOSTNAME}"
     env:
       EXTRAGOARGS: "-v -count=1 -race"
@@ -92,7 +92,7 @@ steps:
   - label: ":rotating_light: :running_shirt_with_sash: runtime isolated tests"
     agents:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
-      distro: "debian"
+      distro: "${BUILDKITE_AGENT_META_DATA_DISTRO}"
       hostname: "${BUILDKITE_AGENT_META_DATA_HOSTNAME}"
     env:
       DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
@@ -104,21 +104,10 @@ steps:
       - make -C runtime integ-test FICD_SNAPSHOTTER=devmapper FICD_DM_POOL=build_${BUILDKITE_BUILD_NUMBER}_runtime
     timeout_in_minutes: 15
 
-  - label: ":rhel: al2 tests"
-    agents:
-      distro: "amzn"
-      queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
-    env:
-      NUMBER_OF_VMS: "5"
-    command:
-      - sudo -E env "PATH=$PATH" /usr/local/bin/go test -tags al2 -run TestMultipleVMs_AL2 ./...
-    timeout_in_minutes: 10
-
-
   - label: ":rotating_light: :exclamation: example tests (devmapper)"
     agents:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
-      distro: "debian"
+      distro: "${BUILDKITE_AGENT_META_DATA_DISTRO}"
       hostname: "${BUILDKITE_AGENT_META_DATA_HOSTNAME}"
     env:
       DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
@@ -128,3 +117,4 @@ steps:
     command:
       - make -C examples integ-test TEST_SS=devmapper TEST_POOL=build_${BUILDKITE_BUILD_NUMBER}_example
     timeout_in_minutes: 10
+

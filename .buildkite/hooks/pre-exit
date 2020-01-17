@@ -1,7 +1,7 @@
 #!/bin/bash
 set -eu
 
-make -C "$BUILDKITE_BUILD_CHECKOUT_PATH" clean
+sudo make -C "$BUILDKITE_BUILD_CHECKOUT_PATH" clean
 
 # clean up ephemeral files since this will cause an error to build kite due to
 # these files being owned by root

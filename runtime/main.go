@@ -23,6 +23,8 @@ import (
 
 const shimID = "aws.firecracker"
 
+var revision string
+
 func init() {
 	logrus.SetFormatter(&logrus.TextFormatter{
 		TimestampFormat: log.RFC3339NanoFixed,

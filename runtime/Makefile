@@ -22,6 +22,8 @@ DOCKER_IMAGE_TAG?=latest
 GO_CACHE_VOLUME_NAME?=gocache
 FIRECRACKER_CONTAINERD_TEST_IMAGE?=localhost/firecracker-containerd-test
 
+REVISION=$(shell git rev-parse HEAD)
+
 INTEG_TEST_SUFFIX := _Isolated
 INTEG_TESTNAMES=$(shell docker run --rm \
 	--network=none \
@@ -37,7 +39,7 @@ all: runtime
 runtime: containerd-shim-aws-firecracker
 
 containerd-shim-aws-firecracker: $(SOURCES) $(GOMOD) $(GOSUM)
-	go build -o containerd-shim-aws-firecracker $(EXTRAGOARGS)
+	go build -o containerd-shim-aws-firecracker $(EXTRAGOARGS) -ldflags "-X main.revision=$(REVISION)"
 
 install: containerd-shim-aws-firecracker
 	install -D -o root -g root -m755 -t $(INSTALLROOT)/bin containerd-shim-aws-firecracker

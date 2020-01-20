@@ -17,16 +17,20 @@ EXTRAGOARGS:=
 SRC := $(shell find . -name '*.go')
 GOMOD := $(shell go env GOMOD)
 GOSUM := $(GOMOD:.mod=.sum)
+REVISION=$(shell git rev-parse HEAD)
+VERSION_LDFLAGS="-X github.com/containerd/containerd/version.Revision=$(REVISION)"
 
 all: build
 
 build: firecracker-containerd firecracker-ctr
 
 firecracker-containerd: $(SRC) $(GOMOD) $(GOSUM)
-	go build $(EXTRAGOARGS) -o firecracker-containerd
+	go build $(EXTRAGOARGS) \
+		-ldflags $(VERSION_LDFLAGS) -o firecracker-containerd
 
 firecracker-ctr: $(GOMOD) $(GOSUM)
-	GOBIN=$(CURDIR) go install -tags=no_cri $(EXTRAGOARGS) github.com/containerd/containerd/cmd/ctr
+	GOBIN=$(CURDIR) go install -tags=no_cri $(EXTRAGOARGS) \
+		-ldflags $(VERSION_LDFLAGS) github.com/containerd/containerd/cmd/ctr
 	mv ctr firecracker-ctr
 
 install: firecracker-containerd firecracker-ctr

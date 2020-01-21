@@ -1,8 +1,8 @@
 #!/bin/bash
 
 shim_base=/tmp/shim-base
-uuid=$BUILDKITE_BUILD_NUMBER
-dir=$shim_base/$uuid
+unique_id=$BUILDKITE_BUILD_NUMBER
+dir=$shim_base/$unique_id
 bin_path=$dir/bin
 devmapper_path=$dir/devmapper
 state_path=$dir/state

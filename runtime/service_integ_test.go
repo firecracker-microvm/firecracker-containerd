@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -60,22 +61,29 @@ import (
 const (
 	defaultNamespace = namespaces.Default
 
-	containerdSockPath = "/run/containerd/containerd.sock"
-
 	firecrackerRuntime     = "aws.firecracker"
 	shimProcessName        = "containerd-shim-aws-firecracker"
 	firecrackerProcessName = "firecracker"
 
-	defaultVMRootfsPath = "/var/lib/firecracker-containerd/runtime/default-rootfs.img"
 	defaultVMNetDevName = "eth0"
 	numberOfVmsEnvName  = "NUMBER_OF_VMS"
 	defaultNumberOfVms  = 5
+
+	containerdSockPathEnvVar = "CONTAINERD_SOCKET"
 )
 
 var (
 	findShim        = findProcWithName(shimProcessName)
 	findFirecracker = findProcWithName(firecrackerProcessName)
+
+	containerdSockPath = "/run/containerd/containerd.sock"
 )
+
+func init() {
+	if v := os.Getenv(containerdSockPathEnvVar); v != "" {
+		containerdSockPath = v
+	}
+}
 
 // Images are presumed by the isolated tests to have already been pulled
 // into the content store. This will just unpack the layers into an
@@ -211,6 +219,18 @@ func vmIDtoMacAddr(vmID uint) string {
 	return strings.Join(addrParts, ":")
 }
 
+func deleteTapDevice(ctx context.Context, tapName string) error {
+	if err := exec.CommandContext(ctx, "ip", "link", "delete", tapName).Run(); err != nil {
+		return err
+	}
+
+	if err := exec.CommandContext(ctx, "ip", "tuntap", "del", tapName, "mode", "tap").Run(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func createTapDevice(ctx context.Context, tapName string) error {
 	err := exec.CommandContext(ctx, "ip", "tuntap", "add", tapName, "mode", "tap").Run()
 	if err != nil {
@@ -225,7 +245,39 @@ func createTapDevice(ctx context.Context, tapName string) error {
 	return nil
 }
 
+type testMultipleVMsRunner struct {
+	containers []containerd.Container
+}
+
+func (runner *testMultipleVMsRunner) ImportPath() string { return "" }
+func (runner *testMultipleVMsRunner) MatchString(pat, str string) (bool, error) {
+	return pat == str, nil
+}
+func (runner *testMultipleVMsRunner) StartCPUProfile(w io.Writer) error                   { return nil }
+func (runner *testMultipleVMsRunner) StopCPUProfile()                                     {}
+func (runner *testMultipleVMsRunner) StartTestLog(w io.Writer)                            {}
+func (runner *testMultipleVMsRunner) StopTestLog() error                                  { return nil }
+func (runner *testMultipleVMsRunner) WriteProfileTo(str string, w io.Writer, n int) error { return nil }
+
 func TestMultipleVMs_Isolated(t *testing.T) {
+	runner := &testMultipleVMsRunner{}
+	tests := []testing.InternalTest{
+		{
+			Name: "TestMultipleVMs_Isolated",
+			F:    runner.TestMultipleVMs,
+		},
+	}
+	m := testing.MainStart(runner, tests, nil, nil)
+	code := m.Run()
+	for _, container := range runner.containers {
+		err := container.Delete(context.Background())
+		t.Log(err)
+	}
+
+	os.Exit(code)
+}
+
+func (runner *testMultipleVMsRunner) TestMultipleVMs(t *testing.T) {
 	prepareIntegTest(t)
 
 	netns, err := ns.GetCurrentNS()
@@ -270,6 +322,9 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
 	require.NoError(t, err, "failed to create ttrpc client")
 
+	cfg, err := config.LoadConfig("")
+	require.NoError(t, err, "failed to load config")
+
 	// This test spawns separate VMs in parallel and ensures containers are spawned within each expected VM. It asserts each
 	// container ends up in the right VM by assigning each VM a network device with a unique mac address and having each container
 	// print the mac address it sees inside its VM.
@@ -283,10 +338,11 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 
 			tapName := fmt.Sprintf("tap%d", vmID)
 			err := createTapDevice(ctx, tapName)
+			defer deleteTapDevice(ctx, tapName)
 
 			require.NoError(t, err, "failed to create tap device for vm %d", vmID)
 
-			rootfsPath := defaultVMRootfsPath
+			rootfsPath := cfg.RootDrive
 
 			vmIDStr := strconv.Itoa(vmID)
 			fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
@@ -321,7 +377,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 				containerWg.Add(1)
 				go func(containerID int) {
 					defer containerWg.Done()
-					testMultipleExecs(
+					runner.testMultipleExecs(
 						ctx,
 						t,
 						vmID,
@@ -366,7 +422,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 	vmWg.Wait()
 }
 
-func testMultipleExecs(
+func (runner *testMultipleVMsRunner) testMultipleExecs(
 	ctx context.Context,
 	t *testing.T,
 	vmID int,
@@ -399,6 +455,7 @@ func testMultipleExecs(
 		),
 	)
 	require.NoError(t, err, "failed to create container %s", containerName)
+	runner.containers = append(runner.containers, newContainer)
 
 	var taskStdout bytes.Buffer
 	var taskStderr bytes.Buffer
@@ -438,7 +495,7 @@ func testMultipleExecs(
 	if jailerConfig != nil {
 		jailer := &runcJailer{
 			Config: runcJailerConfig{
-				OCIBundlePath: filepath.Join(shimBaseDir, vmIDStr),
+				OCIBundlePath: filepath.Join(shimBaseDir(), vmIDStr),
 			},
 			vmID: vmIDStr,
 		}

@@ -29,7 +29,8 @@ import (
 )
 
 const runtimeConfigPath = "/etc/containerd/firecracker-runtime.json"
-const shimBaseDir = "/srv/firecracker_containerd_tests"
+const shimBaseDirEnvVar = "SHIM_BASE_DIR"
+const defaultShimBaseDir = "/srv/firecracker_containerd_tests"
 
 var defaultRuntimeConfig = config.Config{
 	FirecrackerBinaryPath: "/usr/local/bin/firecracker",
@@ -39,10 +40,19 @@ var defaultRuntimeConfig = config.Config{
 	CPUTemplate:           "T2",
 	LogLevel:              "Debug",
 	Debug:                 true,
-	ShimBaseDir:           shimBaseDir,
+	ShimBaseDir:           shimBaseDir(),
 	JailerConfig: config.JailerConfig{
 		RuncBinaryPath: "/usr/local/bin/runc",
+		RuncConfigPath: "/etc/containerd/firecracker-runc-config.json",
 	},
+}
+
+func shimBaseDir() string {
+	if v := os.Getenv(shimBaseDirEnvVar); v != "" {
+		return v
+	}
+
+	return defaultShimBaseDir
 }
 
 func defaultSnapshotterName() string {

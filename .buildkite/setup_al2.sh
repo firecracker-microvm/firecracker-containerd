@@ -1,31 +1,25 @@
 #!/bin/bash
 
+set -eux
+
 source ./.buildkite/al2env.sh
 
-echo "Creating necessary directories"
-
 mkdir -p $dir
+mkdir -p $dir/rootfs
 mkdir -p $bin_path
 mkdir -p $devmapper_path
 mkdir -p $state_path
 
-echo "Resetting thinpool $uuid"
-./tools/thinpool.sh reset $uuid
+./tools/thinpool.sh reset $unique_id
 
 export INSTALLROOT=$dir
 export FIRECRACKER_CONTAINERD_RUNTIME_DIR=$dir
-echo "Running make"
-sudo make
-echo "Running make install"
-sudo -E "INSTALLROOT=$INSTALLROOT" make install
-echo "Running make install-default-vmlinux"
-sudo make install-default-vmlinux
-echo "Running make image"
-sudo make image
-echo "Running make install-default-rootfs"
-sudo make install-default-rootfs
+make
+sudo -E INSTALLROOT=$INSTALLROOT PATH=$PATH make install
+cp /var/lib/fc-ci/vmlinux.bin $dir/default-vmlinux.bin
+make image
+sudo -E PATH=$PATH make install-default-rootfs
 
-echo "Creating $dir/config.toml"
 cat << EOF > $dir/config.toml
 disabled_plugins = ["cri"]
 root = "$dir"
@@ -34,14 +28,13 @@ state = "$state_path"
   address = "$dir/containerd.sock"
 [plugins]
   [plugins.devmapper]
-    pool_name = "fcci--vg-$uuid"
+    pool_name = "fcci--vg-$unique_id"
     base_image_size = "10GB"
     root_path = "$devmapper_path"
 [debug]
   level = "debug"
 EOF
 
-echo "Creating $runtime_config_path"
 cat << EOF > $runtime_config_path
 {
 	"cpu_template": "T2",
@@ -59,7 +52,5 @@ cat << EOF > $runtime_config_path
 }
 EOF
 
-echo "Copying firecracker-runc-config.json"
 cp ./runtime/firecracker-runc-config.json.example $dir/config.json
-echo "Copying runc"
 cp ./_submodules/runc/runc $bin_path/runc

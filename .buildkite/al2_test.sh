@@ -1,15 +1,17 @@
 #!/bin/bash
+set -eu
 
 source ./.buildkite/al2env.sh
 
 export PATH=$bin_path:$PATH
+export FIRECRACKER_CONTAINERD_RUNTIME_CONFIG_PATH=$runtime_config_path
+export ENABLE_ISOLATED_TESTS=true
+export CONTAINERD_SOCKET=$dir/containerd.sock 
+export SHIM_BASE_DIR=$dir
 
-sudo -E "FIRECRACKER_CONTAINERD_RUNTIME_CONFIG_PATH=$runtime_config_path" $bin_path/firecracker-containerd --config $dir/config.toml &
+sudo -E PATH=$PATH $bin_path/firecracker-containerd --config $dir/config.toml &
 containerd_pid=$!
 sudo $bin_path/firecracker-ctr --address $dir/containerd.sock content fetch docker.io/library/alpine:3.10.1
-sudo -E env "PATH=$PATH" /usr/local/bin/go test -run TestMultipleVMs_Isolated ./...
+sudo -E PATH=$bin_path:$PATH /usr/local/bin/go test -count=1 -run TestMultipleVMs_Isolated ./... -v
 
-# cleanup
-sudo kill -9 $containerd_pid
-sudo rm -rf $dir
-./tools/thinpool.sh remove $uuid
+sudo kill $containerd_pid

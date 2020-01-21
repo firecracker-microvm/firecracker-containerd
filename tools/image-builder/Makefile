@@ -88,7 +88,6 @@ builder_stamp:
 %-in-docker: builder_stamp
 	docker run --rm \
 		--security-opt=apparmor=unconfined \
-		-it \
 		--volume $(CURDIR):/src \
 		--volume /src/tmp \
 		--cap-add=sys_admin \

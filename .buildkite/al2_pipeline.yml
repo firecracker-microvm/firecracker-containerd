@@ -1,0 +1,90 @@
+# Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"). You may
+# not use this file except in compliance with the License. A copy of the
+# License is located at
+#
+# 	http://aws.amazon.com/apache2.0/
+#
+# or in the "license" file accompanying this file. This file is distributed
+# on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+# express or implied. See the License for the specific language governing
+# permissions and limitations under the License.
+
+steps:
+
+  - label: ":docker: Build"
+    agents:
+      queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
+      distro: "${BUILDKITE_AGENT_META_DATA_DISTRO}"
+      hostname: "${BUILDKITE_AGENT_META_DATA_HOSTNAME}"
+    env:
+      DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
+      EXTRAGOARGS: "-race"
+    command:
+      - ./.buildkite/setup_al2.sh
+      - docker run --rm -v $PWD:/mnt debian:stretch-slim rm -rf /mnt/tools/image-builder/rootfs
+      - sudo install -d -o root -g buildkite-agent -m 775 "/local/artifacts/$BUILDKITE_BUILD_NUMBER"
+      - cp tools/image-builder/rootfs.img "/local/artifacts/$BUILDKITE_BUILD_NUMBER/"
+
+  - wait
+
+    # Global concurrency has been set to one in the website configuration.
+    # With that we can now clean up loop devices before starting jobs to ensure
+    # we don't hit the loop device limit
+  - label: ":lint-roller: loop device cleanup"
+    agents:
+      queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
+      distro: "${BUILDKITE_AGENT_META_DATA_DISTRO}"
+      hostname: "${BUILDKITE_AGENT_META_DATA_HOSTNAME}"
+    command: 'sudo losetup -D'
+    concurrency: 1
+    concurrency_group: 'loop-device test'
+
+  - wait
+
+  # Git history validation happens after the 'wait' step so it happens
+  # in parallel with the subsequent tests and does not prevent them
+  # from running in the event of a validation failure.
+  - label: 'git log validation'
+    command: './.buildkite/logcheck.sh'
+    # This should run in the same queue, but we don't care whether it runs on
+    # the same host.
+    agents:
+      queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
+
+  - label: ":protractor: verify proto"
+    agents:
+      queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
+      distro: "${BUILDKITE_AGENT_META_DATA_DISTRO}"
+      hostname: "${BUILDKITE_AGENT_META_DATA_HOSTNAME}"
+    env:
+      DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
+    command:
+      - make proto
+      - test -z "$(git status --porcelain)" && exit 0 || git status && echo -e '\nGenerated protobuf code differs from committed, please run "make proto" and commit the updated files.\n' && exit 1
+    timeout_in_minutes: 1
+
+  - label: ":golang: go mod tidy"
+    agents:
+      queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
+      distro: "${BUILDKITE_AGENT_META_DATA_DISTRO}"
+      hostname: "${BUILDKITE_AGENT_META_DATA_HOSTNAME}"
+    env:
+      DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
+    command:
+      - sudo make tidy-in-docker
+      - test -z "$(git status --porcelain)" && exit 0 || git status && echo -e '\ngo.mod and/or go.sum differ from committed, please run "go mod tidy" and commit the updated files.\n' && exit 1
+    timeout_in_minutes: 1
+    
+  - label: ":onion: al2 tests"
+    agents:
+      queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
+      distro: "${BUILDKITE_AGENT_META_DATA_DISTRO}"
+      hostname: "${BUILDKITE_AGENT_META_DATA_HOSTNAME}"
+    env:
+      NUMBER_OF_VMS: "5"
+    command:
+      - ./.buildkite/al2_test.sh
+    timeout_in_minutes: 10
+

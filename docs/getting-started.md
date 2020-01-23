@@ -43,6 +43,7 @@ You need to have the following things in order to use firecracker-containerd:
   as `hello-rootfs.ext4`). 
 * A recent installation of [Docker CE](https://docker.com).
 * Go 1.11 or later, which you can download from [here](https://golang.org/dl/).
+* GCC compiler
 
 ## Setup
 

@@ -14,9 +14,11 @@
 package vm
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/mdlayher/vsock"
@@ -184,14 +186,6 @@ func vsockConnectMsg(port uint32) string {
 	return fmt.Sprintf("CONNECT %d\n", port)
 }
 
-func vsockAckMsg(port uint32) string {
-	// The message a guest-side connection will write after accepting a connection from
-	// a host dial. This is not part of the official Firecracker vsock spec, but is
-	// recommended in order to allow the host to verify connections were established
-	// successfully: https://github.com/firecracker-microvm/firecracker/issues/1272#issuecomment-533004066
-	return fmt.Sprintf("IMALIVE %d\n", port)
-}
-
 // tryConnect attempts to dial a guest vsock listener at the provided host-side
 // unix socket and provided guest-listener port.
 func tryConnect(logger *logrus.Entry, udsPath string, port uint32) (net.Conn, error) {
@@ -215,9 +209,17 @@ func tryConnect(logger *logrus.Entry, udsPath string, port uint32) (net.Conn, er
 		return nil, vsockConnectMsgError{cause: err}
 	}
 
-	err = tryConnRead(conn, vsockAckMsg(port), vsockAckMsgTimeout)
+	line, err := tryConnReadUntil(conn, '\n', vsockAckMsgTimeout)
 	if err != nil {
 		return nil, vsockAckError{cause: err}
+	}
+
+	// The line would be "OK <assigned_hostside_port>\n", but we don't use the hostside port here.
+	// https://github.com/firecracker-microvm/firecracker/blob/master/docs/vsock.md#host-initiated-connections
+	if !strings.HasPrefix(line, "OK ") {
+		return nil, vsockAckError{
+			cause: errors.Errorf(`expected to read "OK <port>", but instead read %q`, line),
+		}
 	}
 	return conn, nil
 }
@@ -240,35 +242,19 @@ func tryAccept(logger *logrus.Entry, listener net.Listener, port uint32) (net.Co
 		}
 	}()
 
-	err = tryConnWrite(conn, vsockAckMsg(port), vsockAckMsgTimeout)
-	if err != nil {
-		return nil, vsockAckError{cause: err}
-	}
-
 	return conn, nil
 }
 
-// tryConnRead will try to do a read from the provided conn, returning an error if
-// the bytes read does not match what was provided or if the read does not complete
+// tryConnReadUntil will try to do a read from the provided conn until the specified
+// end character is encounteed. Returning an error if the read does not complete
 // within the provided timeout. It will reset socket deadlines to none after returning.
 // It's only intended to be used for connect/ack messages, not general purpose reads
 // after the vsock connection is established fully.
-func tryConnRead(conn net.Conn, expectedRead string, timeout time.Duration) error {
+func tryConnReadUntil(conn net.Conn, end byte, timeout time.Duration) (string, error) {
 	conn.SetDeadline(time.Now().Add(timeout))
 	defer conn.SetDeadline(time.Time{})
 
-	actualRead := make([]byte, len(expectedRead))
-	_, err := conn.Read(actualRead)
-	if err != nil {
-		return err
-	}
-
-	if expectedRead != string(actualRead) {
-		return errors.Errorf("expected to read %q, but instead read %q",
-			expectedRead, string(actualRead))
-	}
-
-	return nil
+	return bufio.NewReaderSize(conn, 32).ReadString(end)
 }
 
 // tryConnWrite will try to do a write to the provided conn, returning an error if

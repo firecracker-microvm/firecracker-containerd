@@ -17,7 +17,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -348,23 +347,12 @@ func exposeBlockDeviceToJail(dst string, rdev, uid, gid int) error {
 }
 
 func copyFile(src, dst string, mode os.FileMode) error {
-	srcFile, err := os.Open(src)
+	// --sparse=always is a GNU-only option
+	output, err := exec.Command("cp", "--sparse=always", src, dst).CombinedOutput()
 	if err != nil {
-		return errors.Wrapf(err, "failed to open %v", src)
+		return errors.Wrapf(err, "failed to copy %q to %q: %s", src, dst, output)
 	}
-	defer srcFile.Close()
-
-	dstFile, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_EXCL, mode)
-	if err != nil {
-		return errors.Wrapf(err, "failed to open %v", dstFile)
-	}
-	defer dstFile.Close()
-
-	_, err = io.Copy(dstFile, srcFile)
-	if err != nil {
-		return errors.Wrap(err, "failed to copy to destination")
-	}
-	return nil
+	return os.Chmod(dst, mode)
 }
 
 func (j *runcJailer) jailerCommand(containerName string, isDebug bool) *exec.Cmd {

@@ -90,7 +90,7 @@ func TestCNISupport_Isolated(t *testing.T) {
 			defer vmGroup.Done()
 
 			fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
-			_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
+			_, err := fcClient.CreateVM(ctx, &proto.CreateVMRequest{
 				VMID: vmID,
 				MachineCfg: &proto.FirecrackerMachineConfiguration{
 					MemSizeMib: 512,

@@ -41,17 +41,15 @@ integ-test:
 		--volume $(CURDIR)/etc/containerd/firecracker-runtime.json:/etc/containerd/firecracker-runtime.json \
 		--volume $(CURDIR)/logs:/var/log/firecracker-containerd-test \
 		--volume $(CURDIR)/..:/src \
-		--env FICD_SNAPSHOTTER=$(TEST_SS) \
 		--env FICD_DM_POOL=$(TEST_POOL) \
 		--env EXTRAGOARGS="${EXTRAGOARGS}" \
 		--workdir="/src/examples" \
 		$(FIRECRACKER_CONTAINERD_TEST_IMAGE):${DOCKER_IMAGE_TAG} \
-		"make examples && make testtap && sleep 3 && ./taskworkflow -ip $(TEST_IP)$(TEST_SUBNET) -gw $(TEST_GATEWAY) -ss $(TEST_SS)"
+		"make examples && make testtap && sleep 3 && ./taskworkflow -ip $(TEST_IP)$(TEST_SUBNET) -gw $(TEST_GATEWAY) -ss devmapper"
 
 TEST_GATEWAY?=172.16.0.1
 TEST_IP?=172.16.0.2
 TEST_SUBNET?=/24
-TEST_SS?=devmapper
 TEST_POOL?=
 testtap:
 	ip link add br0 type bridge

@@ -62,7 +62,6 @@ integ-test-%: logs
 		--volume $(CURDIR)/..:/src \
 		--volume $(GO_CACHE_VOLUME_NAME):/go \
 		--env ENABLE_ISOLATED_TESTS=1 \
-		--env FICD_SNAPSHOTTER=$(FICD_SNAPSHOTTER) \
 		--env FICD_DM_POOL=$(FICD_DM_POOL) \
 		--env GOPROXY=direct \
 		--env GOSUMDB=off \
@@ -81,7 +80,6 @@ PERF_RUNTIME_SECONDS?=600
 PERF_VM_MEMSIZE_MB?=1024
 PERF_TARGET_BANDWIDTH?=1G
 
-FICD_SNAPSHOTTER?=devmapper
 FICD_DM_POOL?=
 
 tc-redirect-tap-perf:
@@ -109,7 +107,6 @@ perf-test:
 		--env PERF_RUNTIME_SECONDS=$(PERF_RUNTIME_SECONDS) \
 		--env PERF_VM_MEMSIZE_MB=$(PERF_VM_MEMSIZE_MB) \
 		--env PERF_TARGET_BANDWIDTH=$(PERF_TARGET_BANDWIDTH) \
-		--env FICD_SNAPSHOTTER=$(FICD_SNAPSHOTTER) \
 		--env FICD_DM_POOL=$(FICD_DM_POOL) \
 		--env GOPROXY=direct \
 		--env GOSUMDB=off \

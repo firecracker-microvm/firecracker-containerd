@@ -55,6 +55,8 @@ type jailer interface {
 	// StubDrivesOptions will return a set of options used to create a new stub
 	// drive file
 	StubDrivesOptions() []FileOpt
+	// Close will do any necessary cleanup that the jailer has accrued.
+	Close() error
 }
 
 type cgroupPather interface {

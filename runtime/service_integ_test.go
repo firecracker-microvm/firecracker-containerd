@@ -35,6 +35,7 @@ import (
 	"github.com/containerd/containerd/oci"
 	"github.com/containerd/containerd/pkg/ttrpcutil"
 	"github.com/containerd/containerd/runtime"
+	"github.com/containerd/go-runc"
 	"github.com/containerd/typeurl"
 	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -64,6 +65,7 @@ const (
 	firecrackerRuntime     = "aws.firecracker"
 	shimProcessName        = "containerd-shim-aws-firecracker"
 	firecrackerProcessName = "firecracker"
+	jailerProcessName      = "runc"
 
 	defaultVMRootfsPath = "/var/lib/firecracker-containerd/runtime/default-rootfs.img"
 	defaultVMNetDevName = "eth0"
@@ -74,6 +76,7 @@ const (
 var (
 	findShim        = findProcWithName(shimProcessName)
 	findFirecracker = findProcWithName(firecrackerProcessName)
+	findJailer      = findProcWithName(jailerProcessName)
 )
 
 // Images are presumed by the isolated tests to have already been pulled
@@ -1362,6 +1365,33 @@ func TestStopVM_Isolated(t *testing.T) {
 			stopFunc: func(ctx context.Context, fcClient fccontrol.FirecrackerService, vmID string) {
 				_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
 				require.Equal(status.Code(err), codes.OK)
+			},
+		},
+		{
+			name: "Jailer SIGKILL",
+			createVMRequest: proto.CreateVMRequest{
+				JailerConfig: &proto.JailerConfig{
+					UID: 300000,
+					GID: 300000,
+				},
+			},
+			stopFunc: func(ctx context.Context, fcClient fccontrol.FirecrackerService, vmID string) {
+				firecrackerProcesses, err := internal.WaitForProcessToExist(ctx, time.Second, findJailer)
+				require.NoError(err, "failed waiting for expected firecracker process %q to come up", firecrackerProcessName)
+				require.Len(firecrackerProcesses, 1, "expected only one firecracker process to exist")
+				firecrackerProcess := firecrackerProcesses[0]
+
+				err = firecrackerProcess.KillWithContext(ctx)
+				require.NoError(err, "failed to kill firecracker process")
+
+				// Sleep here to ensure runc finishes execution
+				time.Sleep(500 * time.Millisecond)
+
+				// ensure that the jailer has cleaned up all of the containers
+				runcClient := &runc.Runc{}
+				containers, err := runcClient.List(ctx)
+				require.NoError(err, "failed to run 'runc list'")
+				assert.Equal(0, len(containers))
 			},
 		},
 

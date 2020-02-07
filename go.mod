@@ -8,7 +8,7 @@ require (
 	github.com/containerd/containerd v1.3.3
 	github.com/containerd/continuity v0.0.0-20181027224239-bea7585dbfac // indirect
 	github.com/containerd/fifo v0.0.0-20190816180239-bda0ff6ed73c
-	github.com/containerd/go-runc v0.0.0-20190226155025-7d11b49dc076 // indirect
+	github.com/containerd/go-runc v0.0.0-20190226155025-7d11b49dc076
 	github.com/containerd/ttrpc v0.0.0-20190613183316-1fb3814edf44
 	github.com/containerd/typeurl v0.0.0-20181015155603-461401dc8f19
 	github.com/containernetworking/cni v0.7.2-0.20190807151350-8c6c47d1c7fc

@@ -24,6 +24,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/containerd/go-runc"
 	"github.com/firecracker-microvm/firecracker-go-sdk"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -46,6 +47,7 @@ type runcJailer struct {
 	Config     runcJailerConfig
 	vmID       string
 	configSpec specs.Spec
+	runcClient runc.Runc
 }
 
 const firecrackerFileName = "firecracker"
@@ -64,10 +66,11 @@ func newRuncJailer(ctx context.Context, logger *logrus.Entry, vmID string, cfg r
 		WithField("runcBinaryPath", cfg.RuncBinPath)
 
 	j := &runcJailer{
-		ctx:    ctx,
-		logger: l,
-		Config: cfg,
-		vmID:   vmID,
+		ctx:        ctx,
+		logger:     l,
+		Config:     cfg,
+		vmID:       vmID,
+		runcClient: runc.Runc{},
 	}
 
 	spec := specs.Spec{}
@@ -445,6 +448,14 @@ func (j *runcJailer) setDefaultConfigValues(cfg *config.Config, socketPath strin
 	spec.Linux.CgroupsPath = cgroupPath
 
 	return spec
+}
+
+// Close will cleanup the container that may be left behind if the jailing
+// process was killed via SIGKILL.
+func (j *runcJailer) Close() error {
+	return j.runcClient.Delete(j.ctx, j.vmID, &runc.DeleteOpts{
+		Force: true,
+	})
 }
 
 func mkdirAndChown(path string, mode os.FileMode, uid, gid uint32) error {

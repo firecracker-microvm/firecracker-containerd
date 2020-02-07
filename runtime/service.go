@@ -1278,8 +1278,16 @@ func (s *service) Cleanup(requestCtx context.Context) (*taskAPI.DeleteResponse, 
 }
 
 func (s *service) monitorVMExit() {
-	// once the VM shuts down, the shim should too
-	defer s.shimCancel()
+	defer func() {
+		// we ignore the error here due to cleanup will only succeed if the jailing
+		// process was killed via SIGKILL
+		if err := s.jailer.Close(); err != nil {
+			s.logger.WithError(err).Error("failed to close jailer")
+		}
+
+		// once the VM shuts down, the shim should too
+		s.shimCancel()
+	}()
 
 	// Block until the VM exits
 	s.vmExitErr = s.machine.Wait(s.shimCtx)

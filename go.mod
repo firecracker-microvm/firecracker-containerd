@@ -4,8 +4,8 @@ require (
 	github.com/Microsoft/go-winio v0.4.14 // indirect
 	github.com/StackExchange/wmi v0.0.0-20181212234831-e0a55b97c705 // indirect
 	github.com/containerd/cgroups v0.0.0-20181105182409-82cb49fc1779 // indirect
-	github.com/containerd/console v0.0.0-20181022165439-0650fd9eeb50 // indirect
-	github.com/containerd/containerd v1.3.1
+	github.com/containerd/console v0.0.0-20191219165238-8375c3424e4d // indirect
+	github.com/containerd/containerd v1.3.3
 	github.com/containerd/continuity v0.0.0-20181027224239-bea7585dbfac // indirect
 	github.com/containerd/fifo v0.0.0-20190816180239-bda0ff6ed73c
 	github.com/containerd/go-runc v0.0.0-20190226155025-7d11b49dc076 // indirect
@@ -44,7 +44,7 @@ require (
 	github.com/vishvananda/netlink v0.0.0-20181108222139-023a6dafdcdf
 	go.etcd.io/bbolt v1.3.1-etcd.8 // indirect
 	golang.org/x/sync v0.0.0-20181108010431-42b317875d0f
-	golang.org/x/sys v0.0.0-20190616124812-15dcb6c0061f
+	golang.org/x/sys v0.0.0-20191120155948-bd437916bb0e
 	google.golang.org/genproto v0.0.0-20181109154231-b5d43981345b // indirect
 	google.golang.org/grpc v1.21.0
 	gotest.tools v2.2.0+incompatible // indirect

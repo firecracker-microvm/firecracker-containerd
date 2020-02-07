@@ -41,6 +41,7 @@ integ-test:
 		--volume $(CURDIR)/etc/containerd/firecracker-runtime.json:/etc/containerd/firecracker-runtime.json \
 		--volume $(CURDIR)/logs:/var/log/firecracker-containerd-test \
 		--volume $(CURDIR)/..:/src \
+		--env FICD_DM_VOLUME_GROUP=$(FICD_DM_VOLUME_GROUP) \
 		--env FICD_DM_POOL=$(TEST_POOL) \
 		--env EXTRAGOARGS="${EXTRAGOARGS}" \
 		--workdir="/src/examples" \
@@ -50,6 +51,7 @@ integ-test:
 TEST_GATEWAY?=172.16.0.1
 TEST_IP?=172.16.0.2
 TEST_SUBNET?=/24
+FICD_DM_VOLUME_GROUP?=
 TEST_POOL?=
 testtap:
 	ip link add br0 type bridge

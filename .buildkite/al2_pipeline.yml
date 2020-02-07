@@ -21,6 +21,7 @@ steps:
     env:
       DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
       EXTRAGOARGS: "-race"
+      FICD_DM_VOLUME_GROUP: "fcci-vg"
     command:
       - ./.buildkite/setup_al2.sh
       - docker run --rm -v $PWD:/mnt debian:stretch-slim rm -rf /mnt/tools/image-builder/rootfs

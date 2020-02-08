@@ -76,7 +76,6 @@ const (
 var (
 	findShim        = findProcWithName(shimProcessName)
 	findFirecracker = findProcWithName(firecrackerProcessName)
-	findJailer      = findProcWithName(jailerProcessName)
 )
 
 // Images are presumed by the isolated tests to have already been pulled
@@ -1380,49 +1379,6 @@ func TestStopVM_Isolated(t *testing.T) {
 			},
 		},
 
-		{
-			name:       "Jailer",
-			withStopVM: true,
-
-			createVMRequest: proto.CreateVMRequest{
-				JailerConfig: &proto.JailerConfig{
-					UID: 300000,
-					GID: 300000,
-				},
-			},
-			stopFunc: func(ctx context.Context, fcClient fccontrol.FirecrackerService, vmID string) {
-				_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
-				require.Equal(status.Code(err), codes.OK)
-			},
-		},
-		{
-			name: "Jailer SIGKILL",
-			createVMRequest: proto.CreateVMRequest{
-				JailerConfig: &proto.JailerConfig{
-					UID: 300000,
-					GID: 300000,
-				},
-			},
-			stopFunc: func(ctx context.Context, fcClient fccontrol.FirecrackerService, vmID string) {
-				firecrackerProcesses, err := internal.WaitForProcessToExist(ctx, time.Second, findJailer)
-				require.NoError(err, "failed waiting for expected firecracker process %q to come up", firecrackerProcessName)
-				require.Len(firecrackerProcesses, 1, "expected only one firecracker process to exist")
-				firecrackerProcess := firecrackerProcesses[0]
-
-				err = firecrackerProcess.KillWithContext(ctx)
-				require.NoError(err, "failed to kill firecracker process")
-
-				// Sleep here to ensure runc finishes execution
-				time.Sleep(500 * time.Millisecond)
-
-				// ensure that the jailer has cleaned up all of the containers
-				runcClient := &runc.Runc{}
-				containers, err := runcClient.List(ctx)
-				require.NoError(err, "failed to run 'runc list'")
-				assert.Equal(0, len(containers))
-			},
-		},
-
 		// Firecracker is too fast to test a case where we hit the timeout on a StopVMRequest.
 		// The rootfs below explicitly sleeps 60 seconds after shutting down the agent to simulate the case.
 		{
@@ -1493,13 +1449,12 @@ func TestStopVM_Isolated(t *testing.T) {
 
 	for _, test := range tests {
 		test := test
-		t.Run(test.name, func(t *testing.T) {
+
+		testFunc := func(t *testing.T, createVMRequest proto.CreateVMRequest) {
 			ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 			defer cancel()
 
-			vmID := testNameToVMID(t.Name())
-			createVMRequest := test.createVMRequest
-			createVMRequest.VMID = vmID
+			vmID := createVMRequest.VMID
 
 			fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
 			_, err = fcClient.CreateVM(ctx, &createVMRequest)
@@ -1542,6 +1497,27 @@ func TestStopVM_Isolated(t *testing.T) {
 			// But it should be dead eventually.
 			err = internal.WaitForPidToExit(ctx, time.Second, shimProcess.Pid)
 			require.NoError(err, "shim hasn't been terminated")
+		}
+
+		t.Run(test.name, func(t *testing.T) {
+			req := test.createVMRequest
+			req.VMID = testNameToVMID(test.name)
+			testFunc(t, req)
+		})
+
+		t.Run(test.name+"/Jailer", func(t *testing.T) {
+			req := test.createVMRequest
+			req.VMID = testNameToVMID(test.name) + "_Jailer"
+			req.JailerConfig = &proto.JailerConfig{
+				UID: 300000,
+				GID: 300000,
+			}
+			testFunc(t, req)
+
+			runcClient := &runc.Runc{}
+			containers, err := runcClient.List(ctx)
+			require.NoError(err, "failed to run 'runc list'")
+			assert.Equal(0, len(containers))
 		})
 	}
 }

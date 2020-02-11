@@ -79,3 +79,5 @@ func (j noopJailer) StubDrivesOptions() []FileOpt {
 	j.logger.Debug("noop operation for StubDrivesOptions")
 	return []FileOpt{}
 }
+
+func (j noopJailer) Close() error { return nil }

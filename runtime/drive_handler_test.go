@@ -66,7 +66,7 @@ func TestContainerStubs(t *testing.T) {
 	err = os.MkdirAll(patchedSrcDir, 0700)
 	require.NoError(t, err, "failed to create patched src dir")
 
-	noopJailer := noopJailer{
+	noopJailer := &noopJailer{
 		shimDir: vm.Dir(stubDir),
 		ctx:     ctx,
 		logger:  logger,
@@ -139,7 +139,7 @@ func TestDriveMountStubs(t *testing.T) {
 	err = os.MkdirAll(patchedSrcDir, 0700)
 	require.NoError(t, err, "failed to create patched src dir")
 
-	noopJailer := noopJailer{
+	noopJailer := &noopJailer{
 		shimDir: vm.Dir(stubDir),
 		ctx:     ctx,
 		logger:  logger,

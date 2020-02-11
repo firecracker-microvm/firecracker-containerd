@@ -15,8 +15,11 @@ package main
 
 import (
 	"context"
+	"os"
+	"syscall"
 
 	"github.com/firecracker-microvm/firecracker-go-sdk"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
 	"github.com/firecracker-microvm/firecracker-containerd/config"
@@ -29,17 +32,19 @@ type noopJailer struct {
 	logger  *logrus.Entry
 	shimDir vm.Dir
 	ctx     context.Context
+	pid     int
 }
 
-func newNoopJailer(ctx context.Context, logger *logrus.Entry, shimDir vm.Dir) noopJailer {
-	return noopJailer{
+func newNoopJailer(ctx context.Context, logger *logrus.Entry, shimDir vm.Dir) *noopJailer {
+	return &noopJailer{
 		logger:  logger,
 		shimDir: shimDir,
 		ctx:     ctx,
+		pid:     0,
 	}
 }
 
-func (j noopJailer) BuildJailedMachine(cfg *config.Config, machineConfig *firecracker.Config, vmID string) ([]firecracker.Opt, error) {
+func (j *noopJailer) BuildJailedMachine(cfg *config.Config, machineConfig *firecracker.Config, vmID string) ([]firecracker.Opt, error) {
 	if len(cfg.FirecrackerBinaryPath) == 0 {
 		return []firecracker.Opt{}, nil
 	}
@@ -59,25 +64,58 @@ func (j noopJailer) BuildJailedMachine(cfg *config.Config, machineConfig *firecr
 		cmd.Stderr = j.logger.WithField("vmm_stream", "stderr").WriterLevel(logrus.DebugLevel)
 	}
 
+	pidHandler := firecracker.Handler{
+		Name: "firecracker-containerd-jail-pid-handler",
+		Fn: func(ctx context.Context, m *firecracker.Machine) error {
+			pid, err := m.PID()
+			if err != nil {
+				return err
+			}
+			j.pid = pid
+			return nil
+		},
+	}
+
 	j.logger.Debug("noop operation for BuildJailedMachine")
 	return []firecracker.Opt{
 		firecracker.WithProcessRunner(cmd),
+		func(m *firecracker.Machine) {
+			m.Handlers.FcInit = m.Handlers.FcInit.Append(pidHandler)
+		},
 	}, nil
 }
 
-func (j noopJailer) JailPath() vm.Dir {
+func (j *noopJailer) JailPath() vm.Dir {
 	j.logger.Debug("noop operation returning shim dir for JailPath")
 	return j.shimDir
 }
 
-func (j noopJailer) ExposeFileToJail(path string) error {
+func (j *noopJailer) ExposeFileToJail(path string) error {
 	j.logger.Debug("noop operation for ExposeFileToJail")
 	return nil
 }
 
-func (j noopJailer) StubDrivesOptions() []FileOpt {
+func (j *noopJailer) StubDrivesOptions() []FileOpt {
 	j.logger.Debug("noop operation for StubDrivesOptions")
 	return []FileOpt{}
 }
 
-func (j noopJailer) Close() error { return nil }
+func (j *noopJailer) Stop() error {
+	if j.pid == 0 {
+		return errors.New("the machine hasn't been started")
+	}
+
+	j.logger.Debugf("sending SIGTERM to %d", j.pid)
+	p, err := os.FindProcess(j.pid)
+	if err != nil {
+		return err
+	}
+
+	err = p.Signal(syscall.SIGTERM)
+	if err == nil || err.Error() == "os: process already finished" {
+		return nil
+	}
+	return err
+}
+
+func (j *noopJailer) Close() error { return nil }

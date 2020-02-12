@@ -1392,7 +1392,7 @@ func TestStopVM_Isolated(t *testing.T) {
 			stopFunc: func(ctx context.Context, fcClient fccontrol.FirecrackerService, req proto.CreateVMRequest) {
 				_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: req.VMID})
 				errCode := status.Code(err)
-				assert.Equal(codes.DeadlineExceeded, errCode, "the error code must be DeadlineExceeded")
+				assert.Equal(codes.Internal, errCode, "the error code must be Internal")
 
 				if req.JailerConfig != nil {
 					// No "signal: ..." error with runc since it traps the signal

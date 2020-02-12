@@ -1187,7 +1187,7 @@ func (s *service) shutdown(
 	if err == nil {
 		return nil
 	}
-	return status.Error(codes.DeadlineExceeded, fmt.Sprintf("the VMM was killed forcibly: %v", err))
+	return status.Error(codes.Internal, fmt.Sprintf("the VMM was killed forcibly: %v", err))
 }
 
 // shutdownLoop sends multiple different shutdown requests to stop the VMM.

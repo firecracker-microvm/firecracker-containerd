@@ -74,6 +74,7 @@ const (
 	firecrackerStartTimeout = 5 * time.Second
 	defaultStopVMTimeout    = 5 * time.Second
 	defaultShutdownTimeout  = 5 * time.Second
+	jailerStopTimeout       = 3 * time.Second
 
 	// StartEventName is the topic published to when a VM starts
 	StartEventName = "/firecracker-vm/start"
@@ -1171,54 +1172,80 @@ func (s *service) Shutdown(requestCtx context.Context, req *taskAPI.ShutdownRequ
 	return &ptypes.Empty{}, nil
 }
 
-// shutdown will stop the VMM within the provided timeout. It attempts to shutdown gracefully by having
-// agent stop (which is presumed to cause the VM to begin a reboot) and then waiting for the VMM process
-// to exit (via the s.shimCtx.Done() channel). If that fails, StopVMM will be called to force a shutdown (currently
-// via sending SIGTERM). If that fails, the VMM will still be killed via SIGKILL when the shimCtx is canceled.
 func (s *service) shutdown(
 	requestCtx context.Context,
 	timeout time.Duration,
 	req *taskAPI.ShutdownRequest,
 ) error {
-	shutdownCtx, cancel := context.WithTimeout(requestCtx, timeout)
-	defer cancel()
-	go func() {
-		// Once the shutdown procedure is done, the shim needs to shutdown too.
-		// This also ensures that if the VMM is still alive, it will receive a
-		// SIGKILL via exec.CommandContext
-		<-shutdownCtx.Done()
-		s.shimCancel()
-	}()
-
 	s.logger.Info("stopping the VM")
 
-	// Try to tell agent to exit, causing the VM to begin a reboot. If that
-	// fails, try to forcibly stop the VMM. If that too fails, just cancel
-	// the shutdownCtx to fast-path to the VMM getting SIGKILL.
-	_, shutdownErr := s.agentClient.Shutdown(shutdownCtx, req)
-	if shutdownErr != nil {
-		s.logger.WithError(shutdownErr).Error("failed to shutdown VM agent")
-		stopVMMErr := s.machine.StopVMM()
-		if stopVMMErr != nil {
-			s.logger.WithError(stopVMMErr).Error("failed to forcibly stop VMM")
-			cancel()
+	go func() {
+		s.shutdownLoop(requestCtx, timeout, req)
+	}()
+
+	err := s.machine.Wait(context.Background())
+	if err == nil {
+		return nil
+	}
+	return status.Error(codes.Internal, fmt.Sprintf("the VMM was killed forcibly: %v", err))
+}
+
+// shutdownLoop sends multiple different shutdown requests to stop the VMM.
+// 1) send a request to the in-VM agent, which is presumed to cause the VM to begin a reboot.
+// 2) stop the VM through jailer#Stop(). The signal should be visible from the VMM (e.g. SIGTERM)
+// 3) stop the VM through cancelling the associated context. The signal would not be visible from the VMM (e.g. SIGKILL)
+func (s *service) shutdownLoop(
+	requestCtx context.Context,
+	timeout time.Duration,
+	req *taskAPI.ShutdownRequest,
+) {
+	actions := []struct {
+		name     string
+		shutdown func() error
+		timeout  time.Duration
+	}{
+		{
+			name: "send a request to the in-VM agent",
+			shutdown: func() error {
+				_, err := s.agentClient.Shutdown(requestCtx, req)
+				if err != nil {
+					return err
+				}
+				return nil
+			},
+			timeout: timeout,
+		},
+		{
+			name: "stop the jailer",
+			shutdown: func() error {
+				return s.jailer.Stop()
+			},
+			timeout: jailerStopTimeout,
+		},
+		{
+			name: "cancel the context",
+			shutdown: func() error {
+				s.shimCancel()
+				return nil
+			},
+		},
+	}
+
+	for _, action := range actions {
+		pid, err := s.machine.PID()
+		if pid == 0 && err != nil {
+			break // we have nothing to kill
+		}
+
+		s.logger.Debug(action.name)
+		err = action.shutdown()
+		if err != nil {
+			// if sending an request doesn't succeed, don't wait and carry on.
+			s.logger.WithError(err).Errorf("failed to %s", action.name)
+		} else {
+			time.Sleep(action.timeout)
 		}
 	}
-
-	// wait for the shimCtx to be done, which means the VM has exited and we're ready
-	// to shutdown
-	<-s.shimCtx.Done()
-	if shutdownCtx.Err() == context.DeadlineExceeded {
-		return status.Error(codes.DeadlineExceeded,
-			"timed out waiting for VM shutdown, VMM was sent SIGKILL")
-	}
-
-	if s.vmExitErr != nil {
-		return status.Error(codes.Internal,
-			fmt.Sprintf("VMM exit errors: %v", s.vmExitErr))
-	}
-
-	return nil
 }
 
 func (s *service) Stats(requestCtx context.Context, req *taskAPI.StatsRequest) (*taskAPI.StatsResponse, error) {

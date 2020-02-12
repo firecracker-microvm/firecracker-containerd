@@ -55,6 +55,10 @@ type jailer interface {
 	// StubDrivesOptions will return a set of options used to create a new stub
 	// drive file
 	StubDrivesOptions() []FileOpt
+
+	// Stop the jailer as a way that is visible from the user-level process (e.g. SIGTERM).
+	Stop() error
+
 	// Close will do any necessary cleanup that the jailer has accrued.
 	Close() error
 }

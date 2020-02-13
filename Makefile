@@ -54,7 +54,7 @@ $(SUBDIRS):
 	$(MAKE) -C $@ EXTRAGOARGS=$(EXTRAGOARGS)
 
 %-in-docker:
-	docker run --rm -it \
+	docker run --rm \
 		--user $(UID):$(GID) \
 		--volume $(CURDIR):/src \
 		--volume $(GO_CACHE_VOLUME_NAME):/go \
@@ -325,7 +325,7 @@ tools/runc-builder-stamp: tools/docker/Dockerfile.runc-builder
 	touch $@
 
 $(RUNC_BIN): $(RUNC_DIR)/VERSION tools/runc-builder-stamp
-	docker run --rm -it --user $(UID) \
+	docker run --rm --user $(UID) \
 		--volume $(CURDIR)/$(RUNC_DIR):/gopath/src/github.com/opencontainers/runc \
 		--volume $(CURDIR)/deps:/target \
 		-e HOME=/tmp \

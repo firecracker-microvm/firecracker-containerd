@@ -1,4 +1,6 @@
 #!/bin/bash
-set -eu
+sudo -E PATH=$PATH make -C "$BUILDKITE_BUILD_CHECKOUT_PATH" clean
 
-make -C "$BUILDKITE_BUILD_CHECKOUT_PATH" clean
+# clean up ephemeral files since this will cause an error to build kite due to
+# these files being owned by root
+sudo -E PATH=$PATH make -C "$BUILDKITE_BUILD_CHECKOUT_PATH/tools/image-builder" distclean

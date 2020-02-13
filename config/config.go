@@ -25,7 +25,9 @@ import (
 )
 
 const (
-	configPathEnvName  = "FIRECRACKER_CONTAINERD_RUNTIME_CONFIG_PATH"
+	// ConfigPathEnvName is the name of the environment variable used to
+	// overwrite the default runtime config path
+	ConfigPathEnvName  = "FIRECRACKER_CONTAINERD_RUNTIME_CONFIG_PATH"
 	defaultConfigPath  = "/etc/containerd/firecracker-runtime.json"
 	defaultKernelArgs  = "console=ttyS0 noapic reboot=k panic=1 pci=off nomodules rw"
 	defaultFilesPath   = "/var/lib/firecracker-containerd/runtime/"
@@ -33,6 +35,7 @@ const (
 	defaultRootfsPath  = defaultFilesPath + "default-rootfs.img"
 	defaultCPUTemplate = models.CPUTemplateT2
 	defaultShimBaseDir = "/var/lib/firecracker-containerd/shim-base"
+	runcConfigPath     = "/etc/containerd/firecracker-runc-config.json"
 )
 
 // Config represents runtime configuration parameters
@@ -60,12 +63,13 @@ type Config struct {
 // TODO: Add netns field
 type JailerConfig struct {
 	RuncBinaryPath string `json:"runc_binary_path"`
+	RuncConfigPath string `json:"runc_config_path"`
 }
 
 // LoadConfig loads configuration from JSON file at 'path'
 func LoadConfig(path string) (*Config, error) {
 	if path == "" {
-		path = os.Getenv(configPathEnvName)
+		path = os.Getenv(ConfigPathEnvName)
 	}
 
 	if path == "" {
@@ -83,6 +87,9 @@ func LoadConfig(path string) (*Config, error) {
 		RootDrive:       defaultRootfsPath,
 		CPUTemplate:     string(defaultCPUTemplate),
 		ShimBaseDir:     defaultShimBaseDir,
+		JailerConfig: JailerConfig{
+			RuncConfigPath: runcConfigPath,
+		},
 	}
 
 	if err := json.Unmarshal(data, cfg); err != nil {

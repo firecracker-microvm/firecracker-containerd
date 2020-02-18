@@ -1,4 +1,4 @@
-#! /bin/sh
+#! /bin/bash
 #
 # Copyright 2018-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #
@@ -13,9 +13,9 @@
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
-set -eu
+FICD_DM_VOLUME_GROUP="$FICD_DM_VOLUME_GROUP"
 
-VOLUME_GROUP='fcci-vg'
+set -eu
 
 subcommand="$1"
 name="$2"
@@ -24,22 +24,51 @@ if [ -z "$name" ]; then
     exit 0
 fi
 
-dm_device="/dev/mapper/$(echo ${VOLUME_GROUP} | sed -e s/-/--/g)-$name"
+if [[ -z "$FICD_DM_VOLUME_GROUP" ]]; then
+    pool_create() {
+        echo
+    }
 
-pool_create() {
-    sudo lvcreate --type thin-pool \
-         --poolmetadatasize 16GiB \
-         --size 1G \
-         -n "$name" "$VOLUME_GROUP"
-}
+    pool_remove() {
+        echo
+    }
 
-pool_remove() {
-    sudo dmsetup remove "${dm_device}-snap-"* || true
-    sudo dmsetup remove \
+    pool_reset() {
+        local dev_no=1
+        while true; do
+            sudo dmsetup message "$name" 0 "delete $dev_no" || break
+            dev_no=$(($dev_no + 1))
+        done
+    }
+else
+    dm_device="/dev/mapper/$(echo ${FICD_DM_VOLUME_GROUP} | sed -e s/-/--/g)-$name"
+
+    pool_create() {
+        echo sudo lvcreate --type thin-pool \
+             --poolmetadatasize 16GiB \
+             --size 1G \
+             -n "$name" "$FICD_DM_VOLUME_GROUP"
+        sudo lvcreate --type thin-pool \
+             --poolmetadatasize 16GiB \
+             --size 1G \
+             -n "$name" "$FICD_DM_VOLUME_GROUP"
+    }
+
+    pool_remove() {
+        sudo dmsetup remove "${dm_device}-snap-"* || true
+        sudo dmsetup remove \
          "${dm_device}" \
          "${dm_device}_tdata" "${dm_device}_tmeta" || true
-    sudo lvremove -f "$dm_device"
-}
+        sudo lvremove -f "$dm_device"
+    }
+
+    pool_reset() {
+        if [ -e "${dm_device}" ]; then
+            pool_remove
+        fi
+        pool_create
+    }
+fi
 
 case "$subcommand" in
     'create')
@@ -49,10 +78,7 @@ case "$subcommand" in
         pool_remove
         ;;
     'reset')
-        if [ -e "${dm_device}" ]; then
-            pool_remove
-        fi
-        pool_create
+        pool_reset
         ;;
     *)
         echo "This script doesn't support $subcommand"

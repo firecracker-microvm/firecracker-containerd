@@ -35,7 +35,7 @@ func TestDiskLimit_Isolated(t *testing.T) {
 	require.NoError(err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
 	defer client.Close()
 
-	image, err := alpineImage(ctx, client, defaultSnapshotterName())
+	image, err := alpineImage(ctx, client, defaultSnapshotterName)
 	require.NoError(err, "failed to get alpine image")
 
 	// Right now, both naive snapshotter and devmapper snapshotter are configured to have 1024MB image size.
@@ -47,7 +47,7 @@ func TestDiskLimit_Isolated(t *testing.T) {
 
 	container, err := client.NewContainer(ctx,
 		"container",
-		containerd.WithSnapshotter(defaultSnapshotterName()),
+		containerd.WithSnapshotter(defaultSnapshotterName),
 		containerd.WithNewSnapshot("snapshot", image),
 		sh,
 	)

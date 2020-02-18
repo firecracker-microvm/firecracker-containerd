@@ -119,7 +119,7 @@ func TestShimExitsUponContainerDelete_Isolated(t *testing.T) {
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
 	defer client.Close()
 
-	image, err := alpineImage(ctx, client, defaultSnapshotterName())
+	image, err := alpineImage(ctx, client, defaultSnapshotterName)
 	require.NoError(t, err, "failed to get alpine image")
 
 	testTimeout := 60 * time.Second
@@ -131,7 +131,7 @@ func TestShimExitsUponContainerDelete_Isolated(t *testing.T) {
 	container, err := client.NewContainer(testCtx,
 		containerName,
 		containerd.WithRuntime(firecrackerRuntime, nil),
-		containerd.WithSnapshotter(defaultSnapshotterName()),
+		containerd.WithSnapshotter(defaultSnapshotterName),
 		containerd.WithNewSnapshot(snapshotName, image),
 		containerd.WithNewSpec(
 			oci.WithProcessArgs("sleep", fmt.Sprintf("%d", testTimeout/time.Second)),
@@ -143,7 +143,7 @@ func TestShimExitsUponContainerDelete_Isolated(t *testing.T) {
 	_, err = client.NewContainer(testCtx,
 		fmt.Sprintf("should-fail-%s-%d", t.Name(), time.Now().UnixNano()),
 		containerd.WithRuntime(firecrackerRuntime, nil),
-		containerd.WithSnapshotter(defaultSnapshotterName()),
+		containerd.WithSnapshotter(defaultSnapshotterName),
 		containerd.WithNewSnapshot(snapshotName, image),
 		containerd.WithNewSpec(
 			oci.WithProcessArgs("sleep", fmt.Sprintf("%d", testTimeout/time.Second)),
@@ -316,7 +316,7 @@ func (runner *testMultipleVMsRunner) TestMultipleVMs(t *testing.T) {
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
 	defer client.Close()
 
-	image, err := alpineImage(ctx, client, defaultSnapshotterName())
+	image, err := alpineImage(ctx, client, defaultSnapshotterName)
 	require.NoError(t, err, "failed to get alpine image")
 
 	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
@@ -446,7 +446,7 @@ func (runner *testMultipleVMsRunner) testMultipleExecs(
 	// spawn a container that just prints the VM's eth0 mac address (which we have set uniquely per VM)
 	newContainer, err := client.NewContainer(ctx,
 		containerName,
-		containerd.WithSnapshotter(defaultSnapshotterName()),
+		containerd.WithSnapshotter(defaultSnapshotterName),
 		containerd.WithNewSnapshot(snapshotName, image),
 		containerd.WithNewSpec(
 			processArgs,
@@ -646,7 +646,7 @@ func TestStubBlockDevices_Isolated(t *testing.T) {
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
 	defer client.Close()
 
-	image, err := alpineImage(ctx, client, defaultSnapshotterName())
+	image, err := alpineImage(ctx, client, defaultSnapshotterName)
 	require.NoError(t, err, "failed to get alpine image")
 
 	tapName := fmt.Sprintf("tap%d", vmID)
@@ -677,7 +677,7 @@ func TestStubBlockDevices_Isolated(t *testing.T) {
 
 	newContainer, err := client.NewContainer(ctx,
 		containerName,
-		containerd.WithSnapshotter(defaultSnapshotterName()),
+		containerd.WithSnapshotter(defaultSnapshotterName),
 		containerd.WithNewSnapshot(snapshotName, image),
 		containerd.WithNewSpec(
 			firecrackeroci.WithVMID(strconv.Itoa(vmID)),
@@ -808,7 +808,7 @@ func testCreateContainerWithSameName(t *testing.T, vmID string) {
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
 	defer client.Close()
 
-	image, err := alpineImage(ctx, client, defaultSnapshotterName())
+	image, err := alpineImage(ctx, client, defaultSnapshotterName)
 	require.NoError(t, err, "failed to get alpine image")
 
 	containerName := fmt.Sprintf("%s-%d", t.Name(), time.Now().UnixNano())
@@ -818,7 +818,7 @@ func testCreateContainerWithSameName(t *testing.T, vmID string) {
 
 	c1, err := client.NewContainer(ctx,
 		containerName,
-		containerd.WithSnapshotter(defaultSnapshotterName()),
+		containerd.WithSnapshotter(defaultSnapshotterName),
 		containerd.WithNewSnapshot(snapshotName, image),
 		withNewSpec,
 	)
@@ -844,7 +844,7 @@ func testCreateContainerWithSameName(t *testing.T, vmID string) {
 	// So, we can launch a new container with the same name
 	c2, err := client.NewContainer(ctx,
 		containerName,
-		containerd.WithSnapshotter(defaultSnapshotterName()),
+		containerd.WithSnapshotter(defaultSnapshotterName),
 		containerd.WithNewSnapshot(snapshotName, image),
 		withNewSpec,
 	)
@@ -884,14 +884,14 @@ func TestStubDriveReserveAndReleaseByContainers_Isolated(t *testing.T) {
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
 	defer client.Close()
 
-	image, err := alpineImage(ctx, client, defaultSnapshotterName())
+	image, err := alpineImage(ctx, client, defaultSnapshotterName)
 	require.NoError(t, err, "failed to get alpine image")
 
 	runEchoHello := containerd.WithNewSpec(oci.WithProcessArgs("echo", "-n", "hello"), firecrackeroci.WithVMID("reuse-same-vm"), oci.WithDefaultPathEnv)
 
 	c1, err := client.NewContainer(ctx,
 		"c1",
-		containerd.WithSnapshotter(defaultSnapshotterName()),
+		containerd.WithSnapshotter(defaultSnapshotterName),
 		containerd.WithNewSnapshot("c1", image),
 		runEchoHello,
 	)
@@ -905,7 +905,7 @@ func TestStubDriveReserveAndReleaseByContainers_Isolated(t *testing.T) {
 
 	c2, err := client.NewContainer(ctx,
 		"c2",
-		containerd.WithSnapshotter(defaultSnapshotterName()),
+		containerd.WithSnapshotter(defaultSnapshotterName),
 		containerd.WithNewSnapshot("c2", image),
 		runEchoHello,
 	)
@@ -936,7 +936,7 @@ func TestDriveMount_Isolated(t *testing.T) {
 	fcClient, err := fcClient.New(containerdSockPath + ".ttrpc")
 	require.NoError(t, err, "failed to create fccontrol client")
 
-	image, err := alpineImage(ctx, ctrdClient, defaultSnapshotterName())
+	image, err := alpineImage(ctx, ctrdClient, defaultSnapshotterName)
 	require.NoError(t, err, "failed to get alpine image")
 
 	vmID := "test-drive-mount"
@@ -1041,7 +1041,7 @@ func TestDriveMount_Isolated(t *testing.T) {
 
 	newContainer, err := ctrdClient.NewContainer(ctx,
 		containerName,
-		containerd.WithSnapshotter(defaultSnapshotterName()),
+		containerd.WithSnapshotter(defaultSnapshotterName),
 		containerd.WithNewSnapshot(snapshotName, image),
 		containerd.WithNewSpec(
 			oci.WithProcessArgs("/bin/sh", "-c", strings.Join(append(ctrCommands,
@@ -1211,13 +1211,13 @@ func TestUpdateVMMetadata_Isolated(t *testing.T) {
 	assert.Equal(t, expected, resp.Metadata)
 
 	// Check inside the vm
-	image, err := alpineImage(ctx, client, defaultSnapshotterName())
+	image, err := alpineImage(ctx, client, defaultSnapshotterName)
 	require.NoError(t, err, "failed to get alpine image")
 	containerName := "mmds-test"
 
 	newContainer, err := client.NewContainer(ctx,
 		containerName,
-		containerd.WithSnapshotter(defaultSnapshotterName()),
+		containerd.WithSnapshotter(defaultSnapshotterName),
 		containerd.WithNewSnapshot("mmds-test-all", image),
 		containerd.WithNewSpec(
 			oci.WithProcessArgs("/usr/bin/wget",
@@ -1237,7 +1237,7 @@ func TestUpdateVMMetadata_Isolated(t *testing.T) {
 	containerName += "-entry"
 	newContainer, err = client.NewContainer(ctx,
 		containerName,
-		containerd.WithSnapshotter(defaultSnapshotterName()),
+		containerd.WithSnapshotter(defaultSnapshotterName),
 		containerd.WithNewSnapshot("mmds-test-entry", image),
 		containerd.WithNewSpec(
 			oci.WithProcessArgs("/usr/bin/wget",
@@ -1277,14 +1277,14 @@ func TestRandomness_Isolated(t *testing.T) {
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
 	defer client.Close()
 
-	image, err := alpineImage(ctx, client, defaultSnapshotterName())
+	image, err := alpineImage(ctx, client, defaultSnapshotterName)
 	require.NoError(t, err, "failed to get alpine image")
 	containerName := "test-entropy"
 
 	const blockCount = 1024
 	ddContainer, err := client.NewContainer(ctx,
 		containerName,
-		containerd.WithSnapshotter(defaultSnapshotterName()),
+		containerd.WithSnapshotter(defaultSnapshotterName),
 		containerd.WithNewSnapshot("test-entropy-snapshot", image),
 		containerd.WithNewSpec(
 			oci.WithDefaultUnixDevices,
@@ -1412,7 +1412,7 @@ func TestStopVM_Isolated(t *testing.T) {
 
 	ctx := namespaces.WithNamespace(context.Background(), "default")
 
-	image, err := alpineImage(ctx, client, defaultSnapshotterName())
+	image, err := alpineImage(ctx, client, defaultSnapshotterName)
 	require.NoError(err, "failed to get alpine image")
 
 	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
@@ -1530,7 +1530,7 @@ func TestStopVM_Isolated(t *testing.T) {
 
 			c, err := client.NewContainer(ctx,
 				"container-"+vmID,
-				containerd.WithSnapshotter(defaultSnapshotterName()),
+				containerd.WithSnapshotter(defaultSnapshotterName),
 				containerd.WithNewSnapshot("snapshot-"+vmID, image),
 				containerd.WithNewSpec(oci.WithProcessArgs("/bin/echo", "-n", "hello"), firecrackeroci.WithVMID(vmID)),
 			)
@@ -1604,7 +1604,7 @@ func TestEvents_Isolated(t *testing.T) {
 	defer subscribeCancel()
 	eventCh, errCh := client.Subscribe(subscribeCtx, "topic")
 
-	image, err := alpineImage(ctx, client, defaultSnapshotterName())
+	image, err := alpineImage(ctx, client, defaultSnapshotterName)
 	require.NoError(err, "failed to get alpine image")
 
 	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
@@ -1618,7 +1618,7 @@ func TestEvents_Isolated(t *testing.T) {
 
 	c, err := client.NewContainer(ctx,
 		"container-"+vmID,
-		containerd.WithSnapshotter(defaultSnapshotterName()),
+		containerd.WithSnapshotter(defaultSnapshotterName),
 		containerd.WithNewSnapshot("snapshot-"+vmID, image),
 		containerd.WithNewSpec(oci.WithProcessArgs("/bin/echo", "-n", "hello"), firecrackeroci.WithVMID(vmID)),
 	)

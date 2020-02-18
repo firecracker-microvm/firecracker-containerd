@@ -5,20 +5,18 @@ chmod a+rwx ${FICD_LOG_DIR}
 
 mkdir -p /etc/containerd/snapshotter
 
-case "$FICD_SNAPSHOTTER" in
-    devmapper)
-        cat > /etc/containerd/snapshotter/devmapper.toml <<EOF
+if [[ -z "$FICD_DM_VOLUME_GROUP" ]]; then
+   pool_name="${FICD_DM_POOL}"
+else
+   pool_name="$(echo "$FICD_DM_VOLUME_GROUP" | sed s/-/--/g)-${FICD_DM_POOL}"
+fi
+
+cat > /etc/containerd/snapshotter/devmapper.toml <<EOF
 [plugins]
   [plugins.devmapper]
-    pool_name = "fcci--vg-${FICD_DM_POOL}"
+    pool_name = "${pool_name}"
     base_image_size = "1024MB"
 EOF
-        ;;
-    *)
-        echo "This Docker image doesn't support $FICD_SNAPSHOTTER snapshotter"
-        exit 1
-        ;;
-esac
 
 touch ${FICD_CONTAINERD_OUTFILE}
 chmod a+rw ${FICD_CONTAINERD_OUTFILE}

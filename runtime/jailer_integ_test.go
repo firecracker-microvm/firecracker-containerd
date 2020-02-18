@@ -52,7 +52,7 @@ func testJailer(t *testing.T, jailerConfig *proto.JailerConfig) {
 
 	ctx := namespaces.WithNamespace(context.Background(), "default")
 
-	image, err := alpineImage(ctx, client, defaultSnapshotterName())
+	image, err := alpineImage(ctx, client, defaultSnapshotterName)
 	require.NoError(err, "failed to get alpine image")
 
 	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
@@ -69,7 +69,7 @@ func testJailer(t *testing.T, jailerConfig *proto.JailerConfig) {
 
 	c, err := client.NewContainer(ctx,
 		"container",
-		containerd.WithSnapshotter(defaultSnapshotterName()),
+		containerd.WithSnapshotter(defaultSnapshotterName),
 		containerd.WithNewSnapshot("snapshot", image),
 		containerd.WithNewSpec(oci.WithProcessArgs("/bin/echo", "-n", "hello"), firecrackeroci.WithVMID(vmID)),
 	)

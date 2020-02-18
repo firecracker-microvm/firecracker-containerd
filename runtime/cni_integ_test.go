@@ -53,7 +53,7 @@ func TestCNISupport_Isolated(t *testing.T) {
 	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
 	require.NoError(t, err, "failed to create ttrpc client")
 
-	image, err := alpineImage(ctx, client, defaultSnapshotterName())
+	image, err := alpineImage(ctx, client, defaultSnapshotterName)
 	require.NoError(t, err, "failed to get alpine image")
 
 	numVMs := 5
@@ -127,7 +127,7 @@ func TestCNISupport_Isolated(t *testing.T) {
 
 			newContainer, err := client.NewContainer(ctx,
 				containerName,
-				containerd.WithSnapshotter(defaultSnapshotterName()),
+				containerd.WithSnapshotter(defaultSnapshotterName),
 				containerd.WithNewSnapshot(snapshotName, image),
 				containerd.WithNewSpec(
 					oci.WithProcessArgs("/usr/bin/wget",
@@ -160,7 +160,7 @@ func TestAutomaticCNISupport_Isolated(t *testing.T) {
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
 	defer client.Close()
 
-	image, err := alpineImage(ctx, client, defaultSnapshotterName())
+	image, err := alpineImage(ctx, client, defaultSnapshotterName)
 	require.NoError(t, err, "failed to get alpine image")
 
 	numVMs := 5
@@ -194,7 +194,7 @@ func TestAutomaticCNISupport_Isolated(t *testing.T) {
 
 			newContainer, err := client.NewContainer(ctx,
 				taskID,
-				containerd.WithSnapshotter(defaultSnapshotterName()),
+				containerd.WithSnapshotter(defaultSnapshotterName),
 				containerd.WithNewSnapshot(snapshotName, image),
 				containerd.WithNewSpec(
 					oci.WithProcessArgs("/usr/bin/wget",
@@ -237,7 +237,7 @@ func TestCNIPlugin_Performance(t *testing.T) {
 
 	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
 
-	image, err := iperf3Image(ctx, client, defaultSnapshotterName())
+	image, err := iperf3Image(ctx, client, defaultSnapshotterName)
 	require.NoError(t, err, "failed to get iperf3 image")
 
 	cniNetworkName := "fcnet"
@@ -296,7 +296,7 @@ func TestCNIPlugin_Performance(t *testing.T) {
 
 			newContainer, err := client.NewContainer(ctx,
 				containerName,
-				containerd.WithSnapshotter(defaultSnapshotterName()),
+				containerd.WithSnapshotter(defaultSnapshotterName),
 				containerd.WithNewSnapshot(snapshotName, image),
 				containerd.WithNewSpec(
 					oci.WithProcessArgs("/usr/bin/iperf3",

@@ -98,13 +98,14 @@ steps:
       DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
       NUMBER_OF_VMS: 100
       EXTRAGOARGS: "-v -count=1 -race"
+      FICD_DM_VOLUME_GROUP: fcci-vg
     artifact_paths:
       - "runtime/logs/*"
     command:
-      - make -C runtime integ-test FICD_SNAPSHOTTER=devmapper FICD_DM_POOL=build_${BUILDKITE_BUILD_NUMBER}_runtime
+      - make -C runtime integ-test FICD_DM_POOL=build_${BUILDKITE_BUILD_NUMBER}_runtime
     timeout_in_minutes: 15
 
-  - label: ":rotating_light: :exclamation: example tests (devmapper)"
+  - label: ":rotating_light: :exclamation: example tests"
     agents:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
       distro: "${BUILDKITE_AGENT_META_DATA_DISTRO}"
@@ -112,9 +113,10 @@ steps:
     env:
       DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
       EXTRAGOARGS: "-v -count=1"
+      FICD_DM_VOLUME_GROUP: fcci-vg
     artifact_paths:
       - "examples/logs/*"
     command:
-      - make -C examples integ-test TEST_SS=devmapper TEST_POOL=build_${BUILDKITE_BUILD_NUMBER}_example
+      - make -C examples integ-test TEST_POOL=build_${BUILDKITE_BUILD_NUMBER}_example
     timeout_in_minutes: 10
 

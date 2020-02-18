@@ -55,13 +55,8 @@ func shimBaseDir() string {
 	return defaultShimBaseDir
 }
 
-func defaultSnapshotterName() string {
-	if name := os.Getenv("FICD_SNAPSHOTTER"); name != "" {
-		return name
-	}
-
-	return "devmapper"
-}
+// devmapper is the only snapshotter we can use with Firecracker
+const defaultSnapshotterName = "devmapper"
 
 func prepareIntegTest(t *testing.T, options ...func(*config.Config)) {
 	t.Helper()

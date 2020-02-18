@@ -6,7 +6,8 @@ source ./.buildkite/al2env.sh
 export PATH=$bin_path:$PATH
 export FIRECRACKER_CONTAINERD_RUNTIME_CONFIG_PATH=$runtime_config_path
 export ENABLE_ISOLATED_TESTS=true
-export CONTAINERD_SOCKET=$dir/containerd.sock 
+export CONTAINERD_SOCKET=$dir/containerd.sock
+
 export SHIM_BASE_DIR=$dir
 
 sudo -E PATH=$PATH $bin_path/firecracker-containerd --config $dir/config.toml &

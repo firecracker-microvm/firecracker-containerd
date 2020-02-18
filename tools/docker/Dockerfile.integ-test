@@ -8,8 +8,6 @@ ENV DEBIAN_FRONTEND="noninteractive"
 
 ARG FIRECRACKER_TARGET=x86_64-unknown-linux-musl
 ENV FICD_LOG_DIR="/var/log/firecracker-containerd-test"
-ENV FICD_SNAPSHOTTER="devmapper"
-ENV FICD_SNAPSHOTTER_OUTFILE="${FICD_LOG_DIR}/snapshotter.out"
 ENV FICD_CONTAINERD_OUTFILE="${FICD_LOG_DIR}/containerd.out"
 
 RUN apt-get update && apt-get install --yes --no-install-recommends \

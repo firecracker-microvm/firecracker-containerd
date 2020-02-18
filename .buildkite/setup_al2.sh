@@ -15,10 +15,10 @@ mkdir -p $state_path
 export INSTALLROOT=$dir
 export FIRECRACKER_CONTAINERD_RUNTIME_DIR=$dir
 make
-sudo -E INSTALLROOT=$INSTALLROOT PATH=$PATH make install
 cp /var/lib/fc-ci/vmlinux.bin $dir/default-vmlinux.bin
-make image
-sudo -E PATH=$PATH make install-default-rootfs
+make image firecracker
+sudo -E INSTALLROOT=$INSTALLROOT PATH=$PATH \
+     make install install-firecracker install-default-rootfs
 
 cat << EOF > $dir/config.toml
 disabled_plugins = ["cri"]
@@ -39,7 +39,7 @@ cat << EOF > $runtime_config_path
 {
 	"cpu_template": "T2",
 	"debug": true,
-	"firecracker_binary_path": "/usr/local/bin/$firecracker_bin",
+	"firecracker_binary_path": "$bin_path/firecracker",
 	"shim_base_dir": "$dir",
 	"kernel_image_path": "$dir/default-vmlinux.bin",
 	"kernel_args": "ro console=ttyS0 noapic reboot=k panic=1 pci=off nomodules systemd.journald.forward_to_console systemd.log_color=false systemd.unit=firecracker.target init=/sbin/overlay-init",

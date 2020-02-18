@@ -22,7 +22,7 @@ do
     # https://github.com/firecracker-microvm/firecracker-containerd/blob/2578f3df9d899aa48decb39c9f7f23fa41635ede/internal/common.go#L67
     magic=$(head -c 8 /dev/$name | od -A n -t u1)
 
-    printf "%-4s %-7s %2d %8dB %2d | %s\n" \
+    printf "%-4s %-7s %2d %10dB %2d | %s\n" \
 	   "$name" \
 	   $(cat /sys/block/$name/dev) \
 	   $(cat /sys/block/$name/removable) \

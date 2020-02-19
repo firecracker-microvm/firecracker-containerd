@@ -269,10 +269,6 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 	}
 	m := testing.MainStart(runner, tests, nil, nil)
 	code := m.Run()
-	for _, container := range runner.containers {
-		err := container.Delete(context.Background())
-		t.Log(err)
-	}
 
 	os.Exit(code)
 }
@@ -454,6 +450,8 @@ func (runner *testMultipleVMsRunner) testMultipleExecs(
 			firecrackeroci.WithVMID(vmIDStr),
 		),
 	)
+	defer newContainer.Delete(ctx)
+
 	require.NoError(t, err, "failed to create container %s", containerName)
 	runner.containers = append(runner.containers, newContainer)
 

@@ -17,7 +17,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -245,39 +244,7 @@ func createTapDevice(ctx context.Context, tapName string) error {
 	return nil
 }
 
-type testMultipleVMsRunner struct {
-	containers []containerd.Container
-}
-
-func (runner *testMultipleVMsRunner) ImportPath() string { return "" }
-func (runner *testMultipleVMsRunner) MatchString(pat, str string) (bool, error) {
-	return pat == str, nil
-}
-func (runner *testMultipleVMsRunner) StartCPUProfile(w io.Writer) error                   { return nil }
-func (runner *testMultipleVMsRunner) StopCPUProfile()                                     {}
-func (runner *testMultipleVMsRunner) StartTestLog(w io.Writer)                            {}
-func (runner *testMultipleVMsRunner) StopTestLog() error                                  { return nil }
-func (runner *testMultipleVMsRunner) WriteProfileTo(str string, w io.Writer, n int) error { return nil }
-
 func TestMultipleVMs_Isolated(t *testing.T) {
-	runner := &testMultipleVMsRunner{}
-	tests := []testing.InternalTest{
-		{
-			Name: "TestMultipleVMs_Isolated",
-			F:    runner.TestMultipleVMs,
-		},
-	}
-	m := testing.MainStart(runner, tests, nil, nil)
-	code := m.Run()
-	for _, container := range runner.containers {
-		err := container.Delete(context.Background())
-		t.Log(err)
-	}
-
-	os.Exit(code)
-}
-
-func (runner *testMultipleVMsRunner) TestMultipleVMs(t *testing.T) {
 	prepareIntegTest(t)
 
 	netns, err := ns.GetCurrentNS()
@@ -377,7 +344,7 @@ func (runner *testMultipleVMsRunner) TestMultipleVMs(t *testing.T) {
 				containerWg.Add(1)
 				go func(containerID int) {
 					defer containerWg.Done()
-					runner.testMultipleExecs(
+					testMultipleExecs(
 						ctx,
 						t,
 						vmID,
@@ -422,7 +389,7 @@ func (runner *testMultipleVMsRunner) TestMultipleVMs(t *testing.T) {
 	vmWg.Wait()
 }
 
-func (runner *testMultipleVMsRunner) testMultipleExecs(
+func testMultipleExecs(
 	ctx context.Context,
 	t *testing.T,
 	vmID int,
@@ -455,7 +422,7 @@ func (runner *testMultipleVMsRunner) testMultipleExecs(
 		),
 	)
 	require.NoError(t, err, "failed to create container %s", containerName)
-	runner.containers = append(runner.containers, newContainer)
+	defer newContainer.Delete(ctx)
 
 	var taskStdout bytes.Buffer
 	var taskStderr bytes.Buffer

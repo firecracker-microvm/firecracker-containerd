@@ -35,6 +35,8 @@ steps:
       hostname: "${BUILDKITE_AGENT_META_DATA_HOSTNAME}"
     env:
       NUMBER_OF_VMS: "100"
+    artifact_paths:
+      - "runtime/logs/*"
     command:
       - ./.buildkite/al2_test.sh
     timeout_in_minutes: 10

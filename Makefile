@@ -62,6 +62,7 @@ $(SUBDIRS):
 		--env GOPATH=/go \
 		--env GO111MODULES=on \
 		--env STATIC_AGENT=on \
+		--env GOPROXY=$(shell go env GOPROXY) \
 		--workdir /src \
 		$(FIRECRACKER_CONTAINERD_BUILDER_IMAGE) \
 		$(MAKE) $(subst -in-docker,,$@)

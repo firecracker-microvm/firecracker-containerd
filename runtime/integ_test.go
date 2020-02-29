@@ -58,7 +58,7 @@ func shimBaseDir() string {
 // devmapper is the only snapshotter we can use with Firecracker
 const defaultSnapshotterName = "devmapper"
 
-func prepareIntegTest(t *testing.T, options ...func(*config.Config)) {
+func prepareIntegTest(t testing.TB, options ...func(*config.Config)) {
 	t.Helper()
 
 	internal.RequiresIsolation(t)

@@ -37,8 +37,8 @@ RUN --mount=type=bind,source=firecracker-control/cmd/containerd,target=/src \
   ln -sv /usr/local/bin/firecracker-containerd /usr/local/bin/containerd && \
   ln -sv /usr/local/bin/firecracker-ctr /usr/local/bin/ctr
 RUN containerd 2>/dev/null & \
-  ctr content fetch docker.io/library/alpine:3.10.1 >/dev/null && \
-  ctr content fetch docker.io/mlabbe/iperf3:3.6-r0 >/dev/null
+  ctr --address /run/firecracker-containerd/containerd.sock content fetch docker.io/library/alpine:3.10.1 >/dev/null && \
+  ctr --address /run/firecracker-containerd/containerd.sock content fetch docker.io/mlabbe/iperf3:3.6-r0 >/dev/null
 
 # Install everything we need in this image. Due to the bind-mount, if the host has already
 # up-to-date versions of everything built, this step will be a very quick copy

@@ -72,6 +72,28 @@ integ-test-%: logs
 		$(FIRECRACKER_CONTAINERD_TEST_IMAGE):$(DOCKER_IMAGE_TAG) \
 		"go test $(EXTRAGOARGS) -run '^$(subst integ-test-,,$@)$$'"
 
+benchmark-%: logs
+	$(CURDIR)/../tools/thinpool.sh reset "$(FICD_DM_POOL)"
+	docker run --rm -it \
+		--privileged \
+		--ipc=host \
+		--network=none \
+		--volume /dev:/dev \
+		--volume /run/udev/control:/run/udev/control \
+		--volume $(CURDIR)/logs:/var/log/firecracker-containerd-test \
+		--volume $(CURDIR)/..:/src \
+		--volume $(GO_CACHE_VOLUME_NAME):/go \
+		--env ENABLE_ISOLATED_TESTS=1 \
+		--env FICD_DM_VOLUME_GROUP=$(FICD_DM_VOLUME_GROUP) \
+		--env FICD_DM_POOL=$(FICD_DM_POOL) \
+		--env GOPROXY=direct \
+		--env GOSUMDB=off \
+		--env NUMBER_OF_VMS=$(NUMBER_OF_VMS) \
+		--workdir="/src/runtime" \
+		--init \
+		$(FIRECRACKER_CONTAINERD_TEST_IMAGE):$(DOCKER_IMAGE_TAG) \
+		"go test $(EXTRAGOARGS) -run IGNORE -bench '$(subst benchmark-,,$@)'"
+
 logs:
 	mkdir logs
 

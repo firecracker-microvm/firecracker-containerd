@@ -1,0 +1,35 @@
+name: Build
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    env:
+      GO111MODULE: on
+
+    # Intentionally use 18.04 instead of "latest" to
+    # make this build reproducible.
+    runs-on: ubuntu-18.04
+
+    strategy:
+      matrix:
+        go: ['1.11', '1.12', '1.13', '1.14']
+    name: Go ${{ matrix.go }}
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          # Assuming that there are at most 20 commits in a single pull
+          # request, we want to check all commits in a pull request have DCO.
+          fetch-depth: 20
+      - uses: actions/setup-go@v1
+        with:
+          go-version: ${{ matrix.go }}
+      - run: make deps
+      - run: make
+      - run: make lint
+      - run: make test

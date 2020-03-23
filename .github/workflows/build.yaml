@@ -18,14 +18,24 @@ jobs:
     strategy:
       matrix:
         go: ['1.11', '1.12', '1.13', '1.14']
+      # Build all variants regardless of failures
+      fail-fast: false
     name: Go ${{ matrix.go }}
 
     steps:
       - uses: actions/checkout@v2
         with:
-          # Assuming that there are at most 20 commits in a single pull
-          # request, we want to check all commits in a pull request have DCO.
-          fetch-depth: 20
+          # By default, the checkout action only fetches the last commit,
+          # but we want to run DCO check against all commit messages.
+          # Assuming that a pull request may have multiple commits,
+          # fetching the single commit doesn't work for us.
+          #
+          # While DCO check (on Makefile) checks latest 20 commits,
+          # the checkout action automatically creates a merge commit
+          # for merging "master" into a pull request branch.
+          # So we need to fetch 21 commits (including the merge commit)
+          # to have 20 actual commits from a pull request.
+          fetch-depth: 21
       - uses: actions/setup-go@v1
         with:
           go-version: ${{ matrix.go }}

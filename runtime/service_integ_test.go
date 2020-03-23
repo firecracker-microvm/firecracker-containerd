@@ -75,7 +75,7 @@ var (
 	findShim        = findProcWithName(shimProcessName)
 	findFirecracker = findProcWithName(firecrackerProcessName)
 
-	containerdSockPath = "/run/containerd/containerd.sock"
+	containerdSockPath = "/run/firecracker-containerd/containerd.sock"
 )
 
 func init() {

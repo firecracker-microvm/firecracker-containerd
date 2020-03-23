@@ -19,22 +19,20 @@ for the VM by following [these instructions](https://github.com/firecracker-micr
 
 This creates a tap device named `tap0`, in the local `172.16.0.1/24` subnet.
 Since the example does not rely on a DHCP client running within the VM to
-initialize the network interface, `gw` and `mask` flags should be used to
-specify the gateway and subnet mask values.
+initialize the network interface, `gw` flag should be used to
+specify the gateway value.
 
 The following example sets:
-* The IP address to `172.16.0.2`
+* The IP address (CIDR) to `172.16.0.2/24`
 * The gateway IP address to `172.16.0.1`
-* The subnet mask to `255.255.255.0` (`/24`)
 
 ** NOTE: This example will not work if you're running more than 1 container
 on a host at the same time **
 
 Now, run the example by passing the `-ip` argument:
 ```bash
-$ sudo /path/to/firecracker-containerd/examples/taskworkflow -ip 172.16.0.2 \
-    -gw 172.16.0.1 \
-    -mask 255.255.255.0
+$ sudo /path/to/firecracker-containerd/examples/taskworkflow -ip 172.16.0.2/24 \
+    -gw 172.16.0.1
 ```
 
 You should see output similar to this:

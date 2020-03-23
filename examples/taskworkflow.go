@@ -36,7 +36,7 @@ import (
 )
 
 const (
-	containerdAddress      = "/run/containerd/containerd.sock"
+	containerdAddress      = "/run/firecracker-containerd/containerd.sock"
 	containerdTTRPCAddress = containerdAddress + ".ttrpc"
 	namespaceName          = "firecracker-containerd-example"
 	macAddress             = "AA:FC:00:00:00:01"

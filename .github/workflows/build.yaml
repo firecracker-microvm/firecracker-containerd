@@ -18,6 +18,8 @@ jobs:
     strategy:
       matrix:
         go: ['1.11', '1.12', '1.13', '1.14']
+      # Build all variants regardless of failures
+      fail-fast: false
     name: Go ${{ matrix.go }}
 
     steps:

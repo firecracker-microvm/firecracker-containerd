@@ -28,7 +28,7 @@ SUBMODULES=_submodules
 UID:=$(shell id -u)
 GID:=$(shell id -g)
 
-FIRECRACKER_CONTAINERD_BUILDER_IMAGE?=golang:1.13-stretch
+FIRECRACKER_CONTAINERD_BUILDER_IMAGE?=golang:1.13-buster
 export FIRECRACKER_CONTAINERD_TEST_IMAGE?=localhost/firecracker-containerd-test
 export GO_CACHE_VOLUME_NAME?=gocache
 

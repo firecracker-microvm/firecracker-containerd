@@ -23,7 +23,7 @@ steps:
       EXTRAGOARGS: "-race"
     command:
       - make test-images
-      - docker run --rm -v $PWD:/mnt debian:stretch-slim rm -rf /mnt/tools/image-builder/rootfs
+      - docker run --rm -v $PWD:/mnt debian:buster-slim rm -rf /mnt/tools/image-builder/rootfs
       - sudo install -d -o root -g buildkite-agent -m 775 "/local/artifacts/$BUILDKITE_BUILD_NUMBER"
       - cp tools/image-builder/rootfs.img "/local/artifacts/$BUILDKITE_BUILD_NUMBER/"
 

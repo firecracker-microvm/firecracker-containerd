@@ -15,10 +15,10 @@ files into `/usr/local/bin`.
 1. Get an AWS account (see
    [this article](https://aws.amazon.com/premiumsupport/knowledge-center/create-and-activate-aws-account/)
    if you need help creating one)
-2. Launch an i3.metal instance running Debian Stretch (you can find it in the
-   [AWS marketplace](http://deb.li/awsmp) or on [this
-   page](https://wiki.debian.org/Cloud/AmazonEC2Image/Stretch).  If you need
-   help launching an EC2 instance, see the
+2. Launch an i3.metal instance running Debian Buster (you can find it in the
+   [AWS marketplace](https://aws.amazon.com/marketplace/pp/B0859NK4HC) or
+   on [this page](https://wiki.debian.org/Cloud/AmazonEC2Image/Buster).
+   If you need help launching an EC2 instance, see the
    [EC2 getting started guide](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/EC2_GetStarted.html).
 3. Run the script below to download and install all the required components.
    This script expects to be run from your `$HOME` directory.
@@ -30,11 +30,8 @@ cd ~
 
 # Install git, Go 1.11, make, curl
 sudo mkdir -p /etc/apt/sources.list.d
-echo "deb http://ftp.debian.org/debian stretch-backports main" | \
-     sudo tee /etc/apt/sources.list.d/stretch-backports.list
 sudo DEBIAN_FRONTEND=noninteractive apt-get update
 sudo DEBIAN_FRONTEND=noninteractive apt-get \
-  --target-release stretch-backports \
   install --yes \
   golang-go \
   make \
@@ -42,7 +39,8 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get \
   curl \
   e2fsprogs \
   util-linux \
-  bc
+  bc \
+  gnupg
 
 cd ~
 

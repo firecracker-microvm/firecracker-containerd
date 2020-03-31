@@ -28,12 +28,14 @@ files into `/usr/local/bin`.
 
 cd ~
 
-# Install git, Go 1.11, make, curl
+# Install git, Go 1.13, make, curl
 sudo mkdir -p /etc/apt/sources.list.d
+echo "deb http://ftp.debian.org/debian buster-backports main" | \
+  sudo tee /etc/apt/sources.list.d/buster-backports.list
 sudo DEBIAN_FRONTEND=noninteractive apt-get update
 sudo DEBIAN_FRONTEND=noninteractive apt-get \
   install --yes \
-  golang-go \
+  golang-1.13 \
   make \
   git \
   curl \
@@ -41,6 +43,9 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get \
   util-linux \
   bc \
   gnupg
+
+# Debian's Go 1.13 package installs "go" command under /usr/lib/go-1.13/bin
+export PATH=/usr/lib/go-1.13/bin:$PATH
 
 cd ~
 

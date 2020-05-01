@@ -14,6 +14,8 @@
 package main
 
 import (
+	"flag"
+	"fmt"
 	"os"
 
 	"github.com/containerd/containerd/log"
@@ -35,6 +37,15 @@ func init() {
 }
 
 func main() {
+
+	var version bool
+	flag.BoolVar(&version, "version", false, "Show the version")
+	flag.Parse()
+	if version {
+		showVersion()
+		return
+	}
+
 	shim.Run(shimID, NewService, func(cfg *shim.Config) {
 		cfg.NoSetupLogger = true
 
@@ -45,4 +56,10 @@ func main() {
 		cfg.NoSubreaper = true
 		cfg.NoReaper = true
 	})
+}
+
+func showVersion() {
+	// Once https://github.com/golang/go/issues/29814 is resolved,
+	// we can use runtime/debug.BuildInfo instead of calling git(1) from Makefile
+	fmt.Printf("containerd firecracker shim (git commit: %s)\n", revision)
 }

@@ -245,17 +245,23 @@ func (j *runcJailer) BuildLinkFifoHandler() firecracker.Handler {
 			contentsPath := j.RootPath()
 			fifoFileName := filepath.Base(m.Cfg.LogFifo)
 			newFifoPath := filepath.Join(contentsPath, fifoFileName)
-			if err := os.Link(m.Cfg.LogFifo, newFifoPath); err != nil {
+			// Since Firecracker is unaware that we are in a jailed environment and
+			// what owner/group to set this as when creating, we will manually have
+			// to adjust the permission bits ourselves
+			if err := linkAndChown(m.Cfg.LogFifo, newFifoPath, j.Config.UID, j.Config.GID); err != nil {
 				return err
 			}
-			m.Cfg.LogFifo = newFifoPath
+			// this path needs to be relative to the root path, and since we are
+			// placing the file in the root path the LogFifo value should just be the
+			// file name.
+			m.Cfg.LogFifo = fifoFileName
 
 			metricFifoFileName := filepath.Base(m.Cfg.MetricsFifo)
 			newMetricFifoPath := filepath.Join(contentsPath, metricFifoFileName)
-			if err := os.Link(m.Cfg.MetricsFifo, newMetricFifoPath); err != nil {
+			if err := linkAndChown(m.Cfg.MetricsFifo, newMetricFifoPath, j.Config.UID, j.Config.GID); err != nil {
 				return err
 			}
-			m.Cfg.MetricsFifo = newMetricFifoPath
+			m.Cfg.MetricsFifo = metricFifoFileName
 
 			return nil
 		},
@@ -488,6 +494,18 @@ func mkdirAllWithPermissions(path string, mode os.FileMode, uid, gid uint32) err
 		if err != nil && !os.IsExist(err) {
 			return err
 		}
+	}
+
+	return nil
+}
+
+func linkAndChown(src, dst string, uid, gid uint32) error {
+	if err := os.Link(src, dst); err != nil {
+		return err
+	}
+
+	if err := os.Chown(dst, int(uid), int(gid)); err != nil {
+		return err
 	}
 
 	return nil

@@ -492,8 +492,13 @@ func (s *service) createVM(requestCtx context.Context, request *proto.CreateVMRe
 		}
 	}()
 
+	namespace, ok := namespaces.Namespace(s.shimCtx)
+	if !ok {
+		namespace = namespaces.Default
+	}
+
 	s.logger.Info("creating new VM")
-	s.jailer, err = newJailer(s.shimCtx, s.logger, filepath.Join(s.config.ShimBaseDir, s.vmID), s, request)
+	s.jailer, err = newJailer(s.shimCtx, s.logger, filepath.Join(s.config.ShimBaseDir, namespace, s.vmID), s, request)
 	if err != nil {
 		return errors.Wrap(err, "failed to create jailer")
 	}
@@ -1165,11 +1170,21 @@ func (s *service) shutdown(
 		s.shutdownLoop(requestCtx, timeout, req)
 	}()
 
-	err := s.machine.Wait(context.Background())
-	if err == nil {
+	var result *multierror.Error
+	if err := s.machine.Wait(context.Background()); err != nil {
+		result = multierror.Append(result, err)
+	}
+	if err := s.jailer.Close(); err != nil {
+		result = multierror.Append(result, err)
+	}
+	if result == nil {
 		return nil
 	}
-	return status.Error(codes.Internal, fmt.Sprintf("the VMM was killed forcibly: %v", err))
+
+	if err := result.ErrorOrNil(); err != nil {
+		return status.Error(codes.Internal, fmt.Sprintf("the VMM was killed forcibly: %v", err))
+	}
+	return nil
 }
 
 // shutdownLoop sends multiple different shutdown requests to stop the VMM.

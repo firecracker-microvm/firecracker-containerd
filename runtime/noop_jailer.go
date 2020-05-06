@@ -118,4 +118,6 @@ func (j *noopJailer) Stop() error {
 	return err
 }
 
-func (j *noopJailer) Close() error { return nil }
+func (j *noopJailer) Close() error {
+	return os.RemoveAll(j.shimDir.RootPath())
+}

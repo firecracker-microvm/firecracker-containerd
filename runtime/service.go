@@ -20,7 +20,6 @@ import (
 	"math"
 	"net"
 	"os"
-	"path/filepath"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -497,8 +496,13 @@ func (s *service) createVM(requestCtx context.Context, request *proto.CreateVMRe
 		namespace = namespaces.Default
 	}
 
+	dir, err := vm.ShimDir(s.config.ShimBaseDir, namespace, s.vmID)
+	if err != nil {
+		return err
+	}
+
 	s.logger.Info("creating new VM")
-	s.jailer, err = newJailer(s.shimCtx, s.logger, filepath.Join(s.config.ShimBaseDir, namespace, s.vmID), s, request)
+	s.jailer, err = newJailer(s.shimCtx, s.logger, dir.RootPath(), s, request)
 	if err != nil {
 		return errors.Wrap(err, "failed to create jailer")
 	}

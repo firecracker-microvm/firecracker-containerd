@@ -470,9 +470,12 @@ func testMultipleExecs(
 	close(execStdouts)
 
 	if jailerConfig != nil {
+		dir, err := vm.ShimDir(shimBaseDir(), "default", vmIDStr)
+		require.NoError(t, err)
+
 		jailer := &runcJailer{
 			Config: runcJailerConfig{
-				OCIBundlePath: filepath.Join(shimBaseDir(), vmIDStr),
+				OCIBundlePath: dir.RootPath(),
 			},
 			vmID: vmIDStr,
 		}

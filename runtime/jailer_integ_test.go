@@ -99,15 +99,13 @@ func testJailer(t *testing.T, jailerConfig *proto.JailerConfig) {
 func TestJailerCPUSet_Isolated(t *testing.T) {
 	prepareIntegTest(t)
 
-	t.Run("TestJailerCPUSet_Isolated", func(t *testing.T) {
-		b := cpuset.Builder{}
-		cset := b.AddCPU(0).AddMem(0).Build()
-		config := &proto.JailerConfig{
-			CPUs: cset.CPUs(),
-			Mems: cset.Mems(),
-			UID:  300000,
-			GID:  300000,
-		}
-		testJailer(t, config)
-	})
+	b := cpuset.Builder{}
+	cset := b.AddCPU(0).AddMem(0).Build()
+	config := &proto.JailerConfig{
+		CPUs: cset.CPUs(),
+		Mems: cset.Mems(),
+		UID:  300000,
+		GID:  300000,
+	}
+	testJailer(t, config)
 }

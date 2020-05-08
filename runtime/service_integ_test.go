@@ -273,6 +273,15 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 				NetNS: netns.Path(),
 			},
 		},
+		{
+			MaxContainers: 3,
+			JailerConfig: &proto.JailerConfig{
+				UID:        300000,
+				GID:        300000,
+				NetNS:      netns.Path(),
+				CgroupPath: "/mycgroup",
+			},
+		},
 	}
 
 	testTimeout := 600 * time.Second
@@ -471,7 +480,7 @@ func testMultipleExecs(
 		require.NoError(t, err, "failed to stat root path of jailer")
 		_, err = os.Stat(filepath.Join("/sys/fs/cgroup/cpu", cgroupPath))
 		require.NoError(t, err, "failed to stat cgroup path of jailer")
-		assert.Equal(t, filepath.Join("/firecracker-containerd", vmIDStr), cgroupPath)
+		assert.Regexp(t, fmt.Sprintf(".+/%s", vmIDStr), cgroupPath)
 	}
 
 	// Verify each exec had the same stdout and use that value as the mount namespace that will be compared

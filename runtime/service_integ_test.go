@@ -370,6 +370,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 			require.Equal(t, vmInfoResp.SocketPath, filepath.Join(cfg.ShimBaseDir, defaultNamespace, strconv.Itoa(vmID), "firecracker.sock"))
 			require.Equal(t, vmInfoResp.LogFifoPath, filepath.Join(cfg.ShimBaseDir, defaultNamespace, strconv.Itoa(vmID), "fc-logs.fifo"))
 			require.Equal(t, vmInfoResp.MetricsFifoPath, filepath.Join(cfg.ShimBaseDir, defaultNamespace, strconv.Itoa(vmID), "fc-metrics.fifo"))
+			require.Equal(t, resp.CgroupPath, vmInfoResp.CgroupPath)
 
 			// just verify that updating the metadata doesn't return an error, a separate test case is needed
 			// to very the MMDS update propagates to the container correctly

@@ -597,11 +597,17 @@ func (s *service) GetVMInfo(requestCtx context.Context, request *proto.GetVMInfo
 		return nil, err
 	}
 
+	cgroupPath := ""
+	if c, ok := s.jailer.(cgroupPather); ok {
+		cgroupPath = c.CgroupPath()
+	}
+
 	return &proto.GetVMInfoResponse{
 		VMID:            s.vmID,
 		SocketPath:      s.shimDir.FirecrackerSockPath(),
 		LogFifoPath:     s.machineConfig.LogFifo,
 		MetricsFifoPath: s.machineConfig.MetricsFifo,
+		CgroupPath:      cgroupPath,
 	}, nil
 }
 

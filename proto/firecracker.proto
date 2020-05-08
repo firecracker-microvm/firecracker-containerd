@@ -102,5 +102,11 @@ message JailerConfig {
     string Mems = 3;
     uint32 UID = 4;
     uint32 GID = 5;
+	// CgroupPath is used to dictate where the cgroup should be located
+	// relative to the cgroup directory which is
+	// /sys/fs/cgroup/cpu/<CgroupPath>/<vmID>
+	// if no value was provided, then /firecracker-containerd will be used as
+	// the default value
+    string CgroupPath = 6;
 }
 

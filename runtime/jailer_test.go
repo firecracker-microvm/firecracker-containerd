@@ -17,6 +17,7 @@ import (
 	"context"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"syscall"
 	"testing"
@@ -25,6 +26,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/firecracker-microvm/firecracker-containerd/config"
+	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 )
 
@@ -57,6 +60,7 @@ func createSparseFile(path string, size int) error {
 
 	return nil
 }
+
 func TestCopyFile_sparse(t *testing.T) {
 	dir, err := ioutil.TempDir("", t.Name())
 	require.NoError(t, err)
@@ -95,4 +99,44 @@ func TestJailer_invalidUIDGID(t *testing.T) {
 	}
 	_, err := newJailer(context.Background(), logrus.NewEntry(logrus.New()), "/foo", &service{}, &req)
 	assert.Error(t, err, "expected invalid uid and gid error, but received none")
+}
+
+func TestNewJailer_Isolated(t *testing.T) {
+	prepareIntegTest(t)
+
+	ociBundlePath, err := ioutil.TempDir("", t.Name())
+	require.NoError(t, err)
+	defer os.RemoveAll(ociBundlePath)
+	b, err := exec.Command(
+		"cp",
+		"firecracker-runc-config.json.example",
+		filepath.Join(ociBundlePath, "config.json"),
+	).CombinedOutput()
+	require.NoErrorf(t, err, "copy runc config failed with: %s", string(b))
+
+	ctx := context.Background()
+	logger := logrus.NewEntry(logrus.New())
+	s := &service{
+		vmID:    "id",
+		shimDir: vm.Dir("/path/to/shim"),
+		config: &config.Config{
+			JailerConfig: config.JailerConfig{
+				RuncBinaryPath: "/path/to/runc_bin_path",
+				RuncConfigPath: filepath.Join(ociBundlePath, "config.json"),
+			},
+		},
+	}
+	req := &proto.CreateVMRequest{
+		JailerConfig: &proto.JailerConfig{
+			UID:        123,
+			GID:        456,
+			CgroupPath: "/my/cgroup_path",
+		},
+	}
+
+	j, err := newJailer(ctx, logger, ociBundlePath, s, req)
+	require.NoError(t, err)
+	runc, ok := j.(*runcJailer)
+	require.True(t, ok)
+	assert.Equal(t, filepath.Join(req.JailerConfig.CgroupPath, s.vmID), runc.CgroupPath())
 }

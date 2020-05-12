@@ -60,6 +60,7 @@ type runcJailerConfig struct {
 	GID            uint32
 	CPUs           string
 	Mems           string
+	CgroupPath     string
 }
 
 func newRuncJailer(ctx context.Context, logger *logrus.Entry, vmID string, cfg runcJailerConfig) (*runcJailer, error) {
@@ -429,7 +430,12 @@ func (j *runcJailer) overwriteConfig(cfg *config.Config, machineConfig *firecrac
 }
 
 func (j runcJailer) CgroupPath() string {
-	return filepath.Join("/firecracker-containerd", j.vmID)
+	basePath := "/firecracker-containerd"
+	if j.Config.CgroupPath != "" {
+		basePath = j.Config.CgroupPath
+	}
+
+	return filepath.Join(basePath, j.vmID)
 }
 
 // setDefaultConfigValues will process the spec file provided and allow any

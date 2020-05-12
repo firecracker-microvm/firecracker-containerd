@@ -102,6 +102,7 @@ func newJailer(
 		GID:            request.JailerConfig.GID,
 		CPUs:           request.JailerConfig.CPUs,
 		Mems:           request.JailerConfig.Mems,
+		CgroupPath:     request.JailerConfig.CgroupPath,
 	}
 	return newRuncJailer(ctx, l, service.vmID, config)
 }

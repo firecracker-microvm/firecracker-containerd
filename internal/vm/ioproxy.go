@@ -128,7 +128,7 @@ func (connectorPair *IOConnectorPair) proxy(
 		logger.Debug("begin copying io")
 		defer logger.Debug("end copying io")
 
-		_, err := io.CopyBuffer(writer, reader, make([]byte, internal.DefaultBufferSize))
+		size, err := io.CopyBuffer(writer, reader, make([]byte, internal.DefaultBufferSize))
 		if err != nil {
 			if strings.Contains(err.Error(), "use of closed network connection") ||
 				strings.Contains(err.Error(), "file already closed") {
@@ -138,6 +138,8 @@ func (connectorPair *IOConnectorPair) proxy(
 			}
 			copyDone <- err
 		}
+		logger.Debugf("copied %d", size)
+		defer logClose(logger, reader, writer)
 	}()
 
 	return initDone, copyDone

@@ -21,16 +21,16 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// FIFOConnector adapts containerd's fifo package to the IOConnector interface
-func FIFOConnector(path string) IOConnector {
+// fifoConnector adapts containerd's fifo package to the IOConnector interface
+func fifoConnector(path string, flag int) IOConnector {
 	return func(procCtx context.Context, logger *logrus.Entry) <-chan IOConnectorResult {
 		returnCh := make(chan IOConnectorResult, 1)
 		defer close(returnCh)
 
 		// We open the FIFO synchronously to ensure that the FIFO is created (via O_CREAT) before
-		// it is passed to any task service. O_RDWR ensures that we don't block on the syscall
+		// it is passed to any task service. O_NONBLOCK ensures that we don't block on the syscall
 		// level (as documented in the fifo pkg).
-		fifo, err := fifo.OpenFifo(procCtx, path, syscall.O_CREAT|syscall.O_RDWR, 0300)
+		fifo, err := fifo.OpenFifo(procCtx, path, syscall.O_CREAT|syscall.O_NONBLOCK|flag, 0300)
 		returnCh <- IOConnectorResult{
 			ReadWriteCloser: fifo,
 			Err:             err,
@@ -38,4 +38,14 @@ func FIFOConnector(path string) IOConnector {
 
 		return returnCh
 	}
+}
+
+// ReadFIFOConnector returns a FIFO which is open for reading
+func ReadFIFOConnector(path string) IOConnector {
+	return fifoConnector(path, syscall.O_RDONLY)
+}
+
+// WriteFIFOConnector returns a FIFO which is open for writing
+func WriteFIFOConnector(path string) IOConnector {
+	return fifoConnector(path, syscall.O_WRONLY)
 }

@@ -787,6 +787,46 @@ func (s *service) buildRootDrive(req *proto.CreateVMRequest) []models.Drive {
 	return builder.Build()
 }
 
+func (s *service) newIOProxy(logger *logrus.Entry, stdin, stdout, stderr string, extraData *proto.ExtraData) (vm.IOProxy, error) {
+	var ioConnectorSet vm.IOProxy
+
+	relVSockPath, err := s.jailer.JailPath().FirecrackerVSockRelPath()
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to get relative path to firecracker vsock")
+	}
+
+	if vm.IsAgentOnlyIO(stdout, logger) {
+		ioConnectorSet = vm.NewNullIOProxy()
+	} else {
+		var stdinConnectorPair *vm.IOConnectorPair
+		if stdin != "" {
+			stdinConnectorPair = &vm.IOConnectorPair{
+				ReadConnector:  vm.ReadFIFOConnector(stdin),
+				WriteConnector: vm.VSockDialConnector(relVSockPath, extraData.StdinPort),
+			}
+		}
+
+		var stdoutConnectorPair *vm.IOConnectorPair
+		if stdout != "" {
+			stdoutConnectorPair = &vm.IOConnectorPair{
+				ReadConnector:  vm.VSockDialConnector(relVSockPath, extraData.StdoutPort),
+				WriteConnector: vm.WriteFIFOConnector(stdout),
+			}
+		}
+
+		var stderrConnectorPair *vm.IOConnectorPair
+		if stderr != "" {
+			stderrConnectorPair = &vm.IOConnectorPair{
+				ReadConnector:  vm.VSockDialConnector(relVSockPath, extraData.StderrPort),
+				WriteConnector: vm.WriteFIFOConnector(stderr),
+			}
+		}
+
+		ioConnectorSet = vm.NewIOConnectorProxy(stdinConnectorPair, stdoutConnectorPair, stderrConnectorPair)
+	}
+	return ioConnectorSet, nil
+}
+
 func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTaskRequest) (*taskAPI.CreateTaskResponse, error) {
 	logger := s.logger.WithField("task_id", request.ID)
 	defer logPanicAndDie(logger)
@@ -857,41 +897,9 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 		return nil, err
 	}
 
-	relVSockPath, err := s.jailer.JailPath().FirecrackerVSockRelPath()
+	ioConnectorSet, err := s.newIOProxy(logger, request.Stdin, request.Stdout, request.Stderr, extraData)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to get relative path to firecracker vsock")
-	}
-
-	var ioConnectorSet vm.IOProxy
-
-	if vm.IsAgentOnlyIO(request.Stdout, logger) {
-		ioConnectorSet = vm.NewNullIOProxy()
-	} else {
-		var stdinConnectorPair *vm.IOConnectorPair
-		if request.Stdin != "" {
-			stdinConnectorPair = &vm.IOConnectorPair{
-				ReadConnector:  vm.FIFOConnector(request.Stdin),
-				WriteConnector: vm.VSockDialConnector(relVSockPath, extraData.StdinPort),
-			}
-		}
-
-		var stdoutConnectorPair *vm.IOConnectorPair
-		if request.Stdout != "" {
-			stdoutConnectorPair = &vm.IOConnectorPair{
-				ReadConnector:  vm.VSockDialConnector(relVSockPath, extraData.StdoutPort),
-				WriteConnector: vm.FIFOConnector(request.Stdout),
-			}
-		}
-
-		var stderrConnectorPair *vm.IOConnectorPair
-		if request.Stderr != "" {
-			stderrConnectorPair = &vm.IOConnectorPair{
-				ReadConnector:  vm.VSockDialConnector(relVSockPath, extraData.StderrPort),
-				WriteConnector: vm.FIFOConnector(request.Stderr),
-			}
-		}
-
-		ioConnectorSet = vm.NewIOConnectorProxy(stdinConnectorPair, stdoutConnectorPair, stderrConnectorPair)
+		return nil, err
 	}
 
 	// override the request with the bundle dir that should be used inside the VM
@@ -987,41 +995,9 @@ func (s *service) Exec(requestCtx context.Context, req *taskAPI.ExecProcessReque
 		return nil, err
 	}
 
-	relVSockPath, err := s.jailer.JailPath().FirecrackerVSockRelPath()
+	ioConnectorSet, err := s.newIOProxy(logger, req.Stdin, req.Stdout, req.Stderr, extraData)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to get relative path to firecracker vsock")
-	}
-
-	var ioConnectorSet vm.IOProxy
-
-	if vm.IsAgentOnlyIO(req.Stdout, logger) {
-		ioConnectorSet = vm.NewNullIOProxy()
-	} else {
-		var stdinConnectorPair *vm.IOConnectorPair
-		if req.Stdin != "" {
-			stdinConnectorPair = &vm.IOConnectorPair{
-				ReadConnector:  vm.FIFOConnector(req.Stdin),
-				WriteConnector: vm.VSockDialConnector(relVSockPath, extraData.StdinPort),
-			}
-		}
-
-		var stdoutConnectorPair *vm.IOConnectorPair
-		if req.Stdout != "" {
-			stdoutConnectorPair = &vm.IOConnectorPair{
-				ReadConnector:  vm.VSockDialConnector(relVSockPath, extraData.StdoutPort),
-				WriteConnector: vm.FIFOConnector(req.Stdout),
-			}
-		}
-
-		var stderrConnectorPair *vm.IOConnectorPair
-		if req.Stderr != "" {
-			stderrConnectorPair = &vm.IOConnectorPair{
-				ReadConnector:  vm.VSockDialConnector(relVSockPath, extraData.StderrPort),
-				WriteConnector: vm.FIFOConnector(req.Stderr),
-			}
-		}
-
-		ioConnectorSet = vm.NewIOConnectorProxy(stdinConnectorPair, stdoutConnectorPair, stderrConnectorPair)
+		return nil, err
 	}
 
 	resp, err := s.taskManager.ExecProcess(requestCtx, req, s.agentClient, ioConnectorSet)

@@ -269,6 +269,9 @@ func (m *taskManager) monitorExit(proc *vmProc, taskService taskAPI.TaskService)
 		ID:     proc.taskID,
 		ExecID: proc.execID,
 	})
+
+	<-proc.ioCopyDone
+
 	proc.cancel()
 
 	if waitErr == context.Canceled {

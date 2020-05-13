@@ -228,7 +228,7 @@ func (ts *TaskService) Create(requestCtx context.Context, req *taskAPI.CreateTas
 			req.Stdin = fifoSet.Stdin
 			stdinConnectorPair = &vm.IOConnectorPair{
 				ReadConnector:  vm.VSockAcceptConnector(extraData.StdinPort),
-				WriteConnector: vm.FIFOConnector(fifoSet.Stdin),
+				WriteConnector: vm.WriteFIFOConnector(fifoSet.Stdin),
 			}
 		}
 
@@ -236,7 +236,7 @@ func (ts *TaskService) Create(requestCtx context.Context, req *taskAPI.CreateTas
 		if req.Stdout != "" {
 			req.Stdout = fifoSet.Stdout
 			stdoutConnectorPair = &vm.IOConnectorPair{
-				ReadConnector:  vm.FIFOConnector(fifoSet.Stdout),
+				ReadConnector:  vm.ReadFIFOConnector(fifoSet.Stdout),
 				WriteConnector: vm.VSockAcceptConnector(extraData.StdoutPort),
 			}
 		}
@@ -245,7 +245,7 @@ func (ts *TaskService) Create(requestCtx context.Context, req *taskAPI.CreateTas
 		if req.Stderr != "" {
 			req.Stderr = fifoSet.Stderr
 			stderrConnectorPair = &vm.IOConnectorPair{
-				ReadConnector:  vm.FIFOConnector(fifoSet.Stderr),
+				ReadConnector:  vm.ReadFIFOConnector(fifoSet.Stderr),
 				WriteConnector: vm.VSockAcceptConnector(extraData.StderrPort),
 			}
 		}
@@ -454,7 +454,7 @@ func (ts *TaskService) Exec(requestCtx context.Context, req *taskAPI.ExecProcess
 			req.Stdin = fifoSet.Stdin
 			stdinConnectorPair = &vm.IOConnectorPair{
 				ReadConnector:  vm.VSockAcceptConnector(extraData.StdinPort),
-				WriteConnector: vm.FIFOConnector(fifoSet.Stdin),
+				WriteConnector: vm.WriteFIFOConnector(fifoSet.Stdin),
 			}
 			ts.addCleanup(taskExecID, func() error {
 				return os.RemoveAll(req.Stdin)
@@ -465,7 +465,7 @@ func (ts *TaskService) Exec(requestCtx context.Context, req *taskAPI.ExecProcess
 		if req.Stdout != "" {
 			req.Stdout = fifoSet.Stdout
 			stdoutConnectorPair = &vm.IOConnectorPair{
-				ReadConnector:  vm.FIFOConnector(fifoSet.Stdout),
+				ReadConnector:  vm.ReadFIFOConnector(fifoSet.Stdout),
 				WriteConnector: vm.VSockAcceptConnector(extraData.StdoutPort),
 			}
 			ts.addCleanup(taskExecID, func() error {
@@ -477,7 +477,7 @@ func (ts *TaskService) Exec(requestCtx context.Context, req *taskAPI.ExecProcess
 		if req.Stderr != "" {
 			req.Stderr = fifoSet.Stderr
 			stderrConnectorPair = &vm.IOConnectorPair{
-				ReadConnector:  vm.FIFOConnector(fifoSet.Stderr),
+				ReadConnector:  vm.ReadFIFOConnector(fifoSet.Stderr),
 				WriteConnector: vm.VSockAcceptConnector(extraData.StderrPort),
 			}
 			ts.addCleanup(taskExecID, func() error {

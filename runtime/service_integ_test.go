@@ -1589,7 +1589,7 @@ func TestExec_Isolated(t *testing.T) {
 	var taskStdout bytes.Buffer
 	var taskStderr bytes.Buffer
 
-	task, err := c.NewTask(ctx, cio.NewCreator(cio.WithStreams(nil, &taskStdout, &taskStderr)))
+	task, err := c.NewTask(ctx, cio.NewCreator(cio.WithStreams(os.Stdin, &taskStdout, &taskStderr)))
 	require.NoError(t, err, "failed to create task for container %s", c.ID())
 
 	taskExitCh, err := task.Wait(ctx)
@@ -1604,7 +1604,7 @@ func TestExec_Isolated(t *testing.T) {
 	taskExec, err := task.Exec(ctx, "exec", &specs.Process{
 		Args: []string{"/bin/date"},
 		Cwd:  "/",
-	}, cio.NewCreator(cio.WithStreams(nil, &execStdout, &execStderr)))
+	}, cio.NewCreator(cio.WithStreams(os.Stdin, &execStdout, &execStderr)))
 	require.NoError(t, err)
 
 	execExitCh, err := taskExec.Wait(ctx)

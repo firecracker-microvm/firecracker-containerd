@@ -67,20 +67,23 @@ type IOConnectorPair struct {
 }
 
 func (connectorPair *IOConnectorPair) proxy(
-	proc *vmProc,
+	ctx context.Context,
 	logger *logrus.Entry,
 	timeoutAfterExit time.Duration,
 ) (ioInitDone <-chan error, ioCopyDone <-chan error) {
 	initDone := make(chan error, 2)
 	copyDone := make(chan error)
 
+	ioCtx, ioCancel := context.WithCancel(context.Background())
+
 	// Start the initialization process. Any synchronous setup made by the connectors will
 	// be completed after these lines. Async setup will be done once initDone is closed in
 	// the goroutine below.
-	readerResultCh := connectorPair.ReadConnector(proc.ctx, logger.WithField("direction", "read"))
-	writerResultCh := connectorPair.WriteConnector(proc.ctx, logger.WithField("direction", "write"))
+	readerResultCh := connectorPair.ReadConnector(ioCtx, logger.WithField("direction", "read"))
+	writerResultCh := connectorPair.WriteConnector(ioCtx, logger.WithField("direction", "write"))
 
 	go func() {
+		defer ioCancel()
 		defer close(copyDone)
 
 		var reader io.ReadCloser
@@ -119,7 +122,7 @@ func (connectorPair *IOConnectorPair) proxy(
 		// If the io streams close on their own before the timeout, the Close calls here
 		// should just be no-ops.
 		go func() {
-			<-proc.ctx.Done()
+			<-ctx.Done()
 			time.AfterFunc(timeoutAfterExit, func() {
 				logClose(logger, reader, writer)
 			})
@@ -129,6 +132,7 @@ func (connectorPair *IOConnectorPair) proxy(
 		defer logger.Debug("end copying io")
 
 		size, err := io.CopyBuffer(writer, reader, make([]byte, internal.DefaultBufferSize))
+		logger.Debugf("copied %d", size)
 		if err != nil {
 			if strings.Contains(err.Error(), "use of closed network connection") ||
 				strings.Contains(err.Error(), "file already closed") {
@@ -138,7 +142,6 @@ func (connectorPair *IOConnectorPair) proxy(
 			}
 			copyDone <- err
 		}
-		logger.Debugf("copied %d", size)
 		defer logClose(logger, reader, writer)
 	}()
 
@@ -174,19 +177,20 @@ func (ioConnectorSet *ioConnectorSet) start(proc *vmProc) (ioInitDone <-chan err
 	if ioConnectorSet.stdin != nil {
 		// For Stdin only, provide 0 as the timeout to wait after the proc exits before closing IO streams.
 		// There's no reason to send stdin data to a proc that's already dead.
-		waitErrs(ioConnectorSet.stdin.proxy(proc, proc.logger.WithField("stream", "stdin"), 0))
+		waitErrs(ioConnectorSet.stdin.proxy(proc.ctx, proc.logger.WithField("stream", "stdin"), 0))
+
 	} else {
 		proc.logger.Debug("skipping proxy io for unset stdin")
 	}
 
 	if ioConnectorSet.stdout != nil {
-		waitErrs(ioConnectorSet.stdout.proxy(proc, proc.logger.WithField("stream", "stdout"), defaultIOFlushTimeout))
+		waitErrs(ioConnectorSet.stdout.proxy(proc.ctx, proc.logger.WithField("stream", "stdout"), defaultIOFlushTimeout))
 	} else {
 		proc.logger.Debug("skipping proxy io for unset stdout")
 	}
 
 	if ioConnectorSet.stderr != nil {
-		waitErrs(ioConnectorSet.stderr.proxy(proc, proc.logger.WithField("stream", "stderr"), defaultIOFlushTimeout))
+		waitErrs(ioConnectorSet.stderr.proxy(proc.ctx, proc.logger.WithField("stream", "stderr"), defaultIOFlushTimeout))
 	} else {
 		proc.logger.Debug("skipping proxy io for unset stderr")
 	}

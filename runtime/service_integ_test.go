@@ -1566,6 +1566,112 @@ func TestStopVM_Isolated(t *testing.T) {
 		})
 	}
 }
+
+func TestExec_Isolated(t *testing.T) {
+	prepareIntegTest(t)
+
+	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	defer client.Close()
+
+	ctx := namespaces.WithNamespace(context.Background(), "default")
+
+	image, err := alpineImage(ctx, client, defaultSnapshotterName)
+	require.NoError(t, err, "failed to get alpine image")
+
+	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
+	require.NoError(t, err, "failed to create ttrpc client")
+
+	vmID := testNameToVMID(t.Name())
+
+	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
+	_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{VMID: vmID})
+	require.NoError(t, err)
+
+	c, err := client.NewContainer(ctx,
+		"container-"+vmID,
+		containerd.WithSnapshotter(defaultSnapshotterName),
+		containerd.WithNewSnapshot("snapshot-"+vmID, image),
+		containerd.WithNewSpec(oci.WithProcessArgs("/bin/sleep", "3"), firecrackeroci.WithVMID(vmID)),
+	)
+	require.NoError(t, err)
+
+	var taskStdout bytes.Buffer
+	var taskStderr bytes.Buffer
+
+	task, err := c.NewTask(ctx, cio.NewCreator(cio.WithStreams(os.Stdin, &taskStdout, &taskStderr)))
+	require.NoError(t, err, "failed to create task for container %s", c.ID())
+
+	taskExitCh, err := task.Wait(ctx)
+	require.NoError(t, err, "failed to wait on task for container %s", c.ID())
+
+	err = task.Start(ctx)
+	require.NoError(t, err, "failed to start task for container %s", c.ID())
+
+	var execStdout bytes.Buffer
+	var execStderr bytes.Buffer
+
+	taskExec, err := task.Exec(ctx, "exec", &specs.Process{
+		Args: []string{"/bin/date"},
+		Cwd:  "/",
+	}, cio.NewCreator(cio.WithStreams(os.Stdin, &execStdout, &execStderr)))
+	require.NoError(t, err)
+
+	execExitCh, err := taskExec.Wait(ctx)
+	require.NoError(t, err, "failed to wait on exec %s", "exec")
+
+	execBegin := time.Now()
+	err = taskExec.Start(ctx)
+	require.NoError(t, err, "failed to start exec %s", "exec")
+
+	select {
+	case execStatus := <-execExitCh:
+		assert.NoError(t, execStatus.Error())
+		assert.Equal(t, uint32(0), execStatus.ExitCode())
+
+		execElapsed := time.Since(execBegin)
+		assert.Truef(
+			t, execElapsed < 1*time.Second,
+			"The exec took %s to finish, which was too slow.", execElapsed,
+		)
+
+		_, err := taskExec.Delete(ctx)
+		assert.NoError(t, err)
+
+		deleteElapsed := time.Since(execBegin)
+		assert.Truef(
+			t, deleteElapsed < 1*time.Second,
+			"The deletion of the exec took %s to finish, which was too slow.", deleteElapsed,
+		)
+
+		assert.NotEqual(t, "", execStdout.String())
+		assert.Equal(t, "", execStderr.String())
+	case <-ctx.Done():
+		require.Fail(t, "context cancelled",
+			"context cancelled while waiting for container %s to exit, err: %v", c.ID(), ctx.Err())
+	}
+
+	select {
+	case taskStatus := <-taskExitCh:
+		assert.NoError(t, taskStatus.Error())
+		assert.Equal(t, uint32(0), taskStatus.ExitCode())
+
+		deleteResult, err := task.Delete(ctx)
+		assert.NoErrorf(t, err, "failed to delete task %q after exit", c.ID())
+		assert.NoError(t, deleteResult.Error())
+
+		assert.Equal(t, "", taskStdout.String())
+		assert.Equal(t, "", taskStderr.String())
+	case <-ctx.Done():
+		require.Fail(t, "context cancelled",
+			"context cancelled while waiting for container %s to exit, err: %v", c.ID(), ctx.Err())
+	}
+
+	_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
+	assert.NoError(t, err)
+	require.Equal(t, status.Code(err), codes.OK)
+}
+
 func TestEvents_Isolated(t *testing.T) {
 	prepareIntegTest(t)
 	require := require.New(t)

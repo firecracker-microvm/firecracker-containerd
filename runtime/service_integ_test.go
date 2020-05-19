@@ -583,35 +583,69 @@ func TestLongUnixSocketPath_Isolated(t *testing.T) {
 	// default location we store state results in a path like
 	// "/run/firecracker-containerd/default/<vmID>" (with len 112).
 	const maxUnixSockLen = 108
-	vmID := strings.Repeat("x", 76)
+	vmID := strings.Repeat("x", 72)
 
 	ctx := namespaces.WithNamespace(context.Background(), "default")
 
 	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
 	require.NoError(t, err, "failed to create ttrpc client")
 
-	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
-	_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
-		VMID:              vmID,
-		NetworkInterfaces: []*proto.FirecrackerNetworkInterface{},
-	})
-	require.NoError(t, err, "failed to create VM")
-
-	// double-check that the sockets are at the expected path and that their absolute
-	// length exceeds 108 bytes
-	shimDir, err := vm.ShimDir(cfg.ShimBaseDir, "default", vmID)
-	require.NoError(t, err, "failed to get shim dir")
-
-	_, err = os.Stat(shimDir.FirecrackerSockPath())
-	require.NoError(t, err, "failed to stat firecracker socket path")
-	if len(shimDir.FirecrackerSockPath()) <= maxUnixSockLen {
-		assert.Failf(t, "firecracker sock absolute path %q is not greater than max unix socket path length", shimDir.FirecrackerSockPath())
+	subtests := []struct {
+		name    string
+		request proto.CreateVMRequest
+	}{
+		{
+			name: "Without Jailer",
+			request: proto.CreateVMRequest{
+				VMID:              vmID + "noop",
+				NetworkInterfaces: []*proto.FirecrackerNetworkInterface{},
+			},
+		},
+		{
+			name: "With Jailer",
+			request: proto.CreateVMRequest{
+				// We somehow cannot use the same VM ID here.
+				// https://github.com/firecracker-microvm/firecracker-containerd/issues/409
+				VMID:              vmID + "jail",
+				NetworkInterfaces: []*proto.FirecrackerNetworkInterface{},
+				JailerConfig: &proto.JailerConfig{
+					UID: 30000,
+					GID: 30000,
+				},
+			},
+		},
 	}
 
-	_, err = os.Stat(shimDir.FirecrackerVSockPath())
-	require.NoError(t, err, "failed to stat firecracker vsock path")
-	if len(shimDir.FirecrackerVSockPath()) <= maxUnixSockLen {
-		assert.Failf(t, "firecracker vsock absolute path %q is not greater than max unix socket path length", shimDir.FirecrackerVSockPath())
+	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
+	for _, subtest := range subtests {
+		request := subtest.request
+		vmID := request.VMID
+		t.Run(subtest.name, func(t *testing.T) {
+			_, err = fcClient.CreateVM(ctx, &request)
+			require.NoError(t, err, "failed to create VM")
+
+			// double-check that the sockets are at the expected path and that their absolute
+			// length exceeds 108 bytes
+			shimDir, err := vm.ShimDir(cfg.ShimBaseDir, "default", vmID)
+			require.NoError(t, err, "failed to get shim dir")
+
+			if request.JailerConfig == nil {
+				_, err = os.Stat(shimDir.FirecrackerSockPath())
+				require.NoError(t, err, "failed to stat firecracker socket path")
+				if len(shimDir.FirecrackerSockPath()) <= maxUnixSockLen {
+					assert.Failf(t, "firecracker sock absolute path %q is not greater than max unix socket path length", shimDir.FirecrackerSockPath())
+				}
+
+				_, err = os.Stat(shimDir.FirecrackerVSockPath())
+				require.NoError(t, err, "failed to stat firecracker vsock path")
+				if len(shimDir.FirecrackerVSockPath()) <= maxUnixSockLen {
+					assert.Failf(t, "firecracker vsock absolute path %q is not greater than max unix socket path length", shimDir.FirecrackerVSockPath())
+				}
+			}
+
+			_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
+			require.NoError(t, err)
+		})
 	}
 }
 

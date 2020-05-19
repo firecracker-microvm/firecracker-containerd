@@ -156,7 +156,7 @@ func (j *runcJailer) BuildJailedMachine(cfg *config.Config, machineConfig *firec
 func (j *runcJailer) BuildJailedRootHandler(cfg *config.Config, machineConfig *firecracker.Config, vmID string) firecracker.Handler {
 	ociBundlePath := j.OCIBundlePath()
 	rootPath := j.RootPath()
-	machineConfig.SocketPath = filepath.Join(rootPath, "api.socket")
+	machineConfig.SocketPath = filepath.Join(rootfsFolder, "api.socket")
 
 	return firecracker.Handler{
 		Name: jailerHandlerName,

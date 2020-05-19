@@ -20,6 +20,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/firecracker-microvm/firecracker-containerd/internal/debug"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	models "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 )
@@ -40,14 +41,13 @@ const (
 
 // Config represents runtime configuration parameters
 type Config struct {
-	FirecrackerBinaryPath string `json:"firecracker_binary_path"`
-	KernelImagePath       string `json:"kernel_image_path"`
-	KernelArgs            string `json:"kernel_args"`
-	RootDrive             string `json:"root_drive"`
-	CPUTemplate           string `json:"cpu_template"`
-	LogLevel              string `json:"log_level"`
-	HtEnabled             bool   `json:"ht_enabled"`
-	Debug                 bool   `json:"debug"`
+	FirecrackerBinaryPath string   `json:"firecracker_binary_path"`
+	KernelImagePath       string   `json:"kernel_image_path"`
+	KernelArgs            string   `json:"kernel_args"`
+	RootDrive             string   `json:"root_drive"`
+	CPUTemplate           string   `json:"cpu_template"`
+	LogLevels             []string `json:"log_levels"`
+	HtEnabled             bool     `json:"ht_enabled"`
 	// If a CreateVM call specifies no network interfaces and DefaultNetworkInterfaces is non-empty,
 	// the VM will default to using the network interfaces as specified here. This is especially
 	// useful when a CNI-based network interface is provided in DefaultNetworkInterfaces.
@@ -57,6 +57,8 @@ type Config struct {
 	// directory.
 	ShimBaseDir  string       `json:"shim_base_dir"`
 	JailerConfig JailerConfig `json:"jailer"`
+
+	DebugHelper *debug.Helper `json:"-"`
 }
 
 // JailerConfig houses a set of configurable values for jailing
@@ -90,6 +92,11 @@ func LoadConfig(path string) (*Config, error) {
 		JailerConfig: JailerConfig{
 			RuncConfigPath: runcConfigPath,
 		},
+	}
+
+	cfg.DebugHelper, err = debug.New(cfg.LogLevels...)
+	if err != nil {
+		return nil, err
 	}
 
 	if err := json.Unmarshal(data, cfg); err != nil {

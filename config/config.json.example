@@ -4,6 +4,6 @@
   "kernel_args": "console=ttyS0 noapic reboot=k panic=1 pci=off nomodules rw",
   "root_drive": "./vsock.img",
   "cpu_template": "T2",
-  "log_level": "Debug",
+  "log_levels": ["debug"],
   "ht_enabled": false
 }

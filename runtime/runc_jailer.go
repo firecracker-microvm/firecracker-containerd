@@ -23,9 +23,11 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/containerd/go-runc"
 	"github.com/firecracker-microvm/firecracker-go-sdk"
+	"github.com/hashicorp/go-multierror"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -154,7 +156,7 @@ func (j *runcJailer) BuildJailedMachine(cfg *config.Config, machineConfig *firec
 func (j *runcJailer) BuildJailedRootHandler(cfg *config.Config, machineConfig *firecracker.Config, vmID string) firecracker.Handler {
 	ociBundlePath := j.OCIBundlePath()
 	rootPath := j.RootPath()
-	machineConfig.SocketPath = filepath.Join(rootPath, "api.socket")
+	machineConfig.SocketPath = filepath.Join(rootfsFolder, "api.socket")
 
 	return firecracker.Handler{
 		Name: jailerHandlerName,
@@ -466,9 +468,18 @@ func (j *runcJailer) setDefaultConfigValues(cfg *config.Config, socketPath strin
 // Close will cleanup the container that may be left behind if the jailing
 // process was killed via SIGKILL.
 func (j *runcJailer) Close() error {
-	return j.runcClient.Delete(j.ctx, j.vmID, &runc.DeleteOpts{
-		Force: true,
-	})
+	// Even the jailer's associated context is cancelled,
+	// we'd like to do the cleanups below just in case.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Delete the container, if it is still running.
+	runcErr := j.runcClient.Delete(ctx, j.vmID, &runc.DeleteOpts{Force: true})
+
+	// Regardless of the result, remove the directory.
+	removeErr := os.RemoveAll(j.OCIBundlePath())
+
+	return multierror.Append(runcErr, removeErr).ErrorOrNil()
 }
 
 func mkdirAndChown(path string, mode os.FileMode, uid, gid uint32) error {

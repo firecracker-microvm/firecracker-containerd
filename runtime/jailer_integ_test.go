@@ -15,12 +15,15 @@ package main
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/oci"
 	"github.com/containerd/containerd/pkg/ttrpcutil"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	_ "github.com/firecracker-microvm/firecracker-containerd/firecracker-control"
@@ -78,24 +81,31 @@ func testJailer(t *testing.T, jailerConfig *proto.JailerConfig) {
 	stdout := startAndWaitTask(ctx, t, c)
 	require.Equal("hello", stdout)
 
-	defer func() {
-		err := c.Delete(ctx, containerd.WithSnapshotCleanup)
-		require.NoError(err, "failed to delete a container")
-	}()
+	stat, err := os.Stat(filepath.Join(shimBaseDir(), "default", vmID))
+	require.NoError(err)
+	assert.True(t, stat.IsDir())
+
+	err = c.Delete(ctx, containerd.WithSnapshotCleanup)
+	require.NoError(err, "failed to delete a container")
+
+	_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
+	require.NoError(err)
+
+	_, err = os.Stat(filepath.Join(shimBaseDir(), "default", vmID))
+	assert.Error(t, err)
+	assert.True(t, os.IsNotExist(err))
 }
 
 func TestJailerCPUSet_Isolated(t *testing.T) {
 	prepareIntegTest(t)
 
-	t.Run("TestJailerCPUSet_Isolated", func(t *testing.T) {
-		b := cpuset.Builder{}
-		cset := b.AddCPU(0).AddMem(0).Build()
-		config := &proto.JailerConfig{
-			CPUs: cset.CPUs(),
-			Mems: cset.Mems(),
-			UID:  300000,
-			GID:  300000,
-		}
-		testJailer(t, config)
-	})
+	b := cpuset.Builder{}
+	cset := b.AddCPU(0).AddMem(0).Build()
+	config := &proto.JailerConfig{
+		CPUs: cset.CPUs(),
+		Mems: cset.Mems(),
+		UID:  300000,
+		GID:  300000,
+	}
+	testJailer(t, config)
 }

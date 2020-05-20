@@ -1787,3 +1787,77 @@ func findProcWithName(name string) func(context.Context, *process.Process) (bool
 		return filepath.Base(processExecutable) == name, nil
 	}
 }
+
+func TestCreateVM_Isolated(t *testing.T) {
+	prepareIntegTest(t)
+
+	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	defer client.Close()
+
+	ctx := namespaces.WithNamespace(context.Background(), "default")
+
+	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
+	require.NoError(t, err, "failed to create ttrpc client")
+
+	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
+
+	subtests := []struct {
+		name     string
+		request  proto.CreateVMRequest
+		validate func(*testing.T, error)
+	}{
+		{
+			name:    "Happy Case",
+			request: proto.CreateVMRequest{},
+			validate: func(t *testing.T, err error) {
+				require.NoError(t, err)
+			},
+		},
+		{
+			name: "Slow Root FS",
+			request: proto.CreateVMRequest{
+				RootDrive: &proto.FirecrackerRootDrive{
+					HostPath: "/var/lib/firecracker-containerd/runtime/rootfs-slow-boot.img",
+				},
+			},
+			validate: func(t *testing.T, err error) {
+				require.Error(t, err)
+				assert.Equal(t, codes.DeadlineExceeded, status.Code(err))
+				assert.Contains(t, err.Error(), "didn't start within 20s")
+			},
+		},
+		{
+			name: "Slow Root FS and Longer Timeout",
+			request: proto.CreateVMRequest{
+				RootDrive: &proto.FirecrackerRootDrive{
+					HostPath: "/var/lib/firecracker-containerd/runtime/rootfs-slow-boot.img",
+				},
+				TimeoutSeconds: 60,
+			},
+			validate: func(t *testing.T, err error) {
+				require.NoError(t, err)
+			},
+		},
+	}
+
+	for _, subtest := range subtests {
+		request := subtest.request
+		validate := subtest.validate
+
+		t.Run(subtest.name, func(t *testing.T) {
+			request.VMID = testNameToVMID(t.Name())
+
+			_, err = fcClient.CreateVM(ctx, &request)
+			validate(t, err)
+
+			if err != nil {
+				// No VM to stop.
+				return
+			}
+
+			_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: request.VMID})
+			require.Equal(t, status.Code(err), codes.OK)
+		})
+	}
+}

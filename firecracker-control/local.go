@@ -195,8 +195,7 @@ func (s *local) CreateVM(requestCtx context.Context, req *proto.CreateVMRequest)
 
 	resp, err := client.CreateVM(requestCtx, req)
 	if err != nil {
-		err = errors.Wrap(err, "shim CreateVM returned error")
-		s.logger.WithError(err).Error()
+		s.logger.WithError(err).Error("shim CreateVM returned error")
 		return nil, err
 	}
 

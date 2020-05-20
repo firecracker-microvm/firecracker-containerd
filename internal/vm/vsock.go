@@ -37,10 +37,7 @@ const (
 // VSockDial attempts to connect to the Firecracker host-side vsock at the provided unix
 // path and port. It will retry connect attempts if a temporary error is encountered (up
 // to a fixed timeout) or the provided request is canceled.
-func VSockDial(reqCtx context.Context, logger *logrus.Entry, udsPath string, port uint32) (net.Conn, error) {
-	ctx, cancel := context.WithTimeout(reqCtx, vsockRetryTimeout)
-	defer cancel()
-
+func VSockDial(ctx context.Context, logger *logrus.Entry, udsPath string, port uint32) (net.Conn, error) {
 	tickerCh := time.NewTicker(vsockRetryInterval).C
 	var attemptCount int
 	for {

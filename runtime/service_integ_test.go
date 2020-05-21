@@ -1047,6 +1047,7 @@ func TestDriveMount_Isolated(t *testing.T) {
 			UID: 300000,
 			GID: 300000,
 		},
+		TimeoutSeconds: 60,
 	})
 	require.NoError(t, err, "failed to create vm")
 

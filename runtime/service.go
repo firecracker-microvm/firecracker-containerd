@@ -68,12 +68,18 @@ func init() {
 }
 
 const (
-	defaultVsockPort        = 10789
-	minVsockIOPort          = uint32(11000)
-	firecrackerStartTimeout = 5 * time.Second
-	defaultStopVMTimeout    = 5 * time.Second
-	defaultShutdownTimeout  = 5 * time.Second
-	jailerStopTimeout       = 3 * time.Second
+	defaultVsockPort = 10789
+	minVsockIOPort   = uint32(11000)
+
+	// vmReadyTimeout is used to control the time all requests wait a Go channel (vmReady) before calling
+	// Firecracker's API server. The channel is closed once the VM starts.
+	vmReadyTimeout = 5 * time.Second
+
+	defaultCreateVMTimeout = 20 * time.Second
+	defaultStopVMTimeout   = 5 * time.Second
+	defaultShutdownTimeout = 5 * time.Second
+
+	jailerStopTimeout = 3 * time.Second
 
 	// StartEventName is the topic published to when a VM starts
 	StartEventName = "/firecracker-vm/start"
@@ -425,7 +431,7 @@ func (s *service) waitVMReady() error {
 	select {
 	case <-s.vmReady:
 		return nil
-	case <-time.After(firecrackerStartTimeout):
+	case <-time.After(vmReadyTimeout):
 		return status.Error(codes.DeadlineExceeded, "timed out waiting for VM start")
 	}
 }
@@ -435,6 +441,13 @@ func (s *service) waitVMReady() error {
 func (s *service) CreateVM(requestCtx context.Context, request *proto.CreateVMRequest) (*proto.CreateVMResponse, error) {
 	defer logPanicAndDie(s.logger)
 
+	timeout := defaultCreateVMTimeout
+	if request.TimeoutSeconds > 0 {
+		timeout = time.Duration(request.TimeoutSeconds) * time.Second
+	}
+	ctxWithTimeout, cancel := context.WithTimeout(requestCtx, timeout)
+	defer cancel()
+
 	var (
 		err       error
 		createRan bool
@@ -442,7 +455,7 @@ func (s *service) CreateVM(requestCtx context.Context, request *proto.CreateVMRe
 	)
 
 	s.vmStartOnce.Do(func() {
-		err = s.createVM(requestCtx, request)
+		err = s.createVM(ctxWithTimeout, request)
 		createRan = true
 	})
 
@@ -453,9 +466,13 @@ func (s *service) CreateVM(requestCtx context.Context, request *proto.CreateVMRe
 	// If we failed to create the VM, we have no point in existing anymore, so shutdown
 	if err != nil {
 		s.shimCancel()
-		err = errors.Wrap(err, "failed to create VM")
-		s.logger.WithError(err).Error()
-		return nil, err
+
+		s.logger.WithError(err).Error("failed to create VM")
+
+		if errors.Cause(err) == context.DeadlineExceeded {
+			return nil, status.Errorf(codes.DeadlineExceeded, "VM %q didn't start within %s: %s", request.VMID, timeout, err)
+		}
+		return nil, errors.Wrap(err, "failed to create VM")
 	}
 
 	// creating the VM succeeded, setup monitors and publish events to celebrate

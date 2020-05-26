@@ -37,7 +37,7 @@ fi
 touch --reference=debootstrap_stamp --no-create "$(WORKDIR)"
 endef
 
-all: rootfs.img rootfs-slow-reboot.img
+all: rootfs.img rootfs-slow-boot.img rootfs-slow-reboot.img
 
 $(WORKDIR):
 	mkdir $(WORKDIR)
@@ -66,6 +66,13 @@ endif
 
 rootfs.img: files_common_stamp files_debootstrap_stamp files_ephemeral_stamp
 	mksquashfs "$(WORKDIR)" rootfs.img -noappend
+
+# Intentionally break the rootfs to simulate the case where CreateVM is taking longer than the minimal timeout
+rootfs-slow-boot.img: files_common_stamp files_debootstrap_stamp files_ephemeral_stamp
+	rm -fr tmp/$@
+	cp -a "$(WORKDIR)" tmp/$@
+	echo 'ExecStartPre=/bin/sleep 30' >> tmp/$@/etc/systemd/system/firecracker-agent.service
+	mksquashfs tmp/$@ $@ -noappend
 
 # Intentionally break the rootfs to simulate the case where StopVM is taking longer than the minimal timeout
 rootfs-slow-reboot.img: files_common_stamp files_debootstrap_stamp files_ephemeral_stamp
@@ -98,7 +105,7 @@ builder_stamp:
 clean:
 	-rm -f *stamp
 	if [ $(UID) -eq 0 ]; then \
-	  rm -f rootfs.img rootfs-slow-reboot.img ;\
+	  rm -f rootfs.img rootfs-slow-boot.img rootfs-slow-reboot.img ;\
 	else \
 	  $(MAKE) clean-in-docker ;\
 	fi

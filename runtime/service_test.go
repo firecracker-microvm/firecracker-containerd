@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/firecracker-microvm/firecracker-containerd/config"
+	"github.com/firecracker-microvm/firecracker-containerd/internal/debug"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 )
@@ -38,6 +39,9 @@ const (
 )
 
 func TestBuildVMConfiguration(t *testing.T) {
+	debugHelper, err := debug.New()
+	require.NoError(t, err, "failed to create debug helper")
+
 	namespace := "TestBuildVMConfiguration"
 	testcases := []struct {
 		name                   string
@@ -54,6 +58,7 @@ func TestBuildVMConfiguration(t *testing.T) {
 				KernelImagePath: "KERNEL IMAGE",
 				RootDrive:       "ROOT DRIVE",
 				CPUTemplate:     "C3",
+				DebugHelper:     debugHelper,
 			},
 			expectedCfg: &firecracker.Config{
 				KernelArgs:      "KERNEL ARGS",
@@ -89,7 +94,9 @@ func TestBuildVMConfiguration(t *testing.T) {
 					VcpuCount:   2,
 				},
 			},
-			config: &config.Config{},
+			config: &config.Config{
+				DebugHelper: debugHelper,
+			},
 			expectedCfg: &firecracker.Config{
 				KernelArgs:      "REQUEST KERNEL ARGS",
 				KernelImagePath: "REQUEST KERNEL IMAGE",
@@ -128,6 +135,7 @@ func TestBuildVMConfiguration(t *testing.T) {
 				KernelArgs:      "KERNEL ARGS",
 				KernelImagePath: "KERNEL IMAGE",
 				CPUTemplate:     "C3",
+				DebugHelper:     debugHelper,
 			},
 			expectedCfg: &firecracker.Config{
 				KernelArgs:      "REQUEST KERNEL ARGS",
@@ -163,6 +171,7 @@ func TestBuildVMConfiguration(t *testing.T) {
 				KernelArgs:      "KERNEL ARGS",
 				KernelImagePath: "KERNEL IMAGE",
 				CPUTemplate:     "C3",
+				DebugHelper:     debugHelper,
 			},
 			expectedCfg: &firecracker.Config{
 				KernelArgs:      "REQUEST KERNEL ARGS",
@@ -192,6 +201,7 @@ func TestBuildVMConfiguration(t *testing.T) {
 				KernelImagePath: "KERNEL IMAGE",
 				RootDrive:       "ROOT DRIVE",
 				CPUTemplate:     "C3",
+				DebugHelper:     debugHelper,
 			},
 			expectedCfg: &firecracker.Config{
 				KernelArgs:      "KERNEL ARGS",
@@ -264,6 +274,11 @@ func TestBuildVMConfiguration(t *testing.T) {
 }
 
 func TestDebugConfig(t *testing.T) {
+	emptyDebugHelper, err := debug.New()
+	require.NoError(t, err, "failed to create empty debug helper")
+	fcDebugHelper, err := debug.New(debug.LogLevelFirecrackerDebug)
+	require.NoError(t, err, "failed to create firecracker debug helper")
+
 	cases := []struct {
 		name    string
 		service *service
@@ -272,7 +287,9 @@ func TestDebugConfig(t *testing.T) {
 			name: "empty",
 			service: &service{
 				logger: logrus.NewEntry(logrus.New()),
-				config: &config.Config{},
+				config: &config.Config{
+					DebugHelper: emptyDebugHelper,
+				},
 			},
 		},
 		{
@@ -280,26 +297,8 @@ func TestDebugConfig(t *testing.T) {
 			service: &service{
 				logger: logrus.NewEntry(logrus.New()),
 				config: &config.Config{
-					LogLevel: "foo",
-				},
-			},
-		},
-		{
-			name: "Debug set",
-			service: &service{
-				logger: logrus.NewEntry(logrus.New()),
-				config: &config.Config{
-					Debug: true,
-				},
-			},
-		},
-		{
-			name: "Both set",
-			service: &service{
-				logger: logrus.NewEntry(logrus.New()),
-				config: &config.Config{
-					LogLevel: "foo",
-					Debug:    true,
+					LogLevels:   []string{debug.LogLevelFirecrackerDebug},
+					DebugHelper: fcDebugHelper,
 				},
 			},
 		},
@@ -326,7 +325,6 @@ func TestDebugConfig(t *testing.T) {
 
 		cfg, err := c.service.buildVMConfiguration(&req)
 		assert.NoError(t, err, "failed to build firecracker configuration")
-		assert.Equal(t, c.service.config.LogLevel, cfg.LogLevel)
-		assert.Equal(t, c.service.config.Debug, cfg.Debug)
+		assert.Equal(t, c.service.config.DebugHelper.GetFirecrackerLogLevel(), cfg.LogLevel)
 	}
 }

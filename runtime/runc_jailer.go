@@ -134,7 +134,7 @@ func (j *runcJailer) BuildJailedMachine(cfg *config.Config, machineConfig *firec
 	}
 
 	opts := []firecracker.Opt{
-		firecracker.WithProcessRunner(j.jailerCommand(vmID, cfg.Debug)),
+		firecracker.WithProcessRunner(j.jailerCommand(vmID, cfg.DebugHelper.LogFirecrackerOutput())),
 		firecracker.WithClient(client),
 		func(m *firecracker.Machine) {
 			m.Handlers.FcInit = m.Handlers.FcInit.Prepend(handler)

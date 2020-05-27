@@ -162,14 +162,12 @@ func NewService(shimCtx context.Context, id string, remotePublisher shim.Publish
 		return nil, err
 	}
 
-	if !cfg.Debug {
-		opts, err := shimOpts(shimCtx)
-		if err != nil {
-			return nil, err
-		}
-
-		cfg.Debug = opts.Debug
+	opts, err := shimOpts(shimCtx)
+	if err != nil {
+		return nil, err
 	}
+
+	cfg.DebugHelper.ShimDebug = opts.Debug
 
 	namespace, ok := namespaces.Namespace(shimCtx)
 	if !ok {
@@ -188,9 +186,10 @@ func NewService(shimCtx context.Context, id string, remotePublisher shim.Publish
 		}
 	}
 
-	if cfg.Debug {
-		logrus.SetLevel(logrus.DebugLevel)
-		logger.Logger.SetLevel(logrus.DebugLevel)
+	logrusLevel, ok := cfg.DebugHelper.GetFirecrackerContainerdLogLevel()
+	if ok {
+		logrus.SetLevel(logrusLevel)
+		logger.Logger.SetLevel(logrusLevel)
 	}
 
 	s := &service{
@@ -529,10 +528,13 @@ func (s *service) createVM(requestCtx context.Context, request *proto.CreateVMRe
 		return errors.Wrapf(err, "failed to build VM configuration")
 	}
 
-	opts := []firecracker.Opt{
-		firecracker.WithLogger(s.logger),
-	}
+	opts := []firecracker.Opt{}
 
+	if v, ok := s.config.DebugHelper.GetFirecrackerSDKLogLevel(); ok {
+		logger := log.G(s.shimCtx)
+		logger.Logger.SetLevel(v)
+		opts = append(opts, firecracker.WithLogger(logger))
+	}
 	relVSockPath, err := s.jailer.JailPath().FirecrackerVSockRelPath()
 	if err != nil {
 		return errors.Wrapf(err, "failed to get relative path to firecracker vsock")
@@ -734,8 +736,7 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 		LogFifo:     s.shimDir.FirecrackerLogFifoPath(),
 		MetricsFifo: s.shimDir.FirecrackerMetricsFifoPath(),
 		MachineCfg:  machineConfigurationFromProto(s.config, req.MachineCfg),
-		LogLevel:    s.config.LogLevel,
-		Debug:       s.config.Debug,
+		LogLevel:    s.config.DebugHelper.GetFirecrackerLogLevel(),
 		VMID:        s.vmID,
 	}
 

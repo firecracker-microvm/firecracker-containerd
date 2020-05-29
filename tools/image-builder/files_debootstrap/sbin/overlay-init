@@ -57,6 +57,9 @@ fi
 
 do_overlay
 
-# invoke the actual system init program and procede with the boot
-# process.
-exec /usr/sbin/init $@
+mount -n -t devtmpfs -o rw,nosuid,relatime,mode=755 udev  /dev
+mount -n -t sysfs    -o nodev,noexec,nosuid         sysfs /sys
+mount -n -t proc     -o rw,nosuid,nodev,noexec      proc  /proc
+mount -n -t cgroup   -o all                         cgroup /sys/fs/cgroup
+
+PATH=/usr/local/bin /usr/local/bin/agent

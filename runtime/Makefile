@@ -92,7 +92,7 @@ benchmark-%: logs
 		--workdir="/src/runtime" \
 		--init \
 		$(FIRECRACKER_CONTAINERD_TEST_IMAGE):$(DOCKER_IMAGE_TAG) \
-		"go test $(EXTRAGOARGS) -run IGNORE -bench '$(subst benchmark-,,$@)'"
+		"go test $(EXTRAGOARGS) -run '$(subst benchmark-,,$@)'"
 
 logs:
 	mkdir logs

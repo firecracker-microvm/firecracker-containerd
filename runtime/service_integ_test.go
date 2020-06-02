@@ -583,7 +583,7 @@ func TestLongUnixSocketPath_Isolated(t *testing.T) {
 	// default location we store state results in a path like
 	// "/run/firecracker-containerd/default/<vmID>" (with len 112).
 	const maxUnixSockLen = 108
-	vmID := strings.Repeat("x", 72)
+	vmID := strings.Repeat("x", 76)
 
 	ctx := namespaces.WithNamespace(context.Background(), "default")
 
@@ -597,16 +597,14 @@ func TestLongUnixSocketPath_Isolated(t *testing.T) {
 		{
 			name: "Without Jailer",
 			request: proto.CreateVMRequest{
-				VMID:              vmID + "noop",
+				VMID:              vmID,
 				NetworkInterfaces: []*proto.FirecrackerNetworkInterface{},
 			},
 		},
 		{
 			name: "With Jailer",
 			request: proto.CreateVMRequest{
-				// We somehow cannot use the same VM ID here.
-				// https://github.com/firecracker-microvm/firecracker-containerd/issues/409
-				VMID:              vmID + "jail",
+				VMID:              vmID,
 				NetworkInterfaces: []*proto.FirecrackerNetworkInterface{},
 				JailerConfig: &proto.JailerConfig{
 					UID: 30000,
@@ -645,6 +643,14 @@ func TestLongUnixSocketPath_Isolated(t *testing.T) {
 
 			_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
 			require.NoError(t, err)
+
+			matches, err := findProcess(ctx, findShim)
+			require.NoError(t, err)
+			require.Empty(t, matches)
+
+			matches, err = findProcess(ctx, findFirecracker)
+			require.NoError(t, err)
+			require.Empty(t, matches)
 		})
 	}
 }
@@ -1566,18 +1572,18 @@ func TestStopVM_Isolated(t *testing.T) {
 
 			test.stopFunc(ctx, fcClient, createVMRequest)
 
-			// If the function above uses StopVMRequest,
-			// shim guarantees that the underlying Firecracker process is dead
+			// If the function above uses StopVMRequest, all underlying processes must be dead
 			// (either gracefully or forcibly) at the end of the request.
 			if test.withStopVM {
 				fcExists, err := process.PidExists(fcProcess.Pid)
 				require.NoError(err, "failed to find firecracker")
 				require.False(fcExists, "firecracker %s is still there", vmID)
+
+				shimExists, err := process.PidExists(shimProcess.Pid)
+				require.NoError(err, "failed to find shim")
+				require.False(shimExists, "shim %s is still there", vmID)
 			}
 
-			// Since the shim is the one which is writing the response,
-			// it cannot guarantee that the shim itself is dead at the end of the request.
-			// But it should be dead eventually.
 			err = internal.WaitForPidToExit(ctx, time.Second, shimProcess.Pid)
 			require.NoError(err, "shim hasn't been terminated")
 		}

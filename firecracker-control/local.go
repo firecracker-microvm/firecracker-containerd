@@ -21,7 +21,9 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
+	"time"
 
 	"github.com/containerd/containerd/identifiers"
 	"github.com/containerd/containerd/log"
@@ -30,6 +32,7 @@ import (
 	"github.com/containerd/containerd/runtime/v2/shim"
 	"github.com/containerd/containerd/sys"
 	"github.com/golang/protobuf/ptypes/empty"
+	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"
@@ -47,6 +50,7 @@ import (
 var (
 	_               fccontrolTtrpc.FirecrackerService = (*local)(nil)
 	ttrpcAddressEnv                                   = "TTRPC_ADDRESS"
+	stopVMInterval                                    = 10 * time.Millisecond
 )
 
 func init() {
@@ -64,6 +68,9 @@ type local struct {
 	containerdAddress string
 	logger            *logrus.Entry
 	config            *config.Config
+
+	processesMu sync.Mutex
+	processes   map[string]int32
 }
 
 func newLocal(ic *plugin.InitContext) (*local, error) {
@@ -80,6 +87,7 @@ func newLocal(ic *plugin.InitContext) (*local, error) {
 		containerdAddress: ic.Address,
 		logger:            log.G(ic.Context),
 		config:            cfg,
+		processes:         make(map[string]int32),
 	}, nil
 }
 
@@ -116,7 +124,7 @@ func (s *local) CreateVM(requestCtx context.Context, req *proto.CreateVMRequest)
 
 	shimSocket, err := shim.NewSocket(shimSocketAddress)
 	if isEADDRINUSE(err) {
-		return nil, status.Errorf(codes.AlreadyExists, "VM with ID %q already exists", id)
+		return nil, status.Errorf(codes.AlreadyExists, "VM with ID %q already exists (socket: %q)", id, shimSocketAddress)
 	} else if err != nil {
 		err = errors.Wrapf(err, "failed to open shim socket at address %q", shimSocketAddress)
 		s.logger.WithError(err).Error()
@@ -199,7 +207,15 @@ func (s *local) CreateVM(requestCtx context.Context, req *proto.CreateVMRequest)
 		return nil, err
 	}
 
+	s.addShim(shimSocketAddress, cmd)
+
 	return resp, nil
+}
+
+func (s *local) addShim(address string, cmd *exec.Cmd) {
+	s.processesMu.Lock()
+	defer s.processesMu.Unlock()
+	s.processes[address] = int32(cmd.Process.Pid)
 }
 
 func (s *local) shimFirecrackerClient(requestCtx context.Context, vmID string) (*fcclient.Client, error) {
@@ -224,16 +240,34 @@ func (s *local) StopVM(requestCtx context.Context, req *proto.StopVMRequest) (*e
 	if err != nil {
 		return nil, err
 	}
-
 	defer client.Close()
 
-	resp, err := client.StopVM(requestCtx, req)
+	resp, shimErr := client.StopVM(requestCtx, req)
+	waitErr := s.waitForShimToExit(requestCtx, req.VMID)
+
+	// Assuming the shim is returning containerd's error code, return the error as is if possible.
+	if waitErr == nil {
+		return resp, shimErr
+	}
+	return resp, multierror.Append(shimErr, waitErr).ErrorOrNil()
+}
+
+func (s *local) waitForShimToExit(ctx context.Context, vmID string) error {
+	socketAddr, err := fcShim.SocketAddress(ctx, vmID)
 	if err != nil {
-		s.logger.WithError(err).Error()
-		return nil, err
+		return err
 	}
 
-	return resp, err
+	s.processesMu.Lock()
+	defer s.processesMu.Unlock()
+
+	pid, ok := s.processes[socketAddr]
+	if !ok {
+		return errors.Errorf("failed to find a shim process for %q", socketAddr)
+	}
+	defer delete(s.processes, socketAddr)
+
+	return internal.WaitForPidToExit(ctx, stopVMInterval, pid)
 }
 
 // GetVMInfo returns metadata for the VM with the given VMID.
@@ -387,6 +421,15 @@ func (s *local) newShim(ns, vmID, containerdAddress string, shimSocket *net.Unix
 				logger.WithError(err).Error("shim has been unexpectedly terminated")
 			}
 		}
+
+		// Close all Unix abstract sockets.
+		if err := shimSocketFile.Close(); err != nil {
+			logger.WithError(err).Errorf("failed to close %q", shimSocketFile.Name())
+		}
+		if err := fcSocketFile.Close(); err != nil {
+			logger.WithError(err).Errorf("failed to close %q", fcSocketFile.Name())
+		}
+
 		if err := os.RemoveAll(shimDir.RootPath()); err != nil {
 			logger.WithError(err).Errorf("failed to remove %q", shimDir.RootPath())
 		}

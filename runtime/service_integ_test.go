@@ -1849,13 +1849,15 @@ func TestCreateVM_Isolated(t *testing.T) {
 		t.Run(subtest.name, func(t *testing.T) {
 			request.VMID = testNameToVMID(t.Name())
 
-			_, err = fcClient.CreateVM(ctx, &request)
+			resp, err := fcClient.CreateVM(ctx, &request)
 			validate(t, err)
-
 			if err != nil {
 				// No VM to stop.
 				return
 			}
+
+			// Ensure the response fields are populated correctly
+			assert.Equal(t, request.VMID, resp.VMID)
 
 			_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: request.VMID})
 			require.Equal(t, status.Code(err), codes.OK)

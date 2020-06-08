@@ -336,7 +336,6 @@ func (s *service) StartShim(shimCtx context.Context, containerID, containerdBina
 		if err != nil {
 			return "", errors.Wrap(err, "failed to generate UUID for VMID")
 		}
-
 		s.vmID = uuid.String()
 
 		// This request is handled by a short-lived shim process to find its control socket.
@@ -457,7 +456,6 @@ func (s *service) CreateVM(requestCtx context.Context, request *proto.CreateVMRe
 		err = s.createVM(ctxWithTimeout, request)
 		createRan = true
 	})
-
 	if !createRan {
 		return nil, status.Error(codes.AlreadyExists, "shim cannot create VM more than once")
 	}
@@ -485,9 +483,14 @@ func (s *service) CreateVM(requestCtx context.Context, request *proto.CreateVMRe
 	// let all the other methods know that the VM is ready for tasks
 	close(s.vmReady)
 
+	resp.VMID = s.vmID
+	resp.MetricsFifoPath = s.machineConfig.MetricsFifo
+	resp.LogFifoPath = s.machineConfig.LogFifo
+	resp.SocketPath = s.shimDir.FirecrackerSockPath()
 	if c, ok := s.jailer.(cgroupPather); ok {
 		resp.CgroupPath = c.CgroupPath()
 	}
+
 	return &resp, nil
 }
 

@@ -1789,6 +1789,80 @@ func findProcWithName(name string) func(context.Context, *process.Process) (bool
 	}
 }
 
+func TestOOM_Isolated(t *testing.T) {
+	prepareIntegTest(t)
+
+	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	defer client.Close()
+
+	ctx := namespaces.WithNamespace(context.Background(), "default")
+
+	// If we don't have enough events within 30 seconds, the context will be cancelled and the loop below will be interrupted
+	subscribeCtx, subscribeCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer subscribeCancel()
+	eventCh, errCh := client.Subscribe(subscribeCtx, "topic")
+
+	image, err := alpineImage(ctx, client, defaultSnapshotterName)
+	require.NoError(t, err, "failed to get alpine image")
+
+	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
+	require.NoError(t, err, "failed to create ttrpc client")
+
+	vmID := testNameToVMID(t.Name())
+
+	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
+	_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{VMID: vmID})
+	require.NoError(t, err)
+
+	c, err := client.NewContainer(ctx,
+		"container-"+vmID,
+		containerd.WithSnapshotter(defaultSnapshotterName),
+		containerd.WithNewSnapshot("snapshot-"+vmID, image),
+		containerd.WithNewSpec(
+			oci.WithProcessArgs("/bin/dd", "if=/dev/zero", "ibs=10M"),
+			firecrackeroci.WithVMID(vmID),
+			oci.WithMemoryLimit(2*1024*1024),
+		),
+	)
+	require.NoError(t, err)
+
+	task, err := c.NewTask(ctx, cio.NewCreator(cio.WithStreams(nil, os.Stdout, os.Stderr)))
+	require.NoError(t, err, "failed to create task for container %s", c.ID())
+
+	err = task.Start(ctx)
+	require.NoError(t, err, "failed to create task for container %s", c.ID())
+
+	_, err = task.Wait(ctx)
+	require.NoError(t, err)
+
+	expected := []string{
+		"/snapshot/prepare",
+		"/snapshot/commit",
+		"/firecracker-vm/start",
+		"/snapshot/prepare",
+		"/containers/create",
+		"/tasks/create",
+		"/tasks/start",
+		"/tasks/oom",
+		"/tasks/exit",
+	}
+	var actual []string
+
+loop:
+	for len(actual) < len(expected) {
+		select {
+		case event := <-eventCh:
+			actual = append(actual, event.Topic)
+		case err := <-errCh:
+			t.Logf("events = %v", actual)
+			assert.NoError(t, err)
+			break loop
+		}
+	}
+	require.Equal(t, expected, actual)
+}
+
 func TestCreateVM_Isolated(t *testing.T) {
 	prepareIntegTest(t)
 

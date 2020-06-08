@@ -94,13 +94,13 @@ func LoadConfig(path string) (*Config, error) {
 		},
 	}
 
+	if err := json.Unmarshal(data, cfg); err != nil {
+		return nil, errors.Wrapf(err, "failed to unmarshal config from %q", path)
+	}
+
 	cfg.DebugHelper, err = debug.New(cfg.LogLevels...)
 	if err != nil {
 		return nil, err
-	}
-
-	if err := json.Unmarshal(data, cfg); err != nil {
-		return nil, errors.Wrapf(err, "failed to unmarshal config from %q", path)
 	}
 
 	return cfg, nil

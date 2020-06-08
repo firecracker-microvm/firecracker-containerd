@@ -47,7 +47,8 @@ func TestLoadConfigOverrides(t *testing.T) {
 			"kernel_image_path":"%s",
 			"root_drive":"%s",
 			"cpu_count": %d,
-            "cpu_template": "%s"
+            "cpu_template": "%s",
+			"log_levels": ["debug"]
 		}`, overrideKernelArgs, overrideKernelPath, overrideRootfsPath, overrideCPUCount, overrideCPUTemplate)
 	configFile, cleanup := createTempConfig(t, configContent)
 	defer cleanup()
@@ -58,6 +59,8 @@ func TestLoadConfigOverrides(t *testing.T) {
 	assert.Equal(t, overrideKernelPath, cfg.KernelImagePath, "expected overridden kernel path")
 	assert.Equal(t, overrideRootfsPath, cfg.RootDrive, "expected overridden rootfs path")
 	assert.Equal(t, overrideCPUTemplate, cfg.CPUTemplate, "expected overridden CPU template")
+
+	assert.True(t, cfg.DebugHelper.LogFirecrackerOutput())
 }
 
 func createTempConfig(t *testing.T, contents string) (string, func()) {

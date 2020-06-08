@@ -11,7 +11,7 @@
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
-SUBDIRS:=agent runtime internal examples firecracker-control/cmd/containerd eventbridge
+SUBDIRS:=agent runtime examples firecracker-control/cmd/containerd
 TEST_SUBDIRS:=$(addprefix test-,$(SUBDIRS))
 INTEG_TEST_SUBDIRS:=$(addprefix integ-test-,$(SUBDIRS))
 
@@ -121,6 +121,7 @@ image: $(RUNC_BIN) agent-in-docker
 	$(MAKE) -C tools/image-builder all-in-docker
 
 test: $(TEST_SUBDIRS)
+	go test ./... $(EXTRAGOARGS)
 
 # test-in-docker runs all unit tests inside a docker container. Use "integ-test" to
 # run the integ-tests inside containers.

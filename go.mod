@@ -40,11 +40,14 @@ require (
 	github.com/sirupsen/logrus v1.4.2
 	github.com/stretchr/testify v1.5.1
 	github.com/syndtr/gocapability v0.0.0-20180916011248-d98352740cb2 // indirect
+	github.com/tv42/httpunix v0.0.0-20191220191345-2ba4b9c3382c
 	github.com/urfave/cli v1.20.0 // indirect
 	github.com/vishvananda/netlink v1.1.0
 	go.etcd.io/bbolt v1.3.1-etcd.8 // indirect
-	golang.org/x/sync v0.0.0-20190423024810-112230192c58
+	golang.org/x/lint v0.0.0-20200302205851-738671d3881b // indirect
+	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
 	golang.org/x/sys v0.0.0-20191210023423-ac6580df4449
+	golang.org/x/tools v0.0.0-20200615222825-6aa8f57aacd9 // indirect
 	google.golang.org/genproto v0.0.0-20181109154231-b5d43981345b // indirect
 	google.golang.org/grpc v1.21.0
 	gotest.tools v2.2.0+incompatible // indirect

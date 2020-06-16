@@ -14,11 +14,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"math"
 	"net"
+	"net/http"
 	"os"
 	"runtime/debug"
 	"strconv"
@@ -61,6 +63,8 @@ import (
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	drivemount "github.com/firecracker-microvm/firecracker-containerd/proto/service/drivemount/ttrpc"
 	fccontrolTtrpc "github.com/firecracker-microvm/firecracker-containerd/proto/service/fccontrol/ttrpc"
+
+	"github.com/tv42/httpunix"
 )
 
 func init() {
@@ -144,6 +148,9 @@ type service struct {
 	machineConfig    *firecracker.Config
 	vsockIOPortCount uint32
 	vsockPortMu      sync.Mutex
+
+	// httpControlClient is to send pause/resume/snapshot commands to the microVM
+	httpControlClient *http.Client
 }
 
 func shimOpts(shimCtx context.Context) (*shim.Opts, error) {
@@ -579,6 +586,8 @@ func (s *service) createVM(requestCtx context.Context, request *proto.CreateVMRe
 		return err
 	}
 
+	s.createHTTPControlClient()
+
 	s.logger.Info("successfully started the VM")
 	return nil
 }
@@ -709,6 +718,55 @@ func (s *service) GetVMMetadata(requestCtx context.Context, request *proto.GetVM
 	}
 
 	return &proto.GetVMMetadataResponse{Metadata: string(metadata)}, nil
+}
+
+// PauseVM Pauses a VM
+func (s *service) PauseVM(ctx context.Context, req *proto.PauseVMRequest) (*empty.Empty, error) {
+	pauseReq, err := formPauseReq()
+	if err != nil {
+		s.logger.WithError(err).Error("Failed to create pause vm request")
+		return nil, err
+	}
+
+	err = s.waitVMReady()
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := s.httpControlClient.Do(pauseReq)
+	if err != nil {
+		s.logger.WithError(err).Error("Failed to send pause VM request")
+		s.logger.Warn(fmt.Sprintf("response from pausevm was :%s:", resp.Status))
+		return nil, err
+	}
+	if !strings.Contains(resp.Status, "204") {
+		s.logger.WithError(err).Error("Failed to pause VM")
+		return nil, err
+	}
+
+	return &empty.Empty{}, nil
+}
+
+// ResumeVM Resumes a VM
+func (s *service) ResumeVM(ctx context.Context, req *proto.ResumeVMRequest) (*empty.Empty, error) {
+	resumeReq, err := formResumeReq()
+	if err != nil {
+		s.logger.WithError(err).Error("Failed to create resume vm request")
+		return nil, err
+	}
+
+	resp, err := s.httpControlClient.Do(resumeReq)
+	if err != nil {
+		s.logger.WithError(err).Error("Failed to send resume VM request")
+		s.logger.Warn(fmt.Sprintf("response from pausevm was :%s:", resp.Status))
+		return nil, err
+	}
+	if !strings.Contains(resp.Status, "204") {
+		s.logger.WithError(err).Error("Failed to pause VM")
+		return nil, err
+	}
+
+	return &empty.Empty{}, nil
 }
 
 func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker.Config, error) {
@@ -1349,4 +1407,68 @@ func (s *service) monitorVMExit() {
 	if err := s.cleanup(); err != nil {
 		s.logger.WithError(err).Error("failed to clean up the VM")
 	}
+}
+
+func (s *service) createHTTPControlClient() {
+	u := &httpunix.Transport{
+		DialTimeout:           100 * time.Millisecond,
+		RequestTimeout:        10 * time.Second,
+		ResponseHeaderTimeout: 10 * time.Second,
+	}
+	u.RegisterLocation("firecracker", s.shimDir.FirecrackerSockPath())
+
+	t := &http.Transport{}
+	t.RegisterProtocol(httpunix.Scheme, u)
+
+	var client = http.Client{
+		Transport: t,
+	}
+
+	s.httpControlClient = &client
+}
+
+func formResumeReq() (*http.Request, error) {
+	var req *http.Request
+
+	data := map[string]string{
+		"state": "Resumed",
+	}
+	json, err := json.Marshal(data)
+	if err != nil {
+		logrus.WithError(err).Error("Failed to marshal json data")
+		return nil, err
+	}
+
+	req, err = http.NewRequest("PATCH", "http+unix://firecracker/vm", bytes.NewBuffer(json))
+	if err != nil {
+		logrus.WithError(err).Error("Failed to create new HTTP request in formResumeReq")
+		return nil, err
+	}
+	req.Header.Add("accept", "application/json")
+	req.Header.Add("Content-Type", "application/json")
+
+	return req, nil
+}
+
+func formPauseReq() (*http.Request, error) {
+	var req *http.Request
+
+	data := map[string]string{
+		"state": "Paused",
+	}
+	json, err := json.Marshal(data)
+	if err != nil {
+		logrus.WithError(err).Error("Failed to marshal json data")
+		return nil, err
+	}
+
+	req, err = http.NewRequest("PATCH", "http+unix://firecracker/vm", bytes.NewBuffer(json))
+	if err != nil {
+		logrus.WithError(err).Error("Failed to create new HTTP request in formPauseReq")
+		return nil, err
+	}
+	req.Header.Add("accept", "application/json")
+	req.Header.Add("Content-Type", "application/json")
+
+	return req, nil
 }

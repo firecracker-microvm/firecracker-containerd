@@ -569,6 +569,82 @@ func (m *GetVMMetadataResponse) GetMetadata() string {
 	return ""
 }
 
+type PauseVMRequest struct {
+	VMID                 string   `protobuf:"bytes,1,opt,name=VMID,json=vMID,proto3" json:"VMID,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *PauseVMRequest) Reset()         { *m = PauseVMRequest{} }
+func (m *PauseVMRequest) String() string { return proto.CompactTextString(m) }
+func (*PauseVMRequest) ProtoMessage()    {}
+func (*PauseVMRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_a73317e9fb8da571, []int{9}
+}
+func (m *PauseVMRequest) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_PauseVMRequest.Unmarshal(m, b)
+}
+func (m *PauseVMRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_PauseVMRequest.Marshal(b, m, deterministic)
+}
+func (m *PauseVMRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PauseVMRequest.Merge(m, src)
+}
+func (m *PauseVMRequest) XXX_Size() int {
+	return xxx_messageInfo_PauseVMRequest.Size(m)
+}
+func (m *PauseVMRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_PauseVMRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_PauseVMRequest proto.InternalMessageInfo
+
+func (m *PauseVMRequest) GetVMID() string {
+	if m != nil {
+		return m.VMID
+	}
+	return ""
+}
+
+type ResumeVMRequest struct {
+	VMID                 string   `protobuf:"bytes,1,opt,name=VMID,json=vMID,proto3" json:"VMID,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *ResumeVMRequest) Reset()         { *m = ResumeVMRequest{} }
+func (m *ResumeVMRequest) String() string { return proto.CompactTextString(m) }
+func (*ResumeVMRequest) ProtoMessage()    {}
+func (*ResumeVMRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_a73317e9fb8da571, []int{10}
+}
+func (m *ResumeVMRequest) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_ResumeVMRequest.Unmarshal(m, b)
+}
+func (m *ResumeVMRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_ResumeVMRequest.Marshal(b, m, deterministic)
+}
+func (m *ResumeVMRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ResumeVMRequest.Merge(m, src)
+}
+func (m *ResumeVMRequest) XXX_Size() int {
+	return xxx_messageInfo_ResumeVMRequest.Size(m)
+}
+func (m *ResumeVMRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_ResumeVMRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ResumeVMRequest proto.InternalMessageInfo
+
+func (m *ResumeVMRequest) GetVMID() string {
+	if m != nil {
+		return m.VMID
+	}
+	return ""
+}
+
 type JailerConfig struct {
 	NetNS string `protobuf:"bytes,1,opt,name=NetNS,json=netNS,proto3" json:"NetNS,omitempty"`
 	// List of the physical numbers of the CPUs on which processes in that
@@ -609,7 +685,7 @@ func (m *JailerConfig) Reset()         { *m = JailerConfig{} }
 func (m *JailerConfig) String() string { return proto.CompactTextString(m) }
 func (*JailerConfig) ProtoMessage()    {}
 func (*JailerConfig) Descriptor() ([]byte, []int) {
-	return fileDescriptor_a73317e9fb8da571, []int{9}
+	return fileDescriptor_a73317e9fb8da571, []int{11}
 }
 func (m *JailerConfig) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_JailerConfig.Unmarshal(m, b)
@@ -689,6 +765,8 @@ func init() {
 	proto.RegisterType((*UpdateVMMetadataRequest)(nil), "UpdateVMMetadataRequest")
 	proto.RegisterType((*GetVMMetadataRequest)(nil), "GetVMMetadataRequest")
 	proto.RegisterType((*GetVMMetadataResponse)(nil), "GetVMMetadataResponse")
+	proto.RegisterType((*PauseVMRequest)(nil), "PauseVMRequest")
+	proto.RegisterType((*ResumeVMRequest)(nil), "ResumeVMRequest")
 	proto.RegisterType((*JailerConfig)(nil), "JailerConfig")
 }
 

@@ -40,6 +40,7 @@ require (
 	github.com/sirupsen/logrus v1.6.0
 	github.com/stretchr/testify v1.6.1
 	github.com/syndtr/gocapability v0.0.0-20180916011248-d98352740cb2 // indirect
+	github.com/tv42/httpunix v0.0.0-20191220191345-2ba4b9c3382c
 	github.com/urfave/cli v1.20.0 // indirect
 	github.com/vishvananda/netlink v1.1.0
 	go.etcd.io/bbolt v1.3.1-etcd.8 // indirect

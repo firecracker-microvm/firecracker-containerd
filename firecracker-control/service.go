@@ -96,3 +96,13 @@ func (s *service) GetVMMetadata(ctx context.Context, req *proto.GetVMMetadataReq
 	log.G(ctx).Debug("Getting vm metadata")
 	return s.local.GetVMMetadata(ctx, req)
 }
+
+func (s *service) PauseVM(ctx context.Context, req *proto.PauseVMRequest) (*empty.Empty, error) {
+	log.G(ctx).Debugf("pause VM request: %+v", req)
+	return s.local.PauseVM(ctx, req)
+}
+
+func (s *service) ResumeVM(ctx context.Context, req *proto.ResumeVMRequest) (*empty.Empty, error) {
+	log.G(ctx).Debugf("resume VM request: %+v", req)
+	return s.local.ResumeVM(ctx, req)
+}

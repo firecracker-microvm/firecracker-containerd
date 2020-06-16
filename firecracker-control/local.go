@@ -463,3 +463,39 @@ func setShimOOMScore(shimPid int) error {
 
 	return nil
 }
+
+// PauseVM Pauses a VM
+func (s *local) PauseVM(ctx context.Context, req *proto.PauseVMRequest) (*empty.Empty, error) {
+	client, err := s.shimFirecrackerClient(ctx, req.VMID)
+	if err != nil {
+		return nil, err
+	}
+
+	defer client.Close()
+
+	resp, err := client.PauseVM(ctx, req)
+	if err != nil {
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+// ResumeVM Resumes a VM
+func (s *local) ResumeVM(ctx context.Context, req *proto.ResumeVMRequest) (*empty.Empty, error) {
+	client, err := s.shimFirecrackerClient(ctx, req.VMID)
+	if err != nil {
+		return nil, err
+	}
+
+	defer client.Close()
+
+	resp, err := client.ResumeVM(ctx, req)
+	if err != nil {
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	return resp, nil
+}

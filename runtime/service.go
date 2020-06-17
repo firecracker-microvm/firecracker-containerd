@@ -736,7 +736,6 @@ func (s *service) PauseVM(ctx context.Context, req *proto.PauseVMRequest) (*empt
 	resp, err := s.httpControlClient.Do(pauseReq)
 	if err != nil {
 		s.logger.WithError(err).Error("Failed to send pause VM request")
-		s.logger.Warn(fmt.Sprintf("response from pausevm was :%s:", resp.Status))
 		return nil, err
 	}
 	if !strings.Contains(resp.Status, "204") {
@@ -758,7 +757,6 @@ func (s *service) ResumeVM(ctx context.Context, req *proto.ResumeVMRequest) (*em
 	resp, err := s.httpControlClient.Do(resumeReq)
 	if err != nil {
 		s.logger.WithError(err).Error("Failed to send resume VM request")
-		s.logger.Warn(fmt.Sprintf("response from pausevm was :%s:", resp.Status))
 		return nil, err
 	}
 	if !strings.Contains(resp.Status, "204") {

@@ -499,3 +499,60 @@ func (s *local) ResumeVM(ctx context.Context, req *proto.ResumeVMRequest) (*empt
 
 	return resp, nil
 }
+
+// CreateSnapshot Creates a snapshot of a VM
+func (s *local) CreateSnapshot(ctx context.Context, req *proto.CreateSnapshotRequest) (*empty.Empty, error) {
+	client, err := s.shimFirecrackerClient(ctx, req.VMID)
+	if err != nil {
+		return nil, err
+	}
+
+	defer client.Close()
+
+	resp, err := client.CreateSnapshot(ctx, req)
+	if err != nil {
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+// LoadSnapshot Loads a snapshot of a VM
+func (s *local) LoadSnapshot(ctx context.Context, req *proto.LoadSnapshotRequest) (*empty.Empty, error) {
+	client, err := s.shimFirecrackerClient(ctx, req.VMID)
+	if err != nil {
+		return nil, err
+	}
+
+	defer client.Close()
+
+	resp, err := client.LoadSnapshot(ctx, req)
+	if err != nil {
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+// Offload Shuts down a VM started through the firecracker go sdk and deletes
+// the corresponding firecracker socket. All of the other resources (shim, other sockets)
+// will persist.
+func (s *local) Offload(ctx context.Context, req *proto.OffloadRequest) (*empty.Empty, error) {
+	client, err := s.shimFirecrackerClient(ctx, req.VMID)
+	if err != nil {
+		return nil, err
+	}
+
+	defer client.Close()
+
+	resp, err := client.Offload(ctx, req)
+	if err != nil {
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	return resp, nil
+}
+

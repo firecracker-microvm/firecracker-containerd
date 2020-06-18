@@ -1,5 +1,7 @@
 module github.com/firecracker-microvm/firecracker-containerd
 
+replace github.com/firecracker-microvm/firecracker-go-sdk => github.com/ustiugov/firecracker-go-sdk v0.20.1-0.20200625102438-8edf287b0123
+
 require (
 	github.com/Microsoft/go-winio v0.4.14 // indirect
 	github.com/StackExchange/wmi v0.0.0-20181212234831-e0a55b97c705 // indirect
@@ -17,7 +19,8 @@ require (
 	github.com/docker/distribution v2.7.1+incompatible // indirect
 	github.com/docker/go-events v0.0.0-20170721190031-9461782956ad // indirect
 	github.com/docker/go-metrics v0.0.0-20181218153428-b84716841b82 // indirect
-	github.com/firecracker-microvm/firecracker-go-sdk v0.21.1-0.20200811001213-ee1e7c41b7bd
+	github.com/docker/go-units v0.4.0 // indirect
+	github.com/firecracker-microvm/firecracker-go-sdk v0.0.0-00010101000000-000000000000
 	github.com/go-ole/go-ole v1.2.4 // indirect
 	github.com/godbus/dbus v0.0.0-20181025153459-66d97aec3384 // indirect
 	github.com/gofrs/uuid v3.3.0+incompatible

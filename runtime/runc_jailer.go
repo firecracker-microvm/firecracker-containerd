@@ -125,7 +125,7 @@ func (j *runcJailer) BuildJailedMachine(cfg *config.Config, machineConfig *firec
 	handler := j.BuildJailedRootHandler(cfg, machineConfig, vmID)
 	fifoHandler := j.BuildLinkFifoHandler()
 	// Build a new client since BuildJailedRootHandler modifies the socket path value.
-	client := firecracker.NewClient(machineConfig.SocketPath, j.logger, machineConfig.Debug)
+	client := firecracker.NewClient(machineConfig.SocketPath, j.logger, true)
 
 	if machineConfig.NetNS == "" {
 		if netns := getNetNS(j.configSpec); netns != "" {

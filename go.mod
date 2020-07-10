@@ -49,6 +49,7 @@ require (
 	go.etcd.io/bbolt v1.3.1-etcd.8 // indirect
 	golang.org/x/sync v0.0.0-20190423024810-112230192c58
 	golang.org/x/sys v0.0.0-20200323222414-85ca7c5b95cd
+	golang.org/x/tools v0.0.0-20200710042808-f1c4188a97a1 // indirect
 	google.golang.org/genproto v0.0.0-20181109154231-b5d43981345b // indirect
 	google.golang.org/grpc v1.21.0
 	gotest.tools v2.2.0+incompatible // indirect

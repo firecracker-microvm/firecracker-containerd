@@ -124,8 +124,13 @@ func (j *runcJailer) JailPath() vm.Dir {
 func (j *runcJailer) BuildJailedMachine(cfg *config.Config, machineConfig *firecracker.Config, vmID string) ([]firecracker.Opt, error) {
 	handler := j.BuildJailedRootHandler(cfg, machineConfig, vmID)
 	fifoHandler := j.BuildLinkFifoHandler()
+
+	var debugSDK bool
+	if level, set := cfg.DebugHelper.GetFirecrackerSDKLogLevel(); set {
+		debugSDK = level == logrus.DebugLevel
+	}
 	// Build a new client since BuildJailedRootHandler modifies the socket path value.
-	client := firecracker.NewClient(machineConfig.SocketPath, j.logger, machineConfig.Debug)
+	client := firecracker.NewClient(machineConfig.SocketPath, j.logger, debugSDK)
 
 	if machineConfig.NetNS == "" {
 		if netns := getNetNS(j.configSpec); netns != "" {

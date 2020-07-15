@@ -788,7 +788,10 @@ func (s *service) LoadSnapshot(ctx context.Context, req *proto.LoadSnapshotReque
 		s.logger.WithError(err).Error("startFirecrackerProcess returned an error")
 		return nil, err
 	}
-	time.Sleep(200 * time.Millisecond)
+
+	if err := s.dialFirecrackerSocket(); err != nil {
+		s.logger.WithError(err).Error("Failed to wait for firecracker socket")
+	}
 	s.createHTTPControlClient()
 
 	loadSnapReq, err := formLoadSnapReq(req.SnapshotFilePath, req.MemFilePath)
@@ -1708,6 +1711,31 @@ func (s *service) startFirecrackerProcess() error {
 	go firecrackerCmd.Wait()
 
 	s.firecrackerPid = firecrackerCmd.Process.Pid
+
+	return nil
+}
+
+func (s *service) dialFirecrackerSocket() error {
+	for {
+		var d net.Dialer
+		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+		defer cancel()
+
+		c, err := d.DialContext(ctx, "unix", s.shimDir.FirecrackerSockPath())
+		if err != nil {
+			if ctx.Err() != nil {
+				s.logger.WithError(ctx.Err()).Error("timed out while waiting for firecracker socket")
+				return ctx.Err()
+			}
+
+			time.Sleep(1 * time.Millisecond)
+			continue
+		}
+
+		c.Close()
+
+		break
+	}
 
 	return nil
 }

@@ -232,7 +232,7 @@ configuration file has the following fields:
   values are "C3" and "T2".
 * `additional_drives` (unused)
 * `log_fifo` (optional) - Named pipe where Firecracker logs should be delivered.
-* `log_level` (optional) - Log level for the Firecracker logs
+* `log_levels` (optional) - Log level for the Firecracker logs.
 * `metrics_fifo` (optional) - Named pipe where Firecracker metrics should be
   delivered.
 * `ht_enabled` (unused) - Reserved for future use.
@@ -255,7 +255,7 @@ configuration file has the following fields:
   "root_drive": "/var/lib/firecracker-containerd/runtime/default-rootfs.img",
   "cpu_template": "T2",
   "log_fifo": "fc-logs.fifo",
-  "log_level": "Debug",
+  "log_levels": ["debug"],
   "metrics_fifo": "fc-metrics.fifo"
 }
 ```

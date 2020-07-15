@@ -161,7 +161,7 @@ sudo tee /etc/containerd/firecracker-runtime.json <<EOF
   "firecracker_binary_path": "/usr/local/bin/firecracker",
   "cpu_template": "T2",
   "log_fifo": "fc-logs.fifo",
-  "log_level": "Debug",
+  "log_levels": ["debug"],
   "metrics_fifo": "fc-metrics.fifo",
   "kernel_args": "console=ttyS0 noapic reboot=k panic=1 pci=off nomodules ro systemd.journald.forward_to_console systemd.unit=firecracker.target init=/sbin/overlay-init",
   "default_network_interfaces": [{

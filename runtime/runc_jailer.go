@@ -544,6 +544,10 @@ func getNetNS(spec specs.Spec) string {
 	return ""
 }
 
-func (j runcJailer) Stop() error {
-	return j.runcClient.Kill(j.ctx, j.vmID, int(syscall.SIGTERM), &runc.KillOpts{All: true})
+func (j runcJailer) Stop(force bool) error {
+	signal := syscall.SIGTERM
+	if force {
+		signal = syscall.SIGKILL
+	}
+	return j.runcClient.Kill(j.ctx, j.vmID, int(signal), &runc.KillOpts{All: true})
 }

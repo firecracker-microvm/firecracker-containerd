@@ -1234,9 +1234,16 @@ func (s *service) shutdownLoop(
 			timeout: timeout,
 		},
 		{
-			name: "stop the jailer",
+			name: "stop the jailer by SIGTERM",
 			shutdown: func() error {
-				return s.jailer.Stop()
+				return s.jailer.Stop(false)
+			},
+			timeout: jailerStopTimeout,
+		},
+		{
+			name: "stop the jailer by SIGKILL",
+			shutdown: func() error {
+				return s.jailer.Stop(true)
 			},
 			timeout: jailerStopTimeout,
 		},

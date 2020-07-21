@@ -21,6 +21,7 @@ GOSUM := $(GOMOD:.mod=.sum)
 DOCKER_IMAGE_TAG?=latest
 GO_CACHE_VOLUME_NAME?=gocache
 FIRECRACKER_CONTAINERD_TEST_IMAGE?=localhost/firecracker-containerd-test
+FICD_DM_POOL?=fc-test-thinpool
 
 REVISION=$(shell git rev-parse HEAD)
 

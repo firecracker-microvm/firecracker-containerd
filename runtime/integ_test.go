@@ -93,7 +93,7 @@ func writeRuntimeConfig(options ...func(*config.Config)) error {
 	return nil
 }
 
-var testNameToVMIDReplacer = strings.NewReplacer("/", "_")
+var testNameToVMIDReplacer = strings.NewReplacer("/", "-", "_", "-")
 
 func testNameToVMID(s string) string {
 	return testNameToVMIDReplacer.Replace(s)

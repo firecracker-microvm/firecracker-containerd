@@ -579,13 +579,14 @@ func TestLongUnixSocketPath_Isolated(t *testing.T) {
 	// Verify that if the absolute path of the Firecracker unix sockets are longer
 	// than the max length enforced by the kernel (UNIX_PATH_MAX, usually 108), we
 	// don't fail (due to the internal implementation using relative paths).
-	// We do this by using the max VMID len (76 chars), which in combination with the
+	// We do this by using the max VMID len (64 chars), which in combination with the
 	// default location we store state results in a path like
-	// "/run/firecracker-containerd/default/<vmID>" (with len 112).
+	// "/run/firecracker-containerd/<namespace>/<vmID>" (with len 112).
 	const maxUnixSockLen = 108
-	vmID := strings.Repeat("x", 76)
+	namespace := strings.Repeat("n", 20)
+	vmID := strings.Repeat("v", 64)
 
-	ctx := namespaces.WithNamespace(context.Background(), "default")
+	ctx := namespaces.WithNamespace(context.Background(), namespace)
 
 	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
 	require.NoError(t, err, "failed to create ttrpc client")
@@ -624,7 +625,7 @@ func TestLongUnixSocketPath_Isolated(t *testing.T) {
 
 			// double-check that the sockets are at the expected path and that their absolute
 			// length exceeds 108 bytes
-			shimDir, err := vm.ShimDir(cfg.ShimBaseDir, "default", vmID)
+			shimDir, err := vm.ShimDir(cfg.ShimBaseDir, namespace, vmID)
 			require.NoError(t, err, "failed to get shim dir")
 
 			if request.JailerConfig == nil {

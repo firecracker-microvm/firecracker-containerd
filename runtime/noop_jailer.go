@@ -44,7 +44,7 @@ func newNoopJailer(ctx context.Context, logger *logrus.Entry, shimDir vm.Dir) *n
 	}
 }
 
-func (j *noopJailer) BuildJailedMachine(cfg *config.Config, machineConfig *firecracker.Config, vmID string) ([]firecracker.Opt, error) {
+func (j *noopJailer) BuildJailedMachine(cfg *config.Config, _ *firecracker.Config, vmID string) ([]firecracker.Opt, error) {
 	if len(cfg.FirecrackerBinaryPath) == 0 {
 		return []firecracker.Opt{}, nil
 	}
@@ -57,6 +57,7 @@ func (j *noopJailer) BuildJailedMachine(cfg *config.Config, machineConfig *firec
 	cmd := firecracker.VMCommandBuilder{}.
 		WithBin(cfg.FirecrackerBinaryPath).
 		WithSocketPath(relSocketPath).
+		WithArgs([]string{"--id", vmID}).
 		Build(j.ctx)
 
 	if cfg.DebugHelper.LogFirecrackerOutput() {

@@ -451,6 +451,7 @@ func (j *runcJailer) setDefaultConfigValues(cfg *config.Config, socketPath strin
 		cmd := firecracker.VMCommandBuilder{}.
 			WithBin("/" + firecrackerFileName).
 			WithSocketPath(socketPath).
+			WithArgs([]string{"--id", j.vmID}).
 			// Don't need to pass in an actual context here as we are only building
 			// the command arguments and not actually building a command
 			Build(context.Background())

@@ -18,13 +18,13 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/firecracker-microvm/firecracker-go-sdk"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
 	"github.com/firecracker-microvm/firecracker-containerd/config"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
+	firecracker "github.com/firecracker-microvm/firecracker-go-sdk"
 )
 
 const (
@@ -95,14 +95,15 @@ func newJailer(
 
 	l := logger.WithField("jailer", "runc")
 	config := runcJailerConfig{
-		OCIBundlePath:  ociBundlePath,
-		RuncBinPath:    service.config.JailerConfig.RuncBinaryPath,
-		RuncConfigPath: service.config.JailerConfig.RuncConfigPath,
-		UID:            request.JailerConfig.UID,
-		GID:            request.JailerConfig.GID,
-		CPUs:           request.JailerConfig.CPUs,
-		Mems:           request.JailerConfig.Mems,
-		CgroupPath:     request.JailerConfig.CgroupPath,
+		OCIBundlePath:     ociBundlePath,
+		RuncBinPath:       service.config.JailerConfig.RuncBinaryPath,
+		RuncConfigPath:    service.config.JailerConfig.RuncConfigPath,
+		UID:               request.JailerConfig.UID,
+		GID:               request.JailerConfig.GID,
+		CPUs:              request.JailerConfig.CPUs,
+		Mems:              request.JailerConfig.Mems,
+		CgroupPath:        request.JailerConfig.CgroupPath,
+		DriveExposePolicy: request.JailerConfig.DriveExposePolicy,
 	}
 	return newRuncJailer(ctx, l, service.vmID, config)
 }

@@ -15,8 +15,10 @@ package main
 
 import (
 	"context"
+	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/containerd/containerd"
@@ -44,6 +46,13 @@ func TestJailer_Isolated(t *testing.T) {
 			GID: 300001,
 		})
 	})
+	t.Run("With Jailer and bind-mount", func(t *testing.T) {
+		testJailer(t, &proto.JailerConfig{
+			UID:               300001,
+			GID:               300001,
+			DriveExposePolicy: proto.DriveExposePolicy_BIND,
+		})
+	})
 }
 
 func testJailer(t *testing.T, jailerConfig *proto.JailerConfig) {
@@ -63,11 +72,30 @@ func testJailer(t *testing.T, jailerConfig *proto.JailerConfig) {
 
 	vmID := testNameToVMID(t.Name())
 
-	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
-	_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
+	request := proto.CreateVMRequest{
 		VMID:         vmID,
 		JailerConfig: jailerConfig,
-	})
+	}
+
+	// If the drive files are bind-mounted, the files must be readable from the jailer's user.
+	if jailerConfig != nil && jailerConfig.DriveExposePolicy == proto.DriveExposePolicy_BIND {
+		f, err := ioutil.TempFile("", strings.Replace(t.Name(), "/", "-", -1))
+		require.NoError(err)
+		defer f.Close()
+
+		dst := f.Name()
+
+		err = copyFile(defaultRuntimeConfig.RootDrive, dst, 0400)
+		require.NoErrorf(err, "failed to copy a rootfs as %q", dst)
+
+		err = os.Chown(dst, int(jailerConfig.UID), int(jailerConfig.GID))
+		require.NoError(err, "failed to chown %q", dst)
+
+		request.RootDrive = &proto.FirecrackerRootDrive{HostPath: dst}
+	}
+
+	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
+	_, err = fcClient.CreateVM(ctx, &request)
 	require.NoError(err)
 
 	c, err := client.NewContainer(ctx,

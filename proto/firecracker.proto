@@ -81,6 +81,15 @@ message GetVMMetadataResponse {
     string Metadata = 1;
 }
 
+// DriveExposePolicy is used to configure the method to expose drive files.
+// "COPY" is copying the files to the jail, which is the default behavior.
+// "BIND" is bind-mounting the files on the jail, assuming a caller pre-configures the permissions of
+// the files appropriately.
+enum DriveExposePolicy {
+    COPY = 0;
+    BIND = 1;
+}
+
 message JailerConfig {
     string NetNS = 1;
     // List of the physical numbers of the CPUs on which processes in that
@@ -110,5 +119,8 @@ message JailerConfig {
 	// if no value was provided, then /firecracker-containerd will be used as
 	// the default value
     string CgroupPath = 6;
+
+    // DriveExposePolicy is used to configure the method to expose drive files.
+    DriveExposePolicy DriveExposePolicy = 7;
 }
 

@@ -101,18 +101,22 @@ func (j *noopJailer) StubDrivesOptions() []FileOpt {
 	return []FileOpt{}
 }
 
-func (j *noopJailer) Stop() error {
+func (j *noopJailer) Stop(force bool) error {
 	if j.pid == 0 {
 		return errors.New("the machine hasn't been started")
 	}
 
-	j.logger.Debugf("sending SIGTERM to %d", j.pid)
+	signal := syscall.SIGTERM
+	if force {
+		signal = syscall.SIGKILL
+	}
+	j.logger.Debugf("sending signal %d to %d", signal, j.pid)
 	p, err := os.FindProcess(j.pid)
 	if err != nil {
 		return err
 	}
 
-	err = p.Signal(syscall.SIGTERM)
+	err = p.Signal(signal)
 	if err == nil || err.Error() == "os: process already finished" {
 		return nil
 	}

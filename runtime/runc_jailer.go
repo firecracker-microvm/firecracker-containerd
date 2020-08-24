@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/containerd/go-runc"
-	"github.com/firecracker-microvm/firecracker-go-sdk"
 	"github.com/hashicorp/go-multierror"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -36,6 +35,8 @@ import (
 	"github.com/firecracker-microvm/firecracker-containerd/config"
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
+	"github.com/firecracker-microvm/firecracker-containerd/proto"
+	firecracker "github.com/firecracker-microvm/firecracker-go-sdk"
 )
 
 const (
@@ -63,6 +64,9 @@ type runcJailerConfig struct {
 	CPUs           string
 	Mems           string
 	CgroupPath     string
+
+	// DriveExposePolicy defines how the jailer exposes files.
+	DriveExposePolicy proto.DriveExposePolicy
 }
 
 func newRuncJailer(ctx context.Context, logger *logrus.Entry, vmID string, cfg runcJailerConfig) (*runcJailer, error) {
@@ -78,7 +82,6 @@ func newRuncJailer(ctx context.Context, logger *logrus.Entry, vmID string, cfg r
 	}
 
 	spec := specs.Spec{}
-	var configBytes []byte
 	configBytes, err := ioutil.ReadFile(cfg.RuncConfigPath)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to read %s", cfg.RuncConfigPath)
@@ -173,13 +176,6 @@ func (j *runcJailer) BuildJailedRootHandler(cfg *config.Config, machineConfig *f
 				return errors.Wrapf(err, "failed to copy config from %v to %v", j.Config.RuncConfigPath, rootPathToConfig)
 			}
 
-			j.logger.Debug("Overwritting process args of config")
-			// we pass m.Cfg as opposed to machineConfig as we want the populated
-			// config defaults when calling NewMachine
-			if err := j.overwriteConfig(cfg, &m.Cfg, filepath.Base(m.Cfg.SocketPath), rootPathToConfig); err != nil {
-				return errors.Wrap(err, "failed to overwrite config.json")
-			}
-
 			// copy the firecracker binary
 			j.logger.WithField("root path", rootPath).Debug("copying firecracker binary")
 			newFirecrackerBinPath := filepath.Join(rootPath, firecrackerFileName)
@@ -216,7 +212,7 @@ func (j *runcJailer) BuildJailedRootHandler(cfg *config.Config, machineConfig *f
 					if firecracker.BoolValue(d.IsReadOnly) {
 						mode = 0400
 					}
-					if err := j.copyFileToJail(drivePath, newDrivePath, os.FileMode(mode)); err != nil {
+					if err := j.exposeFileToJail(drivePath, newDrivePath, os.FileMode(mode)); err != nil {
 						return err
 					}
 				}
@@ -236,6 +232,13 @@ func (j *runcJailer) BuildJailedRootHandler(cfg *config.Config, machineConfig *f
 				filename := filepath.Base(v.Path)
 				v.Path = filepath.Join("/", filename)
 				m.Cfg.VsockDevices[i] = v
+			}
+
+			j.logger.Debugf("Writing %q for runc", rootPathToConfig)
+			// we pass m.Cfg as opposed to machineConfig as we want the populated
+			// config defaults when calling NewMachine
+			if err := j.overwriteConfig(cfg, &m.Cfg, filepath.Base(m.Cfg.SocketPath), rootPathToConfig); err != nil {
+				return errors.Wrap(err, "failed to overwrite config.json")
 			}
 
 			j.logger.Info("Successfully ran jailer handler")
@@ -324,7 +327,7 @@ func (j *runcJailer) ExposeFileToJail(srcPath string) error {
 		}
 
 		dst := filepath.Join(parentDir, filepath.Base(srcPath))
-		if err := j.copyFileToJail(srcPath, dst, os.FileMode(stat.Mode)); err != nil {
+		if err := j.exposeFileToJail(srcPath, dst, os.FileMode(stat.Mode)); err != nil {
 			return err
 		}
 
@@ -335,7 +338,15 @@ func (j *runcJailer) ExposeFileToJail(srcPath string) error {
 	return nil
 }
 
-// copyFileToJail will copy a file from src to dst, and chown the new file to the jail user.
+// exposeFileToJail will make the file accessible from the jail.
+func (j *runcJailer) exposeFileToJail(src, dst string, mode os.FileMode) error {
+	if j.Config.DriveExposePolicy == proto.DriveExposePolicy_BIND {
+		return j.bindMountFileToJail(src, dst, mode)
+	}
+	return j.copyFileToJail(src, dst, mode)
+}
+
+// copyFileToJail copies a file from src to dst, and chown the new file to the jail user.
 func (j *runcJailer) copyFileToJail(src, dst string, mode os.FileMode) error {
 	if err := copyFile(src, dst, mode); err != nil {
 		return err
@@ -343,6 +354,30 @@ func (j *runcJailer) copyFileToJail(src, dst string, mode os.FileMode) error {
 	if err := os.Chown(dst, int(j.Config.UID), int(j.Config.GID)); err != nil {
 		return err
 	}
+	return nil
+}
+
+// bindMountFileToJail mounts a file from src to dst, and chown the new file to
+// the jail user. Note that actual mount is not happening until runc is invoked.
+func (j *runcJailer) bindMountFileToJail(src, dst string, _ os.FileMode) error {
+	f, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	rel, err := filepath.Rel(j.RootPath(), dst)
+	if err != nil {
+		return err
+	}
+
+	j.configSpec.Mounts = append(j.configSpec.Mounts, specs.Mount{
+		Destination: "/" + rel,
+		Source:      src,
+		Type:        "none",
+		Options:     []string{"bind"},
+	})
+
 	return nil
 }
 

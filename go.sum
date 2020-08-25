@@ -30,8 +30,8 @@ github.com/containerd/cgroups v0.0.0-20181105182409-82cb49fc1779 h1:j1IsLW6/hNZP
 github.com/containerd/cgroups v0.0.0-20181105182409-82cb49fc1779/go.mod h1:X9rLEHIqSf/wfK8NsPqxJmeZgW4pcfzdXITDrUSJ6uI=
 github.com/containerd/console v0.0.0-20191219165238-8375c3424e4d h1:VuiIRfgJ2M3vYEU0F6E5lg3+V0l9YpbGQr3jpZor5fo=
 github.com/containerd/console v0.0.0-20191219165238-8375c3424e4d/go.mod h1:8Pf4gM6VEbTNRIT26AyyU7hxdQU3MvAvxVI0sc00XBE=
-github.com/containerd/containerd v1.3.5-0.20200521195814-e655edce10c9 h1:IN459mykxw2bLTRVXUZ7VV+tnrjmeF3wf5awZvrFz14=
-github.com/containerd/containerd v1.3.5-0.20200521195814-e655edce10c9/go.mod h1:bC6axHOhabU15QhwfG7w5PipXdVtMXFTttgp+kVtyUA=
+github.com/containerd/containerd v1.3.8-0.20200824223617-f99bb2cc4483 h1:MP+VxQ5PX5mTeoAFwsOd2JmGU2KIJH0ZK9bCLga0ks0=
+github.com/containerd/containerd v1.3.8-0.20200824223617-f99bb2cc4483/go.mod h1:bC6axHOhabU15QhwfG7w5PipXdVtMXFTttgp+kVtyUA=
 github.com/containerd/continuity v0.0.0-20181027224239-bea7585dbfac h1:PThQaO4yCvJzJBUW1XoFQxLotWRhvX2fgljJX8yrhFI=
 github.com/containerd/continuity v0.0.0-20181027224239-bea7585dbfac/go.mod h1:GL3xCUCBDV3CZiTSEKksMWbLE66hEyuu9qyDOOqM47Y=
 github.com/containerd/fifo v0.0.0-20191213151349-ff969a566b00 h1:lsjC5ENBl+Zgf38+B0ymougXFp0BaubeIVETltYZTQw=

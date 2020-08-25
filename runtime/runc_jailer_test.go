@@ -21,6 +21,8 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/firecracker-microvm/firecracker-containerd/proto"
+
 	"github.com/firecracker-microvm/firecracker-go-sdk"
 	models "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 	"github.com/sirupsen/logrus"
@@ -61,7 +63,7 @@ func TestBuildJailedRootHandler_Isolated(t *testing.T) {
 		GID:            456,
 	}
 	vmID := "foo"
-	jailer, err := newRuncJailer(context.Background(), l, vmID, runcConfig)
+	jailer, err := newRuncJailer(context.Background(), l, vmID, runcConfig, []*proto.FirecrackerDriveMount{})
 	require.NoError(t, err, "failed to create runc jailer")
 
 	cfg := config.Config{
@@ -131,4 +133,41 @@ func TestMkdirAllWithPermissions_Isolated(t *testing.T) {
 	assert.Equal(t, newMode, newlyCreatedPathStat.Mode().Perm())
 	assert.Equal(t, newuid, newlyCreatedPathStat.Sys().(*syscall.Stat_t).Uid)
 	assert.Equal(t, newgid, newlyCreatedPathStat.Sys().(*syscall.Stat_t).Gid)
+}
+
+func TestBindMountToJail_Isolated(t *testing.T) {
+	// The user must be root to call chown.
+	internal.RequiresIsolation(t)
+
+	dir, err := ioutil.TempDir("", t.Name())
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	f, err := os.Create(filepath.Join(dir, "src1"))
+	require.NoError(t, err)
+	defer f.Close()
+
+	j := &runcJailer{
+		started: false,
+		Config:  runcJailerConfig{OCIBundlePath: dir},
+	}
+
+	// Create the mount point. The mount point will be used by runc later.
+	err = j.bindMountFileToJail(
+		filepath.Join(dir, "src1"),
+		filepath.Join(dir, "dst1"),
+	)
+	require.NoError(t, err)
+
+	_, err = os.Stat(filepath.Join(dir, "dst1"))
+	require.NoError(t, err)
+
+	// Once runc has been started, it doesn't create a mount point and
+	// let the caller know the method cannot be used.
+	j.started = true
+	err = j.bindMountFileToJail(
+		filepath.Join(dir, "src2"),
+		filepath.Join(dir, "not-found"),
+	)
+	require.Error(t, err)
 }

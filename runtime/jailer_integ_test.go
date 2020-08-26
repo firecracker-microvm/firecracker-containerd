@@ -25,10 +25,12 @@ import (
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/oci"
 	"github.com/containerd/containerd/pkg/ttrpcutil"
+	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	_ "github.com/firecracker-microvm/firecracker-containerd/firecracker-control"
+	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	fccontrol "github.com/firecracker-microvm/firecracker-containerd/proto/service/fccontrol/ttrpc"
 	"github.com/firecracker-microvm/firecracker-containerd/runtime/cpuset"
@@ -55,6 +57,10 @@ func TestJailer_Isolated(t *testing.T) {
 	})
 }
 
+func fsSafeTestName(tb testing.TB) string {
+	return strings.Replace(tb.Name(), "/", "-", -1)
+}
+
 func testJailer(t *testing.T, jailerConfig *proto.JailerConfig) {
 	require := require.New(t)
 
@@ -72,19 +78,28 @@ func testJailer(t *testing.T, jailerConfig *proto.JailerConfig) {
 
 	vmID := testNameToVMID(t.Name())
 
+	additionalDrive := internal.CreateFSImg(ctx, t, "ext4", internal.FSImgFile{
+		Subpath:  "dir/hello",
+		Contents: "additional drive\n",
+	})
+
 	request := proto.CreateVMRequest{
 		VMID:         vmID,
 		JailerConfig: jailerConfig,
+		DriveMounts: []*proto.FirecrackerDriveMount{
+			{HostPath: additionalDrive, VMPath: "/mnt", FilesystemType: "ext4"},
+		},
 	}
 
 	// If the drive files are bind-mounted, the files must be readable from the jailer's user.
 	if jailerConfig != nil && jailerConfig.DriveExposePolicy == proto.DriveExposePolicy_BIND {
-		f, err := ioutil.TempFile("", strings.Replace(t.Name(), "/", "-", -1))
+		f, err := ioutil.TempFile("", fsSafeTestName(t)+"_rootfs")
 		require.NoError(err)
 		defer f.Close()
 
 		dst := f.Name()
 
+		// Copy the root drive before chown, since the file is used by other tests.
 		err = copyFile(defaultRuntimeConfig.RootDrive, dst, 0400)
 		require.NoErrorf(err, "failed to copy a rootfs as %q", dst)
 
@@ -92,6 +107,10 @@ func testJailer(t *testing.T, jailerConfig *proto.JailerConfig) {
 		require.NoError(err, "failed to chown %q", dst)
 
 		request.RootDrive = &proto.FirecrackerRootDrive{HostPath: dst}
+
+		// The additional drive file is only used by this test.
+		err = os.Chown(additionalDrive, int(jailerConfig.UID), int(jailerConfig.GID))
+		require.NoError(err, "failed to chown %q", additionalDrive)
 	}
 
 	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
@@ -102,12 +121,22 @@ func testJailer(t *testing.T, jailerConfig *proto.JailerConfig) {
 		"container",
 		containerd.WithSnapshotter(defaultSnapshotterName),
 		containerd.WithNewSnapshot("snapshot", image),
-		containerd.WithNewSpec(oci.WithProcessArgs("/bin/echo", "-n", "hello"), firecrackeroci.WithVMID(vmID)),
+		containerd.WithNewSpec(
+			oci.WithProcessArgs(
+				"/bin/sh", "-c", "echo hello && cat /mnt/in-container/dir/hello",
+			),
+			firecrackeroci.WithVMID(vmID),
+			oci.WithMounts([]specs.Mount{{
+				Source:      "/mnt",
+				Destination: "/mnt/in-container",
+				Options:     []string{"bind"},
+			}}),
+		),
 	)
 	require.NoError(err)
 
 	stdout := startAndWaitTask(ctx, t, c)
-	require.Equal("hello", stdout)
+	require.Equal("hello\nadditional drive\n", stdout)
 
 	stat, err := os.Stat(filepath.Join(shimBaseDir(), "default", vmID))
 	require.NoError(err)

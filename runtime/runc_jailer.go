@@ -51,6 +51,7 @@ type runcJailer struct {
 	vmID       string
 	configSpec specs.Spec
 	runcClient runc.Runc
+	started    bool
 }
 
 const firecrackerFileName = "firecracker"
@@ -69,7 +70,10 @@ type runcJailerConfig struct {
 	DriveExposePolicy proto.DriveExposePolicy
 }
 
-func newRuncJailer(ctx context.Context, logger *logrus.Entry, vmID string, cfg runcJailerConfig) (*runcJailer, error) {
+func newRuncJailer(
+	ctx context.Context, logger *logrus.Entry, vmID string, cfg runcJailerConfig,
+	mounts []*proto.FirecrackerDriveMount,
+) (*runcJailer, error) {
 	l := logger.WithField("ociBundlePath", cfg.OCIBundlePath).
 		WithField("runcBinaryPath", cfg.RuncBinPath)
 
@@ -102,7 +106,24 @@ func newRuncJailer(ctx context.Context, logger *logrus.Entry, vmID string, cfg r
 		return nil, errors.Wrapf(err, "%s failed to mkdirAndChown", rootPath)
 	}
 
+	if j.Config.DriveExposePolicy == proto.DriveExposePolicy_BIND {
+		err := j.prepareBindMounts(mounts)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return j, nil
+}
+
+func (j *runcJailer) prepareBindMounts(mounts []*proto.FirecrackerDriveMount) error {
+	for _, m := range mounts {
+		err := j.bindMountFileToJail(m.HostPath, filepath.Join(j.RootPath(), m.HostPath))
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // JailPath returns the base directory from where the jail binary will be ran
@@ -242,6 +263,8 @@ func (j *runcJailer) BuildJailedRootHandler(cfg *config.Config, machineConfig *f
 			}
 
 			j.logger.Info("Successfully ran jailer handler")
+			j.started = true
+
 			return nil
 		},
 	}
@@ -341,7 +364,7 @@ func (j *runcJailer) ExposeFileToJail(srcPath string) error {
 // exposeFileToJail will make the file accessible from the jail.
 func (j *runcJailer) exposeFileToJail(src, dst string, mode os.FileMode) error {
 	if j.Config.DriveExposePolicy == proto.DriveExposePolicy_BIND {
-		return j.bindMountFileToJail(src, dst, mode)
+		return j.bindMountFileToJail(src, dst)
 	}
 	return j.copyFileToJail(src, dst, mode)
 }
@@ -359,7 +382,28 @@ func (j *runcJailer) copyFileToJail(src, dst string, mode os.FileMode) error {
 
 // bindMountFileToJail mounts a file from src to dst, and chown the new file to
 // the jail user. Note that actual mount is not happening until runc is invoked.
-func (j *runcJailer) bindMountFileToJail(src, dst string, _ os.FileMode) error {
+func (j *runcJailer) bindMountFileToJail(src, dst string) error {
+	// Once runc has started, the jailer cannot mount any new files.
+	if j.started {
+		_, err := os.Stat(dst)
+		if err != nil {
+			return errors.Wrapf(err, "%q must be created by runc", dst)
+		}
+		return nil
+	}
+
+	// The directory must be traversable from runc (running as root) and Firecracker (running as j.Config.UID).
+	// These two users don't have a shared group. Hence the permission must be 701, not 700.
+	err := os.MkdirAll(filepath.Dir(dst), 0701)
+	if err != nil {
+		return err
+	}
+
+	err = os.Chown(filepath.Dir(dst), int(j.Config.UID), int(j.Config.GID))
+	if err != nil {
+		return err
+	}
+
 	f, err := os.Create(dst)
 	if err != nil {
 		return err

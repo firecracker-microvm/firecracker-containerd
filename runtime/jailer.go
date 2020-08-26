@@ -105,5 +105,5 @@ func newJailer(
 		CgroupPath:        request.JailerConfig.CgroupPath,
 		DriveExposePolicy: request.JailerConfig.DriveExposePolicy,
 	}
-	return newRuncJailer(ctx, l, service.vmID, config)
+	return newRuncJailer(ctx, l, service.vmID, config, request.DriveMounts)
 }

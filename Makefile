@@ -302,7 +302,8 @@ $(FIRECRACKER_BIN) $(JAILER_BIN): $(FIRECRACKER_DIR)/Cargo.toml tools/firecracke
 		-e HOME=/tmp \
 		--workdir /src \
 		localhost/$(FIRECRACKER_BUILDER_NAME):$(DOCKER_IMAGE_TAG) \
-		cargo build --release --target $(FIRECRACKER_TARGET)
+		cargo build --release --target $(FIRECRACKER_TARGET) \
+		-p firecracker -p jailer
 
 .PHONY: firecracker-clean
 firecracker-clean:

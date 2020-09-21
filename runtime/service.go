@@ -811,24 +811,6 @@ func (s *service) LoadSnapshot(ctx context.Context, req *proto.LoadSnapshotReque
 		return nil, err
 	}
 
-	// Workaround for https://github.com/firecracker-microvm/firecracker/issues/1974
-	patchDriveReq, err := formPatchDriveReq("MN2HE43UOVRDA", s.taskDrivePathOnHost)
-	if err != nil {
-		s.logger.WithError(err).Error("Failed to create patch drive request")
-		return nil, err
-	}
-
-	resp, err = s.httpControlClient.Do(patchDriveReq)
-	if err != nil {
-		s.logger.WithError(err).Error("Failed to send patch drive request")
-		return nil, err
-	}
-	if !strings.Contains(resp.Status, "204") {
-		s.logger.WithError(err).Error("Failed to patch drive")
-		s.logger.WithError(err).Errorf("Status of request: %s", resp.Status)
-		return nil, err
-	}
-
 	return &empty.Empty{}, nil
 }
 
@@ -1644,31 +1626,6 @@ func formCreateSnapReq(snapshotPath, memPath string) (*http.Request, error) {
 		logrus.WithError(err).Error("Failed to create new HTTP request in formCreateSnapReq")
 		return nil, err
 	}
-	req.Header.Add("accept", "application/json")
-	req.Header.Add("Content-Type", "application/json")
-
-	return req, nil
-}
-
-func formPatchDriveReq(driveID, pathOnHost string) (*http.Request, error) {
-	var req *http.Request
-
-	data := map[string]string{
-		"drive_id":     driveID,
-		"path_on_host": pathOnHost,
-	}
-	json, err := json.Marshal(data)
-	if err != nil {
-		logrus.WithError(err).Error("Failed to marshal json data")
-		return nil, err
-	}
-
-	req, err = http.NewRequest("PATCH", fmt.Sprintf("http+unix://firecracker/drives/%s", driveID), bytes.NewBuffer(json))
-	if err != nil {
-		logrus.WithError(err).Error("Failed to create new HTTP request in formPauseReq")
-		return nil, err
-	}
-
 	req.Header.Add("accept", "application/json")
 	req.Header.Add("Content-Type", "application/json")
 

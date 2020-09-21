@@ -272,7 +272,7 @@ func (s *local) waitForShimToExit(ctx context.Context, vmID string, killShim boo
 	if killShim {
 		s.logger.Debug("Killing shim")
 
-		if err := syscall.Kill(int(pid), 9); err != nil {
+		if err := syscall.Kill(int(pid), syscall.SIGKILL); err != nil {
 			s.logger.WithError(err).Error("Failed to kill shim process")
 			return err
 		}
@@ -442,10 +442,6 @@ func (s *local) newShim(ns, vmID, containerdAddress string, shimSocket *net.Unix
 		if err := fcSocketFile.Close(); err != nil {
 			logger.WithError(err).Errorf("failed to close %q", fcSocketFile.Name())
 		}
-
-		if err := os.RemoveAll(shimDir.RootPath()); err != nil {
-			logger.WithError(err).Errorf("failed to remove %q", shimDir.RootPath())
-		}
 	}()
 
 	err = setShimOOMScore(cmd.Process.Pid)
@@ -497,23 +493,16 @@ func (s *local) loadShim(ctx context.Context, ns, vmID, containerdAddress string
 		return nil, err
 	}
 
-	// If we're here, there is no pre-existing shim for this VMID, so we spawn a new one
 	defer shimSocket.Close()
-	if err := os.Mkdir(s.config.ShimBaseDir, 0700); err != nil && !os.IsExist(err) {
-		s.logger.WithError(err).Error()
-		return nil, errors.Wrapf(err, "failed to make shim base directory: %s", s.config.ShimBaseDir)
+
+	// If we're here, there is no pre-existing shim for this VMID, so we spawn a new one
+	if _, err := os.Stat(s.config.ShimBaseDir); os.IsNotExist(err) {
+		return nil, errors.Wrapf(err, "shim base dir does not exist: %s", s.config.ShimBaseDir)
 	}
 
 	shimDir, err := vm.ShimDir(s.config.ShimBaseDir, ns, vmID)
 	if err != nil {
 		err = errors.Wrapf(err, "failed to build shim path")
-		s.logger.WithError(err).Error()
-		return nil, err
-	}
-
-	err = shimDir.Mkdir()
-	if err != nil {
-		err = errors.Wrapf(err, "failed to create VM dir %q", shimDir.RootPath())
 		s.logger.WithError(err).Error()
 		return nil, err
 	}

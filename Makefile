@@ -278,8 +278,8 @@ demo-network: install-cni-bins $(FCNET_CONFIG)
 # Firecracker submodule
 ##########################
 .PHONY: firecracker
-firecracker: $(FIRECRACKER_BIN) $(JAILER_BIN)
-
+firecracker:
+	_submodules/firecracker/tools/devtool build --release
 .PHONY: install-firecracker
 install-firecracker: firecracker
 	install -D -o root -g root -m755 -t $(INSTALLROOT)/bin $(FIRECRACKER_BIN)

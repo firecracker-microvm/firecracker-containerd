@@ -96,3 +96,28 @@ func (s *service) GetVMMetadata(ctx context.Context, req *proto.GetVMMetadataReq
 	log.G(ctx).Debug("Getting vm metadata")
 	return s.local.GetVMMetadata(ctx, req)
 }
+
+func (s *service) PauseVM(ctx context.Context, req *proto.PauseVMRequest) (*empty.Empty, error) {
+	log.G(ctx).Debugf("pause VM request: %+v", req)
+	return s.local.PauseVM(ctx, req)
+}
+
+func (s *service) ResumeVM(ctx context.Context, req *proto.ResumeVMRequest) (*empty.Empty, error) {
+	log.G(ctx).Debugf("resume VM request: %+v", req)
+	return s.local.ResumeVM(ctx, req)
+}
+
+func (s *service) LoadSnapshot(ctx context.Context, req *proto.LoadSnapshotRequest) (*empty.Empty, error) {
+	log.G(ctx).Debugf("load snapshot request: %+v", req)
+	return s.local.LoadSnapshot(ctx, req)
+}
+
+func (s *service) CreateSnapshot(ctx context.Context, req *proto.CreateSnapshotRequest) (*empty.Empty, error) {
+	log.G(ctx).Debugf("create snapshot request: %+v", req)
+	return s.local.CreateSnapshot(ctx, req)
+}
+
+func (s *service) Offload(ctx context.Context, req *proto.OffloadRequest) (*empty.Empty, error) {
+	log.G(ctx).Debugf("offload request: %+v", req)
+	return s.local.Offload(ctx, req)
+}

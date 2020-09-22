@@ -1,5 +1,7 @@
 module github.com/firecracker-microvm/firecracker-containerd
 
+replace github.com/firecracker-microvm/firecracker-go-sdk => github.com/ustiugov/firecracker-go-sdk v0.20.1-0.20200625102438-8edf287b0123
+
 require (
 	github.com/Microsoft/go-winio v0.4.14 // indirect
 	github.com/StackExchange/wmi v0.0.0-20181212234831-e0a55b97c705 // indirect
@@ -17,7 +19,8 @@ require (
 	github.com/docker/distribution v2.7.1+incompatible // indirect
 	github.com/docker/go-events v0.0.0-20170721190031-9461782956ad // indirect
 	github.com/docker/go-metrics v0.0.0-20181218153428-b84716841b82 // indirect
-	github.com/firecracker-microvm/firecracker-go-sdk v0.21.1-0.20200811001213-ee1e7c41b7bd
+	github.com/docker/go-units v0.4.0 // indirect
+	github.com/firecracker-microvm/firecracker-go-sdk v0.0.0-00010101000000-000000000000
 	github.com/go-ole/go-ole v1.2.4 // indirect
 	github.com/godbus/dbus v0.0.0-20181025153459-66d97aec3384 // indirect
 	github.com/gofrs/uuid v3.3.0+incompatible
@@ -40,11 +43,13 @@ require (
 	github.com/sirupsen/logrus v1.6.0
 	github.com/stretchr/testify v1.6.1
 	github.com/syndtr/gocapability v0.0.0-20180916011248-d98352740cb2 // indirect
+	github.com/tv42/httpunix v0.0.0-20191220191345-2ba4b9c3382c
 	github.com/urfave/cli v1.20.0 // indirect
 	github.com/vishvananda/netlink v1.1.0
 	go.etcd.io/bbolt v1.3.1-etcd.8 // indirect
 	golang.org/x/sync v0.0.0-20190423024810-112230192c58
 	golang.org/x/sys v0.0.0-20200323222414-85ca7c5b95cd
+	golang.org/x/tools v0.0.0-20200710042808-f1c4188a97a1 // indirect
 	google.golang.org/genproto v0.0.0-20181109154231-b5d43981345b // indirect
 	google.golang.org/grpc v1.21.0
 	gotest.tools v2.2.0+incompatible // indirect

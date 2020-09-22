@@ -90,6 +90,23 @@ enum DriveExposePolicy {
     BIND = 1;
 }
 
+message CreateSnapshotRequest {
+    string VMID = 1;
+    string SnapshotFilePath = 2;
+    string MemFilePath = 3;
+}
+
+message LoadSnapshotRequest {
+    string VMID = 1;
+    string SnapshotFilePath = 2;
+    string MemFilePath = 3;
+}
+
+message OffloadRequest {
+    string VMID = 1;
+}
+
+
 message JailerConfig {
     string NetNS = 1;
     // List of the physical numbers of the CPUs on which processes in that

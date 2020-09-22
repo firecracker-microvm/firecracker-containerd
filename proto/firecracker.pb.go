@@ -569,6 +569,228 @@ func (m *GetVMMetadataResponse) GetMetadata() string {
 	return ""
 }
 
+type PauseVMRequest struct {
+	VMID                 string   `protobuf:"bytes,1,opt,name=VMID,json=vMID,proto3" json:"VMID,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *PauseVMRequest) Reset()         { *m = PauseVMRequest{} }
+func (m *PauseVMRequest) String() string { return proto.CompactTextString(m) }
+func (*PauseVMRequest) ProtoMessage()    {}
+func (*PauseVMRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_a73317e9fb8da571, []int{9}
+}
+func (m *PauseVMRequest) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_PauseVMRequest.Unmarshal(m, b)
+}
+func (m *PauseVMRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_PauseVMRequest.Marshal(b, m, deterministic)
+}
+func (m *PauseVMRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PauseVMRequest.Merge(m, src)
+}
+func (m *PauseVMRequest) XXX_Size() int {
+	return xxx_messageInfo_PauseVMRequest.Size(m)
+}
+func (m *PauseVMRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_PauseVMRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_PauseVMRequest proto.InternalMessageInfo
+
+func (m *PauseVMRequest) GetVMID() string {
+	if m != nil {
+		return m.VMID
+	}
+	return ""
+}
+
+type ResumeVMRequest struct {
+	VMID                 string   `protobuf:"bytes,1,opt,name=VMID,json=vMID,proto3" json:"VMID,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *ResumeVMRequest) Reset()         { *m = ResumeVMRequest{} }
+func (m *ResumeVMRequest) String() string { return proto.CompactTextString(m) }
+func (*ResumeVMRequest) ProtoMessage()    {}
+func (*ResumeVMRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_a73317e9fb8da571, []int{10}
+}
+func (m *ResumeVMRequest) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_ResumeVMRequest.Unmarshal(m, b)
+}
+func (m *ResumeVMRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_ResumeVMRequest.Marshal(b, m, deterministic)
+}
+func (m *ResumeVMRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ResumeVMRequest.Merge(m, src)
+}
+func (m *ResumeVMRequest) XXX_Size() int {
+	return xxx_messageInfo_ResumeVMRequest.Size(m)
+}
+func (m *ResumeVMRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_ResumeVMRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ResumeVMRequest proto.InternalMessageInfo
+
+func (m *ResumeVMRequest) GetVMID() string {
+	if m != nil {
+		return m.VMID
+	}
+	return ""
+}
+
+type CreateSnapshotRequest struct {
+	VMID                 string   `protobuf:"bytes,1,opt,name=VMID,json=vMID,proto3" json:"VMID,omitempty"`
+	SnapshotFilePath     string   `protobuf:"bytes,2,opt,name=SnapshotFilePath,json=snapshotFilePath,proto3" json:"SnapshotFilePath,omitempty"`
+	MemFilePath          string   `protobuf:"bytes,3,opt,name=MemFilePath,json=memFilePath,proto3" json:"MemFilePath,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *CreateSnapshotRequest) Reset()         { *m = CreateSnapshotRequest{} }
+func (m *CreateSnapshotRequest) String() string { return proto.CompactTextString(m) }
+func (*CreateSnapshotRequest) ProtoMessage()    {}
+func (*CreateSnapshotRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_a73317e9fb8da571, []int{11}
+}
+func (m *CreateSnapshotRequest) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_CreateSnapshotRequest.Unmarshal(m, b)
+}
+func (m *CreateSnapshotRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_CreateSnapshotRequest.Marshal(b, m, deterministic)
+}
+func (m *CreateSnapshotRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CreateSnapshotRequest.Merge(m, src)
+}
+func (m *CreateSnapshotRequest) XXX_Size() int {
+	return xxx_messageInfo_CreateSnapshotRequest.Size(m)
+}
+func (m *CreateSnapshotRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_CreateSnapshotRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_CreateSnapshotRequest proto.InternalMessageInfo
+
+func (m *CreateSnapshotRequest) GetVMID() string {
+	if m != nil {
+		return m.VMID
+	}
+	return ""
+}
+
+func (m *CreateSnapshotRequest) GetSnapshotFilePath() string {
+	if m != nil {
+		return m.SnapshotFilePath
+	}
+	return ""
+}
+
+func (m *CreateSnapshotRequest) GetMemFilePath() string {
+	if m != nil {
+		return m.MemFilePath
+	}
+	return ""
+}
+
+type LoadSnapshotRequest struct {
+	VMID                 string   `protobuf:"bytes,1,opt,name=VMID,json=vMID,proto3" json:"VMID,omitempty"`
+	SnapshotFilePath     string   `protobuf:"bytes,2,opt,name=SnapshotFilePath,json=snapshotFilePath,proto3" json:"SnapshotFilePath,omitempty"`
+	MemFilePath          string   `protobuf:"bytes,3,opt,name=MemFilePath,json=memFilePath,proto3" json:"MemFilePath,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *LoadSnapshotRequest) Reset()         { *m = LoadSnapshotRequest{} }
+func (m *LoadSnapshotRequest) String() string { return proto.CompactTextString(m) }
+func (*LoadSnapshotRequest) ProtoMessage()    {}
+func (*LoadSnapshotRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_a73317e9fb8da571, []int{12}
+}
+func (m *LoadSnapshotRequest) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_LoadSnapshotRequest.Unmarshal(m, b)
+}
+func (m *LoadSnapshotRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_LoadSnapshotRequest.Marshal(b, m, deterministic)
+}
+func (m *LoadSnapshotRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_LoadSnapshotRequest.Merge(m, src)
+}
+func (m *LoadSnapshotRequest) XXX_Size() int {
+	return xxx_messageInfo_LoadSnapshotRequest.Size(m)
+}
+func (m *LoadSnapshotRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_LoadSnapshotRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_LoadSnapshotRequest proto.InternalMessageInfo
+
+func (m *LoadSnapshotRequest) GetVMID() string {
+	if m != nil {
+		return m.VMID
+	}
+	return ""
+}
+
+func (m *LoadSnapshotRequest) GetSnapshotFilePath() string {
+	if m != nil {
+		return m.SnapshotFilePath
+	}
+	return ""
+}
+
+func (m *LoadSnapshotRequest) GetMemFilePath() string {
+	if m != nil {
+		return m.MemFilePath
+	}
+	return ""
+}
+
+type OffloadRequest struct {
+	VMID                 string   `protobuf:"bytes,1,opt,name=VMID,json=vMID,proto3" json:"VMID,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *OffloadRequest) Reset()         { *m = OffloadRequest{} }
+func (m *OffloadRequest) String() string { return proto.CompactTextString(m) }
+func (*OffloadRequest) ProtoMessage()    {}
+func (*OffloadRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_a73317e9fb8da571, []int{13}
+}
+func (m *OffloadRequest) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_OffloadRequest.Unmarshal(m, b)
+}
+func (m *OffloadRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_OffloadRequest.Marshal(b, m, deterministic)
+}
+func (m *OffloadRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_OffloadRequest.Merge(m, src)
+}
+func (m *OffloadRequest) XXX_Size() int {
+	return xxx_messageInfo_OffloadRequest.Size(m)
+}
+func (m *OffloadRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_OffloadRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_OffloadRequest proto.InternalMessageInfo
+
+func (m *OffloadRequest) GetVMID() string {
+	if m != nil {
+		return m.VMID
+	}
+	return ""
+}
+
 type JailerConfig struct {
 	NetNS string `protobuf:"bytes,1,opt,name=NetNS,json=netNS,proto3" json:"NetNS,omitempty"`
 	// List of the physical numbers of the CPUs on which processes in that
@@ -609,7 +831,7 @@ func (m *JailerConfig) Reset()         { *m = JailerConfig{} }
 func (m *JailerConfig) String() string { return proto.CompactTextString(m) }
 func (*JailerConfig) ProtoMessage()    {}
 func (*JailerConfig) Descriptor() ([]byte, []int) {
-	return fileDescriptor_a73317e9fb8da571, []int{9}
+	return fileDescriptor_a73317e9fb8da571, []int{14}
 }
 func (m *JailerConfig) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_JailerConfig.Unmarshal(m, b)
@@ -689,6 +911,11 @@ func init() {
 	proto.RegisterType((*UpdateVMMetadataRequest)(nil), "UpdateVMMetadataRequest")
 	proto.RegisterType((*GetVMMetadataRequest)(nil), "GetVMMetadataRequest")
 	proto.RegisterType((*GetVMMetadataResponse)(nil), "GetVMMetadataResponse")
+	proto.RegisterType((*PauseVMRequest)(nil), "PauseVMRequest")
+	proto.RegisterType((*ResumeVMRequest)(nil), "ResumeVMRequest")
+	proto.RegisterType((*CreateSnapshotRequest)(nil), "CreateSnapshotRequest")
+	proto.RegisterType((*LoadSnapshotRequest)(nil), "LoadSnapshotRequest")
+	proto.RegisterType((*OffloadRequest)(nil), "OffloadRequest")
 	proto.RegisterType((*JailerConfig)(nil), "JailerConfig")
 }
 

@@ -83,6 +83,19 @@ func (d Dir) OpenLogFifo(requestCtx context.Context) (io.ReadWriteCloser, error)
 	return fifo.OpenFifo(requestCtx, d.LogFifoPath(), unix.O_WRONLY|unix.O_NONBLOCK, 0200)
 }
 
+// LogStartPath returns the path to the file for storing
+// firecracker logs after the microVM is started and until
+// it is Offloaded
+func (d Dir) LogStartPath() string {
+	return filepath.Join(d.RootPath(), internal.LogPathNameStart)
+}
+
+// LogLoadPath returns the path to the file for storing
+// firecracker logs after the microVM is loaded from a snapshot
+func (d Dir) LogLoadPath() string {
+	return filepath.Join(d.RootPath(), internal.LogPathNameLoad)
+}
+
 // FirecrackerSockPath returns the path to the unix socket at which the firecracker VMM
 // services its API
 func (d Dir) FirecrackerSockPath() string {

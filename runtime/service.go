@@ -152,9 +152,8 @@ type service struct {
 	vsockPortMu      sync.Mutex
 
 	// httpControlClient is to send pause/resume/snapshot commands to the microVM
-	httpControlClient   *http.Client
-	firecrackerPid      int
-	taskDrivePathOnHost string
+	httpControlClient *http.Client
+	firecrackerPid    int
 }
 
 func shimOpts(shimCtx context.Context) (*shim.Opts, error) {
@@ -838,7 +837,7 @@ func (s *service) CreateSnapshot(ctx context.Context, req *proto.CreateSnapshotR
 // Offload Shuts down a VM and deletes the corresponding firecracker socket
 // and vsock. All of the other resources will persist
 func (s *service) Offload(ctx context.Context, req *proto.OffloadRequest) (*empty.Empty, error) {
-	if err := syscall.Kill(s.firecrackerPid, 9); err != nil {
+	if err := syscall.Kill(s.firecrackerPid, syscall.SIGKILL); err != nil {
 		s.logger.WithError(err).Error("Failed to kill firecracker process")
 		return nil, err
 	}
@@ -1060,8 +1059,6 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 		return nil, errors.Errorf("can only support rootfs with exactly one mount: %+v", request.Rootfs)
 	}
 	rootfsMnt := request.Rootfs[0]
-
-	s.taskDrivePathOnHost = rootfsMnt.Source
 
 	err = s.containerStubHandler.Reserve(requestCtx, request.ID,
 		rootfsMnt.Source, vmBundleDir.RootfsPath(), "ext4", nil, s.driveMountClient, s.machine)

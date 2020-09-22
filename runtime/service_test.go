@@ -260,7 +260,7 @@ func TestBuildVMConfiguration(t *testing.T) {
 			// TODO: FIX TEST WHEN LogPath is no longer hardcoded
 			//tc.expectedCfg.LogFifo = svc.shimDir.FirecrackerLogFifoPath()
 			//tc.expectedCfg.MetricsFifo = svc.shimDir.FirecrackerMetricsFifoPath()
-			tc.expectedCfg.LogPath = "/tmp/log__start.logs"
+			tc.expectedCfg.LogPath = svc.shimDir.LogStartPath()
 
 			drives := make([]models.Drive, tc.expectedStubDriveCount)
 			for i := 0; i < tc.expectedStubDriveCount; i++ {

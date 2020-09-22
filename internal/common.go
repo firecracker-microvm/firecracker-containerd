@@ -50,6 +50,12 @@ const (
 	// ShimLogFifoName is the name of the FIFO created by containerd for a shim to write its logs to
 	ShimLogFifoName = "log"
 
+	// LogPathNameStart is the name of the FIFO created by containerd for a shim to write its logs to
+	LogPathNameStart = "log_start"
+
+	// LogPathNameLoad is the name of the FIFO created by containerd for a shim to write its logs to
+	LogPathNameLoad = "log_load"
+
 	// OCIConfigName is the name of the OCI bundle's config field
 	OCIConfigName = "config.json"
 

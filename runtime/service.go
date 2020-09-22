@@ -875,13 +875,8 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 	}
 
 	// TODO: Remove hardcoding and make a parameter
-	logFilePath := fmt.Sprintf("/tmp/log_%s_start.logs", s.vmID)
-	if err := os.RemoveAll(logFilePath); err != nil {
-		s.logger.WithError(err).Errorf("Failed to delete %s", logFilePath)
-		return nil, err
-	}
-	if _, err := os.OpenFile(logFilePath, os.O_RDONLY|os.O_CREATE, 0600); err != nil {
-		s.logger.WithError(err).Errorf("Failed to create %s", logFilePath)
+	if _, err := os.OpenFile(s.shimDir.LogStartPath(), os.O_RDONLY|os.O_CREATE, 0600); err != nil {
+		s.logger.WithError(err).Errorf("Failed to create %s", s.shimDir.LogStartPath())
 		return nil, err
 	}
 
@@ -892,7 +887,7 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 			ID:   "agent_api",
 		}},
 		// Put LogPath insteadof LogFifo here to comply with the new Firecracker logging
-		LogPath:    logFilePath,
+		LogPath:    s.shimDir.LogStartPath(),
 		MachineCfg: machineConfigurationFromProto(s.config, req.MachineCfg),
 		LogLevel:   s.config.DebugHelper.GetFirecrackerLogLevel(),
 		VMID:       s.vmID,
@@ -1636,8 +1631,7 @@ func (s *service) startFirecrackerProcess() error {
 		return err
 	}
 
-	// TODO: Remove hardcoding and make a parameter
-	logFilePath := fmt.Sprintf("/tmp/log_%s_after.logs", s.vmID)
+	logFilePath := s.shimDir.LogLoadPath()
 	if err := os.RemoveAll(logFilePath); err != nil {
 		s.logger.WithError(err).Errorf("Failed to delete %s", logFilePath)
 		return err

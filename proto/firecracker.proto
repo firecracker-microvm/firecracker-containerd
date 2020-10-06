@@ -36,6 +36,9 @@ message CreateVMRequest {
     JailerConfig JailerConfig = 10;
 
     uint32 TimeoutSeconds = 11;
+
+    string LogFifoPath = 12;
+    string MetricsFifoPath = 13;
 }
 
 message CreateVMResponse {

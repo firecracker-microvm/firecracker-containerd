@@ -253,8 +253,8 @@ func TestBuildVMConfiguration(t *testing.T) {
 				Path: relVSockPath,
 				ID:   "agent_api",
 			}}
-			tc.expectedCfg.LogFifo = svc.shimDir.FirecrackerLogFifoPath()
-			tc.expectedCfg.MetricsFifo = svc.shimDir.FirecrackerMetricsFifoPath()
+			tc.expectedCfg.LogPath = svc.shimDir.FirecrackerLogFifoPath()
+			tc.expectedCfg.MetricsPath = svc.shimDir.FirecrackerMetricsFifoPath()
 
 			drives := make([]models.Drive, tc.expectedStubDriveCount)
 			for i := 0; i < tc.expectedStubDriveCount; i++ {

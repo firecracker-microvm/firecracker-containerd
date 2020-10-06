@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	// disable gosec check for math/rand. We just need a random starting
@@ -635,8 +636,8 @@ func (s *service) GetVMInfo(requestCtx context.Context, request *proto.GetVMInfo
 	return &proto.GetVMInfoResponse{
 		VMID:            s.vmID,
 		SocketPath:      s.shimDir.FirecrackerSockPath(),
-		LogFifoPath:     s.machineConfig.LogFifo,
-		MetricsFifoPath: s.machineConfig.MetricsFifo,
+		LogFifoPath:     s.machineConfig.LogPath,
+		MetricsFifoPath: s.machineConfig.MetricsPath,
 		CgroupPath:      cgroupPath,
 	}, nil
 }
@@ -736,12 +737,33 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 			Path: relVSockPath,
 			ID:   "agent_api",
 		}},
-		LogFifo:     s.shimDir.FirecrackerLogFifoPath(),
-		MetricsFifo: s.shimDir.FirecrackerMetricsFifoPath(),
-		MachineCfg:  machineConfigurationFromProto(s.config, req.MachineCfg),
-		LogLevel:    s.config.DebugHelper.GetFirecrackerLogLevel(),
-		VMID:        s.vmID,
+		MachineCfg: machineConfigurationFromProto(s.config, req.MachineCfg),
+		LogLevel:   s.config.DebugHelper.GetFirecrackerLogLevel(),
+		VMID:       s.vmID,
 	}
+
+	logPath := s.shimDir.FirecrackerLogFifoPath()
+	if req.LogFifoPath != "" {
+		logPath = req.LogFifoPath
+	}
+	err = syscall.Mkfifo(logPath, 0700)
+	if err != nil {
+		return nil, err
+	}
+
+	metricsPath := s.shimDir.FirecrackerMetricsFifoPath()
+	if req.MetricsFifoPath != "" {
+		metricsPath = req.MetricsFifoPath
+	}
+	err = syscall.Mkfifo(metricsPath, 0700)
+	if err != nil {
+		return nil, err
+	}
+
+	// The Config struct has LogFifo and MetricsFifo, but they will be deprecated since
+	// Firecracker doesn't have the corresponding fields anymore.
+	cfg.LogPath = logPath
+	cfg.MetricsPath = metricsPath
 
 	if req.JailerConfig != nil {
 		cfg.NetNS = req.JailerConfig.NetNS

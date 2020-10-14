@@ -24,7 +24,6 @@ import (
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/oci"
-	"github.com/containerd/containerd/pkg/ttrpcutil"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -32,7 +31,6 @@ import (
 	_ "github.com/firecracker-microvm/firecracker-containerd/firecracker-control"
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
-	fccontrol "github.com/firecracker-microvm/firecracker-containerd/proto/service/fccontrol/ttrpc"
 	"github.com/firecracker-microvm/firecracker-containerd/runtime/cpuset"
 	"github.com/firecracker-microvm/firecracker-containerd/runtime/firecrackeroci"
 )
@@ -73,7 +71,7 @@ func testJailer(t *testing.T, jailerConfig *proto.JailerConfig) {
 	image, err := alpineImage(ctx, client, defaultSnapshotterName)
 	require.NoError(err, "failed to get alpine image")
 
-	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
+	fcClient, err := newFCClient(containerdSockPath)
 	require.NoError(err, "failed to create ttrpc client")
 
 	vmID := testNameToVMID(t.Name())
@@ -113,7 +111,6 @@ func testJailer(t *testing.T, jailerConfig *proto.JailerConfig) {
 		require.NoError(err, "failed to chown %q", additionalDrive)
 	}
 
-	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
 	_, err = fcClient.CreateVM(ctx, &request)
 	require.NoError(err)
 

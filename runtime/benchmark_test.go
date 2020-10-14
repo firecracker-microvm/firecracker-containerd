@@ -20,7 +20,6 @@ import (
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/namespaces"
-	"github.com/containerd/containerd/pkg/ttrpcutil"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	fccontrol "github.com/firecracker-microvm/firecracker-containerd/proto/service/fccontrol/ttrpc"
 	"github.com/gofrs/uuid"
@@ -63,10 +62,9 @@ func benchmarkCreateAndStopVM(t *testing.T, vcpuCount uint32, kernelArgs string)
 
 	ctx := namespaces.WithNamespace(context.Background(), "default")
 
-	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
+	fcClient, err := newFCClient(containerdSockPath)
 	require.NoError(t, err, "failed to create ttrpc client")
 
-	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
 	request := proto.CreateVMRequest{
 		KernelArgs: kernelArgs,
 		MachineCfg: &proto.FirecrackerMachineConfiguration{

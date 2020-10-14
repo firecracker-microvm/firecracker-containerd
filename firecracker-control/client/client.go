@@ -29,16 +29,21 @@ type Client struct {
 
 // New creates a new firecracker-control service client
 func New(ttrpcAddress string) (*Client, error) {
-	ttrpcClient, err := ttrpcutil.NewClient(ttrpcAddress)
+	client, err := ttrpcutil.NewClient(ttrpcAddress)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create ttrpc client")
+		return nil, errors.Wrap(err, "failed to create a TTRPC client")
 	}
 
-	fcClient := fccontrol.NewFirecrackerClient(ttrpcClient.Client())
+	ttrpcClient, err := client.Client()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get the underlying TTRPC client")
+	}
+
+	fcClient := fccontrol.NewFirecrackerClient(ttrpcClient)
 
 	return &Client{
 		FirecrackerService: fcClient,
-		ttrpcClient:        ttrpcClient,
+		ttrpcClient:        client,
 	}, nil
 }
 

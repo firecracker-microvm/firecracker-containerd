@@ -27,7 +27,6 @@ import (
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/oci"
-	"github.com/containerd/containerd/pkg/ttrpcutil"
 	"github.com/firecracker-microvm/firecracker-go-sdk/cni/cmd/tc-redirect-tap/args"
 	"github.com/shirou/gopsutil/cpu"
 	"github.com/stretchr/testify/assert"
@@ -36,7 +35,6 @@ import (
 	"github.com/firecracker-microvm/firecracker-containerd/config"
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
-	fccontrol "github.com/firecracker-microvm/firecracker-containerd/proto/service/fccontrol/ttrpc"
 	"github.com/firecracker-microvm/firecracker-containerd/runtime/firecrackeroci"
 )
 
@@ -50,7 +48,7 @@ func TestCNISupport_Isolated(t *testing.T) {
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
 	defer client.Close()
 
-	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
+	fcClient, err := newFCClient(containerdSockPath)
 	require.NoError(t, err, "failed to create ttrpc client")
 
 	image, err := alpineImage(ctx, client, defaultSnapshotterName)
@@ -89,7 +87,6 @@ func TestCNISupport_Isolated(t *testing.T) {
 		go func(vmID string) {
 			defer vmGroup.Done()
 
-			fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
 			_, err := fcClient.CreateVM(ctx, &proto.CreateVMRequest{
 				VMID: vmID,
 				MachineCfg: &proto.FirecrackerMachineConfiguration{
@@ -232,10 +229,8 @@ func TestCNIPlugin_Performance(t *testing.T) {
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
 	defer client.Close()
 
-	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
+	fcClient, err := newFCClient(containerdSockPath)
 	require.NoError(t, err, "failed to create ttrpc client")
-
-	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
 
 	image, err := iperf3Image(ctx, client, defaultSnapshotterName)
 	require.NoError(t, err, "failed to get iperf3 image")

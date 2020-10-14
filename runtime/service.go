@@ -353,7 +353,11 @@ func (s *service) StartShim(shimCtx context.Context, containerID, containerdBina
 		return "", err
 	}
 
-	fcControlClient := fccontrolTtrpc.NewFirecrackerClient(client.Client())
+	ttrpcClient, err := client.Client()
+	if err != nil {
+		return "", err
+	}
+	fcControlClient := fccontrolTtrpc.NewFirecrackerClient(ttrpcClient)
 
 	_, err = fcControlClient.CreateVM(shimCtx, &proto.CreateVMRequest{
 		VMID:                     s.vmID,

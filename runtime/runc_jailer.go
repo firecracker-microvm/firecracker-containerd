@@ -270,32 +270,41 @@ func (j *runcJailer) BuildJailedRootHandler(cfg *config.Config, machineConfig *f
 	}
 }
 
+func (j *runcJailer) makeLinkInJail(src string) (string, error) {
+	root := j.RootPath()
+
+	base := filepath.Base(src)
+	dst := filepath.Join(root, base)
+
+	// Since Firecracker is unaware that we are in a jailed environment and
+	// what owner/group to set this as when creating, we will manually have
+	// to adjust the permission bits ourselves
+	if err := linkAndChown(src, dst, j.Config.UID, j.Config.GID); err != nil {
+		return "", err
+	}
+
+	// this path needs to be relative to the root path, and since we are
+	// placing the file in the root path the value should just be the file name.
+	return base, nil
+}
+
 // BuildLinkFifoHandler will return a new firecracker.Handler with the function
 // that will allow linking of the fifos making them visible to Firecracker.
 func (j *runcJailer) BuildLinkFifoHandler() firecracker.Handler {
 	return firecracker.Handler{
 		Name: jailerFifoHandlerName,
 		Fn: func(ctx context.Context, m *firecracker.Machine) error {
-			contentsPath := j.RootPath()
-			fifoFileName := filepath.Base(m.Cfg.LogFifo)
-			newFifoPath := filepath.Join(contentsPath, fifoFileName)
-			// Since Firecracker is unaware that we are in a jailed environment and
-			// what owner/group to set this as when creating, we will manually have
-			// to adjust the permission bits ourselves
-			if err := linkAndChown(m.Cfg.LogFifo, newFifoPath, j.Config.UID, j.Config.GID); err != nil {
+			logFifo, err := j.makeLinkInJail(m.Cfg.LogPath)
+			if err != nil {
 				return err
 			}
-			// this path needs to be relative to the root path, and since we are
-			// placing the file in the root path the LogFifo value should just be the
-			// file name.
-			m.Cfg.LogFifo = fifoFileName
+			m.Cfg.LogFifo = logFifo
 
-			metricFifoFileName := filepath.Base(m.Cfg.MetricsFifo)
-			newMetricFifoPath := filepath.Join(contentsPath, metricFifoFileName)
-			if err := linkAndChown(m.Cfg.MetricsFifo, newMetricFifoPath, j.Config.UID, j.Config.GID); err != nil {
+			metricsFifo, err := j.makeLinkInJail(m.Cfg.MetricsPath)
+			if err != nil {
 				return err
 			}
-			m.Cfg.MetricsFifo = metricFifoFileName
+			m.Cfg.MetricsFifo = metricsFifo
 
 			return nil
 		},

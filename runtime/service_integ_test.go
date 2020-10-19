@@ -14,6 +14,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
@@ -1870,6 +1871,23 @@ loop:
 	require.Equal(t, expected, actual)
 }
 
+func requireNonEmptyFifo(t testing.TB, path string) {
+	file, err := os.Open(path)
+	require.NoError(t, err)
+	defer file.Close()
+
+	reader := bufio.NewReader(file)
+
+	// Since this is a FIFO, reading till EOF would block if its writer-end is still open.
+	line, err := reader.ReadString('\n')
+	require.NoError(t, err)
+	require.NotEqualf(t, "", line, "%s must not be empty", path)
+
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	require.Equal(t, os.ModeNamedPipe, info.Mode()&os.ModeType, "%s is a FIFO file", path)
+}
+
 func TestCreateVM_Isolated(t *testing.T) {
 	prepareIntegTest(t)
 
@@ -1923,25 +1941,55 @@ func TestCreateVM_Isolated(t *testing.T) {
 		},
 	}
 
+	runTest := func(t *testing.T, request proto.CreateVMRequest, validate func(t *testing.T, err error)) {
+		vmID := testNameToVMID(t.Name())
+
+		tempDir, err := ioutil.TempDir("", vmID)
+		require.NoError(t, err)
+		defer os.RemoveAll(tempDir)
+
+		logFile := filepath.Join(tempDir, "log.fifo")
+		metricsFile := filepath.Join(tempDir, "metrics.fifo")
+
+		request.VMID = vmID
+		request.LogFifoPath = logFile
+		request.MetricsFifoPath = metricsFile
+
+		resp, createVMErr := fcClient.CreateVM(ctx, &request)
+
+		// Even CreateVM fails, the log file and the metrics file must have some data.
+		requireNonEmptyFifo(t, logFile)
+		requireNonEmptyFifo(t, metricsFile)
+
+		// Some test cases are expected to have an error, some are not.
+		validate(t, createVMErr)
+
+		// No VM to stop.
+		if createVMErr != nil {
+			return
+		}
+
+		// Ensure the response fields are populated correctly
+		assert.Equal(t, request.VMID, resp.VMID)
+
+		_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: request.VMID})
+		require.Equal(t, status.Code(err), codes.OK)
+	}
+
 	for _, subtest := range subtests {
 		request := subtest.request
 		validate := subtest.validate
-
 		t.Run(subtest.name, func(t *testing.T) {
-			request.VMID = testNameToVMID(t.Name())
+			runTest(t, request, validate)
+		})
 
-			resp, err := fcClient.CreateVM(ctx, &request)
-			validate(t, err)
-			if err != nil {
-				// No VM to stop.
-				return
-			}
-
-			// Ensure the response fields are populated correctly
-			assert.Equal(t, request.VMID, resp.VMID)
-
-			_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: request.VMID})
-			require.Equal(t, status.Code(err), codes.OK)
+		requestWithJailer := subtest.request
+		requestWithJailer.JailerConfig = &proto.JailerConfig{
+			UID: 30000,
+			GID: 30000,
+		}
+		t.Run(subtest.name+" with Jailer", func(t *testing.T) {
+			runTest(t, requestWithJailer, validate)
 		})
 	}
 }

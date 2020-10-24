@@ -171,3 +171,66 @@ func TestBindMountToJail_Isolated(t *testing.T) {
 	)
 	require.Error(t, err)
 }
+
+func TestFifoHandler_Isolated(t *testing.T) {
+	// Because of chown(2).
+	internal.RequiresIsolation(t)
+
+	testcases := []struct {
+		name        string
+		logPath     string
+		metricsPath string
+	}{
+		{
+			"Different basename",
+			"log.fifo",
+			"metrics.fifo",
+		},
+		{
+			"Same basename",
+			"log/vmid.fifo",
+			"metrics/vmid.fifo",
+		},
+	}
+
+	for _, tc := range testcases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			dir, err := ioutil.TempDir("", testNameToVMID(t.Name()))
+			require.NoError(t, err)
+
+			logPath := filepath.Join(dir, tc.logPath)
+			metricsPath := filepath.Join(dir, tc.metricsPath)
+
+			err = os.MkdirAll(filepath.Dir(logPath), 0750)
+			require.NoError(t, err)
+			err = ioutil.WriteFile(logPath, []byte("log"), 0644)
+			require.NoError(t, err)
+
+			err = os.MkdirAll(filepath.Dir(metricsPath), 0750)
+			require.NoError(t, err)
+			err = ioutil.WriteFile(metricsPath, []byte("metrics"), 0644)
+			require.NoError(t, err)
+
+			j := runcJailer{
+				Config: runcJailerConfig{
+					OCIBundlePath: dir,
+				},
+			}
+			err = os.Mkdir(j.RootPath(), 0750)
+			require.NoError(t, err)
+
+			handler := j.BuildLinkFifoHandler()
+			err = handler.Fn(
+				context.Background(),
+				&firecracker.Machine{
+					Cfg: firecracker.Config{
+						LogPath:     logPath,
+						MetricsPath: metricsPath,
+					},
+				},
+			)
+			require.NoError(t, err)
+		})
+	}
+}

@@ -270,10 +270,14 @@ func (j *runcJailer) BuildJailedRootHandler(cfg *config.Config, machineConfig *f
 	}
 }
 
-func (j *runcJailer) makeLinkInJail(src string) (string, error) {
+// makeLinkInJail creates a hard link to `src` inside the jail directory.
+func (j *runcJailer) makeLinkInJail(src, base string) (string, error) {
 	root := j.RootPath()
 
-	base := filepath.Base(src)
+	if strings.ContainsRune(base, os.PathSeparator) {
+		return "", fmt.Errorf("%q must not contain %q", base, os.PathSeparator)
+	}
+
 	dst := filepath.Join(root, base)
 
 	// Since Firecracker is unaware that we are in a jailed environment and
@@ -294,13 +298,13 @@ func (j *runcJailer) BuildLinkFifoHandler() firecracker.Handler {
 	return firecracker.Handler{
 		Name: jailerFifoHandlerName,
 		Fn: func(ctx context.Context, m *firecracker.Machine) error {
-			logFifo, err := j.makeLinkInJail(m.Cfg.LogPath)
+			logFifo, err := j.makeLinkInJail(m.Cfg.LogPath, internal.FirecrackerLogFifoName)
 			if err != nil {
 				return err
 			}
 			m.Cfg.LogFifo = logFifo
 
-			metricsFifo, err := j.makeLinkInJail(m.Cfg.MetricsPath)
+			metricsFifo, err := j.makeLinkInJail(m.Cfg.MetricsPath, internal.FirecrackerMetricsFifoName)
 			if err != nil {
 				return err
 			}

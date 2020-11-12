@@ -1,6 +1,6 @@
 #! /bin/sh
 # tiny lsblk(8) equivalent to make integration tests distro-agnostic
-set -eu
+set -euo pipefail
 
 echo 'NAME MAJ:MIN RM      SIZE RO | MAGIC'
 

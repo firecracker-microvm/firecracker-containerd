@@ -32,6 +32,7 @@ import (
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/api/events"
 	"github.com/containerd/containerd/cio"
+	"github.com/containerd/containerd/containers"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/oci"
 	"github.com/containerd/containerd/pkg/ttrpcutil"
@@ -657,6 +658,24 @@ func TestLongUnixSocketPath_Isolated(t *testing.T) {
 	}
 }
 
+func allowDeviceAccess(_ context.Context, _ oci.Client, _ *containers.Container, s *oci.Spec) error {
+	// By default, all devices accesses are forbidden.
+	s.Linux.Resources.Devices = append(
+		s.Linux.Resources.Devices,
+		specs.LinuxDeviceCgroup{Allow: true, Access: "r"},
+	)
+
+	// Exposes the host kernel's /dev as /dev.
+	// By default, runc creates own /dev with a minimal set of pseudo devices such as /dev/null.
+	s.Mounts = append(s.Mounts, specs.Mount{
+		Type:        "bind",
+		Options:     []string{"bind"},
+		Destination: "/dev",
+		Source:      "/dev",
+	})
+	return nil
+}
+
 func TestStubBlockDevices_Isolated(t *testing.T) {
 	prepareIntegTest(t)
 
@@ -706,15 +725,6 @@ func TestStubBlockDevices_Isolated(t *testing.T) {
 			oci.WithProcessArgs("/bin/sh", "/var/firecracker-containerd-test/scripts/lsblk.sh"),
 
 			oci.WithMounts([]specs.Mount{
-				// Exposes the host kernel's /dev as /dev.
-				// By default, runc creates own /dev with a minimal set of pseudo devices such as /dev/null.
-				{
-					Type:        "bind",
-					Options:     []string{"bind"},
-					Destination: "/dev",
-					Source:      "/dev",
-				},
-
 				// Exposes test scripts from the host kernel
 				{
 					Type:        "bind",
@@ -723,8 +733,7 @@ func TestStubBlockDevices_Isolated(t *testing.T) {
 					Source:      "/var/firecracker-containerd-test/scripts",
 				},
 			}),
-			// Make the host kernel's /dev readable
-			oci.WithParentCgroupDevices,
+			allowDeviceAccess,
 		),
 	)
 	require.NoError(t, err, "failed to create container %s", containerName)

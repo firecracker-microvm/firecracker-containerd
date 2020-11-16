@@ -253,10 +253,10 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 	require.NoError(t, err, "failed to get a namespace")
 
 	// numberOfVmsEnvName = NUMBER_OF_VMS ENV and is configurable from buildkite
-	numberOfVms, err := strconv.Atoi(os.Getenv(numberOfVmsEnvName))
-	require.NoError(t, err, "failed to get NUMBER_OF_VMS env")
-	if numberOfVms == 0 {
-		numberOfVms = defaultNumberOfVms
+	numberOfVms := defaultNumberOfVms
+	if str := os.Getenv(numberOfVmsEnvName); str != "" {
+		numberOfVms, err = strconv.Atoi(str)
+		require.NoError(t, err, "failed to get NUMBER_OF_VMS env")
 	}
 	t.Logf("TestMultipleVMs_Isolated: will run %d vm's", numberOfVms)
 

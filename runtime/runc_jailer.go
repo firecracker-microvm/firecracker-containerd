@@ -258,7 +258,7 @@ func (j *runcJailer) BuildJailedRootHandler(cfg *config.Config, machineConfig *f
 			j.logger.Debugf("Writing %q for runc", rootPathToConfig)
 			// we pass m.Cfg as opposed to machineConfig as we want the populated
 			// config defaults when calling NewMachine
-			if err := j.overwriteConfig(cfg, &m.Cfg, filepath.Base(m.Cfg.SocketPath), rootPathToConfig); err != nil {
+			if err := j.overwriteConfig(&m.Cfg, filepath.Base(m.Cfg.SocketPath), rootPathToConfig); err != nil {
 				return errors.Wrap(err, "failed to overwrite config.json")
 			}
 
@@ -478,7 +478,7 @@ func (j *runcJailer) jailerCommand(containerName string, isDebug bool) *exec.Cmd
 }
 
 // overwriteConfig will set the proper default values if a field had not been set.
-func (j *runcJailer) overwriteConfig(cfg *config.Config, machineConfig *firecracker.Config, socketPath, configPath string) error {
+func (j *runcJailer) overwriteConfig(machineConfig *firecracker.Config, socketPath, configPath string) error {
 	spec := j.configSpec
 	if spec.Process.User.UID != 0 ||
 		spec.Process.User.GID != 0 {
@@ -489,7 +489,7 @@ func (j *runcJailer) overwriteConfig(cfg *config.Config, machineConfig *firecrac
 		)
 	}
 
-	spec = j.setDefaultConfigValues(cfg, socketPath, spec)
+	spec = j.setDefaultConfigValues(socketPath, spec)
 	spec.Root.Path = rootfsFolder
 	spec.Root.Readonly = false
 	spec.Process.User.UID = j.Config.UID
@@ -537,24 +537,21 @@ func (j runcJailer) CgroupPath() string {
 	return filepath.Join(basePath, j.vmID)
 }
 
-// setDefaultConfigValues will process the spec file provided and allow any
-// empty/zero values to be replaced with default values.
-func (j *runcJailer) setDefaultConfigValues(cfg *config.Config, socketPath string, spec specs.Spec) specs.Spec {
+// setDefaultConfigValues will override the spec to start Firecracker inside.
+func (j *runcJailer) setDefaultConfigValues(socketPath string, spec specs.Spec) specs.Spec {
 	if spec.Process == nil {
 		spec.Process = &specs.Process{}
 	}
 
-	if spec.Process.Args == nil {
-		cmd := firecracker.VMCommandBuilder{}.
-			WithBin("/" + firecrackerFileName).
-			WithSocketPath(socketPath).
-			WithArgs([]string{"--id", j.vmID}).
-			// Don't need to pass in an actual context here as we are only building
-			// the command arguments and not actually building a command
-			Build(context.Background())
+	cmd := firecracker.VMCommandBuilder{}.
+		WithBin("/" + firecrackerFileName).
+		WithSocketPath(socketPath).
+		WithArgs([]string{"--id", j.vmID}).
+		// Don't need to pass in an actual context here as we are only building
+		// the command arguments and not actually building a command
+		Build(context.Background())
 
-		spec.Process.Args = cmd.Args
-	}
+	spec.Process.Args = cmd.Args
 
 	cgroupPath := j.CgroupPath()
 	j.logger.WithField("CgroupPath", cgroupPath).Debug("using cgroup path")

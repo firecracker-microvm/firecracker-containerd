@@ -22,6 +22,8 @@ import (
 	"github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -110,7 +112,7 @@ func (m *taskManager) newProc(taskID, execID string) (*vmProc, error) {
 
 	_, procExists := m.tasks[taskID][execID]
 	if procExists {
-		return nil, errors.Errorf("cannot add duplicate exec %q to task %q", execID, taskID)
+		return nil, status.Errorf(codes.AlreadyExists, "exec %q already exists", execID)
 	}
 
 	proc := &vmProc{}

@@ -255,7 +255,7 @@ func (ts *TaskService) Create(requestCtx context.Context, req *taskAPI.CreateTas
 
 	resp, err := ts.taskManager.CreateTask(requestCtx, req, ts.runcService, ioConnectorSet)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create runc shim")
+		return nil, err
 	}
 
 	logger.WithField("pid", resp.Pid).Debugf("create succeeded")

@@ -33,6 +33,7 @@ import (
 	"github.com/containerd/containerd/api/events"
 	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/containers"
+	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/oci"
 	"github.com/containerd/containerd/pkg/ttrpcutil"
@@ -1666,11 +1667,20 @@ func TestExec_Isolated(t *testing.T) {
 	var execStdout bytes.Buffer
 	var execStderr bytes.Buffer
 
-	taskExec, err := task.Exec(ctx, "exec", &specs.Process{
+	const execID = "date"
+	taskExec, err := task.Exec(ctx, execID, &specs.Process{
 		Args: []string{"/bin/date"},
 		Cwd:  "/",
 	}, cio.NewCreator(cio.WithStreams(os.Stdin, &execStdout, &execStderr)))
 	require.NoError(t, err)
+
+	// Intentionally reuse execID.
+	_, err = task.Exec(ctx, execID, &specs.Process{
+		Args: []string{"/bin/date"},
+		Cwd:  "/",
+	}, cio.NewCreator(cio.WithStreams(os.Stdin, ioutil.Discard, ioutil.Discard)))
+	assert.Error(t, err)
+	assert.Truef(t, errdefs.IsAlreadyExists(err), "%q's cause must be %q", err, errdefs.ErrAlreadyExists)
 
 	execExitCh, err := taskExec.Wait(ctx)
 	require.NoError(t, err, "failed to wait on exec %s", "exec")

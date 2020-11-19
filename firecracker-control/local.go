@@ -252,6 +252,42 @@ func (s *local) StopVM(requestCtx context.Context, req *proto.StopVMRequest) (*e
 	return resp, multierror.Append(shimErr, waitErr).ErrorOrNil()
 }
 
+// PauseVM pauses a VM
+func (s *local) PauseVM(ctx context.Context, req *proto.PauseVMRequest) (*empty.Empty, error) {
+	client, err := s.shimFirecrackerClient(ctx, req.VMID)
+	if err != nil {
+		return nil, err
+	}
+
+	defer client.Close()
+
+	resp, err := client.PauseVM(ctx, req)
+	if err != nil {
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+// ResumeVM resumes a VM
+func (s *local) ResumeVM(ctx context.Context, req *proto.ResumeVMRequest) (*empty.Empty, error) {
+	client, err := s.shimFirecrackerClient(ctx, req.VMID)
+	if err != nil {
+		return nil, err
+	}
+
+	defer client.Close()
+
+	resp, err := client.ResumeVM(ctx, req)
+	if err != nil {
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	return resp, nil
+}
+
 func (s *local) waitForShimToExit(ctx context.Context, vmID string) error {
 	socketAddr, err := fcShim.SocketAddress(ctx, vmID)
 	if err != nil {

@@ -49,6 +49,14 @@ message CreateVMResponse {
     string CgroupPath = 5;
 }
 
+message PauseVMRequest {
+    string VMID = 1;
+}
+
+message ResumeVMRequest {
+    string VMID = 1;
+}
+
 message StopVMRequest {
     string VMID = 1;
     uint32 TimeoutSeconds = 2;

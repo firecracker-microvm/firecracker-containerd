@@ -1602,13 +1602,13 @@ func TestStopVM_Isolated(t *testing.T) {
 
 		t.Run(test.name, func(t *testing.T) {
 			req := test.createVMRequest
-			req.VMID = testNameToVMID(test.name)
+			req.VMID = testNameToVMID(t.Name())
 			testFunc(t, req)
 		})
 
 		t.Run(test.name+"/Jailer", func(t *testing.T) {
 			req := test.createVMRequest
-			req.VMID = testNameToVMID(test.name) + "_Jailer"
+			req.VMID = testNameToVMID(t.Name())
 			req.JailerConfig = &proto.JailerConfig{
 				UID: 300000,
 				GID: 300000,
@@ -2007,7 +2007,7 @@ func TestCreateVM_Isolated(t *testing.T) {
 			UID: 30000,
 			GID: 30000,
 		}
-		t.Run(subtest.name+" with Jailer", func(t *testing.T) {
+		t.Run(subtest.name+"/Jailer", func(t *testing.T) {
 			runTest(t, requestWithJailer, validate)
 		})
 	}

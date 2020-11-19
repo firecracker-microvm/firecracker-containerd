@@ -238,16 +238,13 @@ FIREWALL_BIN?=$(BINPATH)/firewall
 $(FIREWALL_BIN):
 	GOBIN=$(dir $@) GO111MODULE=off go get -u github.com/containernetworking/plugins/plugins/meta/firewall
 
-TC_REDIRECT_TAP_BIN?=$(BINPATH)/tc-redirect-tap
-$(TC_REDIRECT_TAP_BIN):
-	GOBIN=$(dir $@) go install github.com/firecracker-microvm/firecracker-go-sdk/cni/cmd/tc-redirect-tap
 
 TEST_BRIDGED_TAP_BIN?=$(BINPATH)/test-bridged-tap
 $(TEST_BRIDGED_TAP_BIN): $(shell find internal/cmd/test-bridged-tap -name *.go) $(GOMOD) $(GOSUM)
 	go build -o $@ $(CURDIR)/internal/cmd/test-bridged-tap
 
 .PHONY: cni-bins
-cni-bins: $(BRIDGE_BIN) $(PTP_BIN) $(HOSTLOCAL_BIN) $(FIREWALL_BIN) $(TC_REDIRECT_TAP_BIN)
+cni-bins: $(BRIDGE_BIN) $(PTP_BIN) $(HOSTLOCAL_BIN) $(FIREWALL_BIN)
 
 .PHONY: test-cni-bins
 test-cni-bins: $(TEST_BRIDGED_TAP_BIN)
@@ -258,7 +255,6 @@ install-cni-bins: cni-bins $(CNI_BIN_ROOT)
 	install -D -o root -g root -m755 -t $(CNI_BIN_ROOT) $(PTP_BIN)
 	install -D -o root -g root -m755 -t $(CNI_BIN_ROOT) $(HOSTLOCAL_BIN)
 	install -D -o root -g root -m755 -t $(CNI_BIN_ROOT) $(FIREWALL_BIN)
-	install -D -o root -g root -m755 -t $(CNI_BIN_ROOT) $(TC_REDIRECT_TAP_BIN)
 
 .PHONY: install-test-cni-bins
 install-test-cni-bins: test-cni-bins $(CNI_BIN_ROOT)

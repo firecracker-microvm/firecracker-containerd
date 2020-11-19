@@ -72,6 +72,16 @@ func (s *service) CreateVM(ctx context.Context, req *proto.CreateVMRequest) (*pr
 	return s.local.CreateVM(ctx, req)
 }
 
+func (s *service) PauseVM(ctx context.Context, req *proto.PauseVMRequest) (*empty.Empty, error) {
+	log.G(ctx).Debugf("pause VM request: %+v", req)
+	return s.local.PauseVM(ctx, req)
+}
+
+func (s *service) ResumeVM(ctx context.Context, req *proto.ResumeVMRequest) (*empty.Empty, error) {
+	log.G(ctx).Debugf("resume VM request: %+v", req)
+	return s.local.ResumeVM(ctx, req)
+}
+
 func (s *service) StopVM(ctx context.Context, req *proto.StopVMRequest) (*empty.Empty, error) {
 	log.G(ctx).Debugf("stop VM: %+v", req)
 	return s.local.StopVM(ctx, req)

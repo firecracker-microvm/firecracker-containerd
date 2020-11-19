@@ -24,20 +24,19 @@ import (
 	"testing"
 	"time"
 
+	args "github.com/awslabs/tc-redirect-tap/cmd/tc-redirect-tap/args"
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/oci"
 	"github.com/containerd/containerd/pkg/ttrpcutil"
-	"github.com/firecracker-microvm/firecracker-go-sdk/cni/cmd/tc-redirect-tap/args"
-	"github.com/shirou/gopsutil/cpu"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
 	"github.com/firecracker-microvm/firecracker-containerd/config"
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	fccontrol "github.com/firecracker-microvm/firecracker-containerd/proto/service/fccontrol/ttrpc"
 	"github.com/firecracker-microvm/firecracker-containerd/runtime/firecrackeroci"
+	"github.com/shirou/gopsutil/cpu"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCNISupport_Isolated(t *testing.T) {
@@ -423,3 +422,4 @@ func requiredEnv(t *testing.T, key string) string {
 	require.NotEmpty(t, envVal, "%s env is not set", key)
 	return envVal
 }
+

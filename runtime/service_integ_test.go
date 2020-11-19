@@ -1909,7 +1909,6 @@ func requireNonEmptyFifo(t testing.TB, path string) {
 
 func TestCreateVM_Isolated(t *testing.T) {
 	prepareIntegTest(t)
-
 	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
 	defer client.Close()
@@ -1921,17 +1920,38 @@ func TestCreateVM_Isolated(t *testing.T) {
 
 	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
 
-	subtests := []struct {
+	type subtest struct {
 		name     string
 		request  proto.CreateVMRequest
 		validate func(*testing.T, error)
-	}{
+		stopVM   bool
+	}
+
+	subtests := []subtest{
 		{
 			name:    "Happy Case",
 			request: proto.CreateVMRequest{},
 			validate: func(t *testing.T, err error) {
 				require.NoError(t, err)
 			},
+			stopVM: true,
+		},
+		{
+			name: "Error Case",
+			request: proto.CreateVMRequest{
+				TimeoutSeconds: 5,
+				RootDrive: &proto.FirecrackerRootDrive{
+					HostPath: "/var/lib/firecracker-containerd/runtime/rootfs-no-agent.img",
+				},
+			},
+			validate: func(t *testing.T, err error) {
+				require.NotNil(t, err, "expected an error but did not receive any")
+				time.Sleep(5 * time.Second)
+				firecrackerProcesses, err := findProcess(ctx, findFirecracker)
+				require.NoError(t, err, "failed waiting for expected firecracker process %q to come up", firecrackerProcessName)
+				require.Len(t, firecrackerProcesses, 0, "expected only no firecracker processes to exist")
+			},
+			stopVM: false,
 		},
 		{
 			name: "Slow Root FS",
@@ -1945,6 +1965,7 @@ func TestCreateVM_Isolated(t *testing.T) {
 				assert.Equal(t, codes.DeadlineExceeded, status.Code(err))
 				assert.Contains(t, err.Error(), "didn't start within 20s")
 			},
+			stopVM: true,
 		},
 		{
 			name: "Slow Root FS and Longer Timeout",
@@ -1957,10 +1978,11 @@ func TestCreateVM_Isolated(t *testing.T) {
 			validate: func(t *testing.T, err error) {
 				require.NoError(t, err)
 			},
+			stopVM: true,
 		},
 	}
 
-	runTest := func(t *testing.T, request proto.CreateVMRequest, validate func(t *testing.T, err error)) {
+	runTest := func(t *testing.T, request proto.CreateVMRequest, s subtest) {
 		vmID := testNameToVMID(t.Name())
 
 		tempDir, err := ioutil.TempDir("", vmID)
@@ -1981,34 +2003,31 @@ func TestCreateVM_Isolated(t *testing.T) {
 		requireNonEmptyFifo(t, metricsFile)
 
 		// Some test cases are expected to have an error, some are not.
-		validate(t, createVMErr)
+		s.validate(t, createVMErr)
 
-		// No VM to stop.
-		if createVMErr != nil {
-			return
+		if createVMErr == nil && s.stopVM {
+			// Ensure the response fields are populated correctly
+			assert.Equal(t, request.VMID, resp.VMID)
+
+			_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: request.VMID})
+			require.Equal(t, status.Code(err), codes.OK)
 		}
-
-		// Ensure the response fields are populated correctly
-		assert.Equal(t, request.VMID, resp.VMID)
-
-		_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: request.VMID})
-		require.Equal(t, status.Code(err), codes.OK)
 	}
 
-	for _, subtest := range subtests {
-		request := subtest.request
-		validate := subtest.validate
-		t.Run(subtest.name, func(t *testing.T) {
-			runTest(t, request, validate)
+	for _, _s := range subtests {
+		s := _s
+		request := s.request
+		t.Run(s.name, func(t *testing.T) {
+			runTest(t, request, s)
 		})
 
-		requestWithJailer := subtest.request
+		requestWithJailer := s.request
 		requestWithJailer.JailerConfig = &proto.JailerConfig{
 			UID: 30000,
 			GID: 30000,
 		}
-		t.Run(subtest.name+"/Jailer", func(t *testing.T) {
-			runTest(t, requestWithJailer, validate)
+		t.Run(s.name+"/Jailer", func(t *testing.T) {
+			runTest(t, requestWithJailer, s)
 		})
 	}
 }

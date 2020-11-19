@@ -37,7 +37,7 @@ fi
 touch --reference=debootstrap_stamp --no-create "$(WORKDIR)"
 endef
 
-all: rootfs.img rootfs-slow-boot.img rootfs-slow-reboot.img
+all: rootfs.img rootfs-slow-boot.img rootfs-slow-reboot.img rootfs-no-agent.img
 
 $(WORKDIR):
 	mkdir $(WORKDIR)
@@ -79,6 +79,13 @@ rootfs-slow-reboot.img: files_common_stamp files_debootstrap_stamp files_ephemer
 	rm -fr tmp/$@
 	cp -a "$(WORKDIR)" tmp/$@
 	echo 'ExecStop=/bin/sleep 60' >> tmp/$@/etc/systemd/system/firecracker-agent.service
+	mksquashfs tmp/$@ $@ -noappend
+
+rootfs-no-agent.img: files_common_stamp files_debootstrap_stamp files_ephemeral_stamp
+	rm -fr tmp/$@
+	cp -a "$(WORKDIR)" tmp/$@
+	rm tmp/$@/etc/systemd/system/firecracker-agent.service
+	rm tmp/$@/usr/local/bin/agent
 	mksquashfs tmp/$@ $@ -noappend
 
 builder: builder_stamp

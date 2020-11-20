@@ -422,4 +422,3 @@ func requiredEnv(t *testing.T, key string) string {
 	require.NotEmpty(t, envVal, "%s env is not set", key)
 	return envVal
 }
-

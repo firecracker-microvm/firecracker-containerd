@@ -28,7 +28,6 @@ require (
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.0
 	github.com/imdario/mergo v0.3.8 // indirect
-	github.com/konsorten/go-windows-terminal-sequences v1.0.3 // indirect
 	github.com/mdlayher/vsock v0.0.0-20190329173812-a92c53d5dcab
 	github.com/miekg/dns v1.1.16
 	github.com/opencontainers/go-digest v1.0.0-rc1 // indirect

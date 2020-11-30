@@ -15,24 +15,18 @@ package shim
 
 import (
 	"context"
-	"path/filepath"
 
 	"github.com/containerd/containerd/runtime/v2/shim"
 )
 
-// SocketAddress is the abstract unix socket address at which a shim
-// with the given namespace and vmID will listen and serve the shim api
-func SocketAddress(namespacedCtx context.Context, vmID string) (string, error) {
-	return shim.SocketAddress(namespacedCtx, vmID)
-}
-
-// FCControlSocketAddress is the abstract unix socket address at which a shim
-// with the given namespace and vmID will listen and serve the fccontrol api
-func FCControlSocketAddress(namespacedCtx context.Context, vmID string) (string, error) {
-	shimSocketAddr, err := SocketAddress(namespacedCtx, vmID)
+// FCControlSocketAddress is a unix socket address at which a shim
+// with the given namespace, the containerd socket address, and the vmID will listen and serve
+// the fccontrol api
+func FCControlSocketAddress(namespacedCtx context.Context, socketPath, vmID string) (string, error) {
+	shimSocketAddr, err := shim.SocketAddress(namespacedCtx, socketPath, vmID)
 	if err != nil {
 		return "", err
 	}
 
-	return filepath.Join(shimSocketAddr, "fccontrol"), nil
+	return shimSocketAddr + "-fccontrol", nil
 }

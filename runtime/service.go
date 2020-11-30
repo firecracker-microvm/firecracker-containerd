@@ -59,7 +59,6 @@ import (
 	"github.com/firecracker-microvm/firecracker-containerd/eventbridge"
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/bundle"
-	fcShim "github.com/firecracker-microvm/firecracker-containerd/internal/shim"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	drivemount "github.com/firecracker-microvm/firecracker-containerd/proto/service/drivemount/ttrpc"
@@ -393,7 +392,7 @@ func (s *service) StartShim(shimCtx context.Context, containerID, containerdBina
 	}
 	log.WithField("vmID", s.vmID).Infof("successfully started shim (git commit: %s).%s", revision, str)
 
-	return fcShim.SocketAddress(shimCtx, s.vmID)
+	return shim.SocketAddress(shimCtx, containerdAddress, s.vmID)
 }
 
 func logPanicAndDie(logger *logrus.Entry) {

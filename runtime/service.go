@@ -748,7 +748,7 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 	}
 	err = syscall.Mkfifo(logPath, 0700)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "failed to create %q for logging", logPath)
 	}
 
 	metricsPath := s.shimDir.FirecrackerMetricsFifoPath()
@@ -757,7 +757,7 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 	}
 	err = syscall.Mkfifo(metricsPath, 0700)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "failed to create %q for metrics", metricsPath)
 	}
 
 	// The Config struct has LogFifo and MetricsFifo, but they will be deprecated since

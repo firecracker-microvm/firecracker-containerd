@@ -39,11 +39,10 @@ const (
 // to a fixed timeout) or the provided request is canceled.
 func VSockDial(ctx context.Context, logger *logrus.Entry, udsPath string, port uint32) (net.Conn, error) {
 	tickerCh := time.NewTicker(vsockRetryInterval).C
-	var attemptCount int
-	for {
-		attemptCount++
-		logger := logger.WithField("attempt", attemptCount)
+	errorsDedup := newErrDedup(logger)
+	defer errorsDedup.Log()
 
+	for {
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -51,11 +50,11 @@ func VSockDial(ctx context.Context, logger *logrus.Entry, udsPath string, port u
 			conn, err := tryConnect(logger, udsPath, port)
 			if isTemporaryNetErr(err) {
 				err = errors.Wrap(err, "temporary vsock dial failure")
-				logger.WithError(err).Debug()
+				errorsDedup.Add(err)
 				continue
 			} else if err != nil {
 				err = errors.Wrap(err, "non-temporary vsock dial failure")
-				logger.WithError(err).Error()
+				errorsDedup.Add(err)
 				return nil, err
 			}
 

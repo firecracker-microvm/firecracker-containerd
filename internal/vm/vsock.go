@@ -127,14 +127,16 @@ func (l vsockListener) Addr() net.Addr {
 
 // VSockDialConnector returns an IOConnector for establishing vsock connections
 // that are dialed from the host to a guest listener.
-func VSockDialConnector(udsPath string, port uint32) IOConnector {
+func VSockDialConnector(timeout time.Duration, udsPath string, port uint32) IOConnector {
 	return func(procCtx context.Context, logger *logrus.Entry) <-chan IOConnectorResult {
 		returnCh := make(chan IOConnectorResult)
 
 		go func() {
 			defer close(returnCh)
+			timeoutCtx, cancel := context.WithTimeout(procCtx, timeout)
+			defer cancel()
 
-			conn, err := VSockDial(procCtx, logger, udsPath, port)
+			conn, err := VSockDial(timeoutCtx, logger, udsPath, port)
 			returnCh <- IOConnectorResult{
 				ReadWriteCloser: conn,
 				Err:             err,

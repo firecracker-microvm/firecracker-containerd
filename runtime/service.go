@@ -76,9 +76,10 @@ const (
 	// Firecracker's API server. The channel is closed once the VM starts.
 	vmReadyTimeout = 5 * time.Second
 
-	defaultCreateVMTimeout = 20 * time.Second
-	defaultStopVMTimeout   = 5 * time.Second
-	defaultShutdownTimeout = 5 * time.Second
+	defaultCreateVMTimeout     = 20 * time.Second
+	defaultStopVMTimeout       = 5 * time.Second
+	defaultShutdownTimeout     = 5 * time.Second
+	defaultVSockConnectTimeout = 5 * time.Second
 
 	jailerStopTimeout = 3 * time.Second
 
@@ -859,14 +860,14 @@ func (s *service) newIOProxy(logger *logrus.Entry, stdin, stdout, stderr string,
 		if stdin != "" {
 			stdinConnectorPair = &vm.IOConnectorPair{
 				ReadConnector:  vm.ReadFIFOConnector(stdin),
-				WriteConnector: vm.VSockDialConnector(relVSockPath, extraData.StdinPort),
+				WriteConnector: vm.VSockDialConnector(defaultVSockConnectTimeout, relVSockPath, extraData.StdinPort),
 			}
 		}
 
 		var stdoutConnectorPair *vm.IOConnectorPair
 		if stdout != "" {
 			stdoutConnectorPair = &vm.IOConnectorPair{
-				ReadConnector:  vm.VSockDialConnector(relVSockPath, extraData.StdoutPort),
+				ReadConnector:  vm.VSockDialConnector(defaultVSockConnectTimeout, relVSockPath, extraData.StdoutPort),
 				WriteConnector: vm.WriteFIFOConnector(stdout),
 			}
 		}
@@ -874,7 +875,7 @@ func (s *service) newIOProxy(logger *logrus.Entry, stdin, stdout, stderr string,
 		var stderrConnectorPair *vm.IOConnectorPair
 		if stderr != "" {
 			stderrConnectorPair = &vm.IOConnectorPair{
-				ReadConnector:  vm.VSockDialConnector(relVSockPath, extraData.StderrPort),
+				ReadConnector:  vm.VSockDialConnector(defaultVSockConnectTimeout, relVSockPath, extraData.StderrPort),
 				WriteConnector: vm.WriteFIFOConnector(stderr),
 			}
 		}

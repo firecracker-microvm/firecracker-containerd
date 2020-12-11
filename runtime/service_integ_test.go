@@ -2025,64 +2025,85 @@ func TestAttach_Isolated(t *testing.T) {
 	image, err := alpineImage(ctx, client, defaultSnapshotterName)
 	require.NoError(t, err, "failed to get alpine image")
 
-	vmID := testNameToVMID(t.Name())
+	testcases := []struct {
+		name     string
+		newIO    func(context.Context, string) (cio.IO, error)
+		expected string
+	}{
+		{
+			name: "attach",
+			newIO: func(ctx context.Context, id string) (cio.IO, error) {
+				set, err := cio.NewFIFOSetInDir("", id, false)
+				if err != nil {
+					return nil, err
+				}
 
-	c, err := client.NewContainer(ctx,
-		"container-"+vmID,
-		containerd.WithSnapshotter(defaultSnapshotterName),
-		containerd.WithNewSnapshot("snapshot-"+vmID, image),
-		containerd.WithNewSpec(oci.WithProcessArgs(
-			"/bin/cat",
-		)),
-	)
-	require.NoError(t, err)
+				return cio.NewDirectIO(ctx, set)
+			},
+			expected: "hello\n",
+		},
+		{
+			name: "null io",
 
-	// cio.NewCreator creates FIFOs and *the readers* implicitly. Use cio.NewDirectIO() to
-	// only create FIFOs.
-	fifos, err := cio.NewFIFOSetInDir("", t.Name(), false)
-	require.NoError(t, err)
+			// firecracker-containerd doesn't create IO Proxy objects in this case.
+			newIO: func(ctx context.Context, id string) (cio.IO, error) {
+				return cio.NullIO(id)
+			},
 
-	io, err := cio.NewDirectIO(ctx, fifos)
-	require.NoError(t, err)
+			// So, attaching new IOs doesn't work.
+			// While it looks odd, containerd's v2 shim has the same behavior.
+			expected: "",
+		},
+	}
 
-	task1, err := c.NewTask(ctx, func(id string) (cio.IO, error) {
-		// Pass FIFO files, but don't create the readers.
-		return io, nil
-	})
-	require.NoError(t, err, "failed to create task for container %s", c.ID())
-	defer task1.Delete(ctx)
+	for _, tc := range testcases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			name := testNameToVMID(t.Name())
 
-	err = task1.Start(ctx)
-	require.NoError(t, err, "failed to start task for container %s", c.ID())
+			c, err := client.NewContainer(ctx,
+				"container-"+name,
+				containerd.WithSnapshotter(defaultSnapshotterName),
+				containerd.WithNewSnapshot("snapshot-"+name, image),
+				containerd.WithNewSpec(oci.WithProcessArgs("/bin/cat")),
+			)
+			require.NoError(t, err)
 
-	// Directly reading/writing bytes to make sure "cat" is working.
-	input := "line1\n"
-	io.Stdin.Write([]byte(input))
+			io, err := tc.newIO(ctx, name)
+			require.NoError(t, err)
 
-	output := make([]byte, len(input))
-	io.Stdout.Read(output)
-	assert.Equal(t, input, string(output))
+			t1, err := c.NewTask(ctx, func(id string) (cio.IO, error) {
+				return io, nil
+			})
+			require.NoError(t, err)
 
-	c, err = client.LoadContainer(ctx, "container-"+vmID)
-	require.NoError(t, err)
+			ch, err := t1.Wait(ctx)
+			require.NoError(t, err)
 
-	var stderr, stdout bytes.Buffer
-	task2, err := c.Task(
-		ctx,
-		cio.NewAttach(cio.WithStreams(bytes.NewBufferString("line2\n"), &stdout, &stderr)),
-	)
-	require.NoError(t, err, "failed to load the task")
+			err = t1.Start(ctx)
+			require.NoError(t, err)
 
-	assert.Equal(t, task1.ID(), task2.ID(), "task1 and task2 are pointing the same task")
+			stdin := bytes.NewBufferString("hello\n")
+			var stdout bytes.Buffer
+			t2, err := c.Task(
+				ctx,
+				cio.NewAttach(cio.WithStreams(stdin, &stdout, nil)),
+			)
+			require.NoError(t, err)
+			assert.Equal(t, t1.ID(), t2.ID())
 
-	ch, err := task2.Wait(ctx)
-	require.NoError(t, err)
+			err = io.Close()
+			assert.NoError(t, err)
 
-	err = task2.CloseIO(ctx, containerd.WithStdinCloser)
-	require.NoError(t, err)
+			err = t2.CloseIO(ctx, containerd.WithStdinCloser)
+			assert.NoError(t, err)
 
-	<-ch
+			<-ch
 
-	assert.Equal(t, "", stderr.String(), "stderr")
-	assert.Equal(t, "line2\n", stdout.String(), "stdout")
+			_, err = t2.Delete(ctx)
+			require.NoError(t, err)
+
+			assert.Equal(t, tc.expected, stdout.String())
+		})
+	}
 }

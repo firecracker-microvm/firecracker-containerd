@@ -2012,3 +2012,77 @@ func TestCreateVM_Isolated(t *testing.T) {
 		})
 	}
 }
+
+func TestAttach_Isolated(t *testing.T) {
+	prepareIntegTest(t)
+
+	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	defer client.Close()
+
+	ctx := namespaces.WithNamespace(context.Background(), "default")
+
+	image, err := alpineImage(ctx, client, defaultSnapshotterName)
+	require.NoError(t, err, "failed to get alpine image")
+
+	vmID := testNameToVMID(t.Name())
+
+	c, err := client.NewContainer(ctx,
+		"container-"+vmID,
+		containerd.WithSnapshotter(defaultSnapshotterName),
+		containerd.WithNewSnapshot("snapshot-"+vmID, image),
+		containerd.WithNewSpec(oci.WithProcessArgs(
+			"/bin/cat",
+		)),
+	)
+	require.NoError(t, err)
+
+	// cio.NewCreator creates FIFOs and *the readers* implicitly. Use cio.NewDirectIO() to
+	// only create FIFOs.
+	fifos, err := cio.NewFIFOSetInDir("", t.Name(), false)
+	require.NoError(t, err)
+
+	io, err := cio.NewDirectIO(ctx, fifos)
+	require.NoError(t, err)
+
+	task1, err := c.NewTask(ctx, func(id string) (cio.IO, error) {
+		// Pass FIFO files, but don't create the readers.
+		return io, nil
+	})
+	require.NoError(t, err, "failed to create task for container %s", c.ID())
+	defer task1.Delete(ctx)
+
+	err = task1.Start(ctx)
+	require.NoError(t, err, "failed to start task for container %s", c.ID())
+
+	// Directly reading/writing bytes to make sure "cat" is working.
+	input := "line1\n"
+	io.Stdin.Write([]byte(input))
+
+	output := make([]byte, len(input))
+	io.Stdout.Read(output)
+	assert.Equal(t, input, string(output))
+
+	c, err = client.LoadContainer(ctx, "container-"+vmID)
+	require.NoError(t, err)
+
+	var stderr, stdout bytes.Buffer
+	task2, err := c.Task(
+		ctx,
+		cio.NewAttach(cio.WithStreams(bytes.NewBufferString("line2\n"), &stdout, &stderr)),
+	)
+	require.NoError(t, err, "failed to load the task")
+
+	assert.Equal(t, task1.ID(), task2.ID(), "task1 and task2 are pointing the same task")
+
+	ch, err := task2.Wait(ctx)
+	require.NoError(t, err)
+
+	err = task2.CloseIO(ctx, containerd.WithStdinCloser)
+	require.NoError(t, err)
+
+	<-ch
+
+	assert.Equal(t, "", stderr.String(), "stderr")
+	assert.Equal(t, "line2\n", stdout.String(), "stdout")
+}

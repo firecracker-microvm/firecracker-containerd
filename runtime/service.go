@@ -465,9 +465,7 @@ func (s *service) CreateVM(requestCtx context.Context, request *proto.CreateVMRe
 	// If we failed to create the VM, we have no point in existing anymore, so shutdown
 	if err != nil {
 		s.shimCancel()
-
 		s.logger.WithError(err).Error("failed to create VM")
-
 		if errors.Cause(err) == context.DeadlineExceeded {
 			return nil, status.Errorf(codes.DeadlineExceeded, "VM %q didn't start within %s: %s", request.VMID, timeout, err)
 		}
@@ -481,7 +479,6 @@ func (s *service) CreateVM(requestCtx context.Context, request *proto.CreateVMRe
 	}
 
 	go s.monitorVMExit()
-
 	// let all the other methods know that the VM is ready for tasks
 	close(s.vmReady)
 
@@ -527,6 +524,15 @@ func (s *service) createVM(requestCtx context.Context, request *proto.CreateVMRe
 	if err != nil {
 		return errors.Wrap(err, "failed to create jailer")
 	}
+
+	defer func() {
+		// in the event of an error, we should stop the VM
+		if err != nil {
+			if e := s.jailer.Stop(true); e != nil {
+				s.logger.WithError(e).Debug("failed to stop firecracker")
+			}
+		}
+	}()
 
 	s.machineConfig, err = s.buildVMConfiguration(request)
 	if err != nil {

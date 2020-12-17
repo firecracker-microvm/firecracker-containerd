@@ -196,6 +196,10 @@ ROOTFS_SLOW_REBOOT_INSTALLPATH=$(FIRECRACKER_CONTAINERD_RUNTIME_DIR)/rootfs-slow
 $(ROOTFS_SLOW_REBOOT_INSTALLPATH): tools/image-builder/rootfs-slow-reboot.img $(FIRECRACKER_CONTAINERD_RUNTIME_DIR)
 	install -D -o root -g root -m400 $< $@
 
+ROOTFS_NO_AGENT_INSTALLPATH=$(FIRECRACKER_CONTAINERD_RUNTIME_DIR)/rootfs-no-agent.img
+$(ROOTFS_NO_AGENT_INSTALLPATH): tools/image-builder/rootfs-no-agent.img $(FIRECRACKER_CONTAINERD_RUNTIME_DIR)
+	install -D -o root -g root -m400 $< $@
+
 .PHONY: default-vmlinux
 default-vmlinux: $(DEFAULT_VMLINUX_NAME)
 
@@ -209,7 +213,7 @@ install-default-rootfs: $(DEFAULT_ROOTFS_INSTALLPATH)
 install-default-runc-jailer-config: $(DEFAULT_RUNC_JAILER_CONFIG_INSTALLPATH)
 
 .PHONY: install-test-rootfs
-install-test-rootfs: $(ROOTFS_SLOW_BOOT_INSTALLPATH) $(ROOTFS_SLOW_REBOOT_INSTALLPATH)
+install-test-rootfs: $(ROOTFS_SLOW_BOOT_INSTALLPATH) $(ROOTFS_SLOW_REBOOT_INSTALLPATH) $(ROOTFS_NO_AGENT_INSTALLPATH)
 
 ##########################
 # CNI Network

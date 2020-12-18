@@ -2031,3 +2031,98 @@ func TestCreateVM_Isolated(t *testing.T) {
 		})
 	}
 }
+
+func TestAttach_Isolated(t *testing.T) {
+	prepareIntegTest(t)
+
+	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	defer client.Close()
+
+	ctx := namespaces.WithNamespace(context.Background(), "default")
+
+	image, err := alpineImage(ctx, client, defaultSnapshotterName)
+	require.NoError(t, err, "failed to get alpine image")
+
+	testcases := []struct {
+		name     string
+		newIO    func(context.Context, string) (cio.IO, error)
+		expected string
+	}{
+		{
+			name: "attach",
+			newIO: func(ctx context.Context, id string) (cio.IO, error) {
+				set, err := cio.NewFIFOSetInDir("", id, false)
+				if err != nil {
+					return nil, err
+				}
+
+				return cio.NewDirectIO(ctx, set)
+			},
+			expected: "hello\n",
+		},
+		{
+			name: "null io",
+
+			// firecracker-containerd doesn't create IO Proxy objects in this case.
+			newIO: func(ctx context.Context, id string) (cio.IO, error) {
+				return cio.NullIO(id)
+			},
+
+			// So, attaching new IOs doesn't work.
+			// While it looks odd, containerd's v2 shim has the same behavior.
+			expected: "",
+		},
+	}
+
+	for _, tc := range testcases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			name := testNameToVMID(t.Name())
+
+			c, err := client.NewContainer(ctx,
+				"container-"+name,
+				containerd.WithSnapshotter(defaultSnapshotterName),
+				containerd.WithNewSnapshot("snapshot-"+name, image),
+				containerd.WithNewSpec(oci.WithProcessArgs("/bin/cat")),
+			)
+			require.NoError(t, err)
+
+			io, err := tc.newIO(ctx, name)
+			require.NoError(t, err)
+
+			t1, err := c.NewTask(ctx, func(id string) (cio.IO, error) {
+				return io, nil
+			})
+			require.NoError(t, err)
+
+			ch, err := t1.Wait(ctx)
+			require.NoError(t, err)
+
+			err = t1.Start(ctx)
+			require.NoError(t, err)
+
+			stdin := bytes.NewBufferString("hello\n")
+			var stdout bytes.Buffer
+			t2, err := c.Task(
+				ctx,
+				cio.NewAttach(cio.WithStreams(stdin, &stdout, nil)),
+			)
+			require.NoError(t, err)
+			assert.Equal(t, t1.ID(), t2.ID())
+
+			err = io.Close()
+			assert.NoError(t, err)
+
+			err = t2.CloseIO(ctx, containerd.WithStdinCloser)
+			assert.NoError(t, err)
+
+			<-ch
+
+			_, err = t2.Delete(ctx)
+			require.NoError(t, err)
+
+			assert.Equal(t, tc.expected, stdout.String())
+		})
+	}
+}

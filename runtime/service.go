@@ -32,6 +32,7 @@ import (
 	// secure randomness
 	"math/rand" // #nosec
 
+	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/events/exchange"
 	"github.com/containerd/containerd/log"
@@ -88,6 +89,10 @@ const (
 
 	// StopEventName is the topic published to when a VM stops
 	StopEventName = "/firecracker-vm/stop"
+
+	// taskExecID is a special exec ID that is pointing its task itself.
+	// While the constant is defined here, the convention is coming from containerd.
+	taskExecID = ""
 )
 
 var (
@@ -146,6 +151,10 @@ type service struct {
 	machineConfig    *firecracker.Config
 	vsockIOPortCount uint32
 	vsockPortMu      sync.Mutex
+
+	// fifos have stdio FIFOs containerd passed to the shim. The key is [taskID][execID].
+	fifos   map[string]map[string]cio.Config
+	fifosMu sync.Mutex
 }
 
 func shimOpts(shimCtx context.Context) (*shim.Opts, error) {
@@ -210,6 +219,7 @@ func NewService(shimCtx context.Context, id string, remotePublisher shim.Publish
 
 		vmReady: make(chan struct{}),
 		jailer:  newNoopJailer(shimCtx, logger, shimDir),
+		fifos:   make(map[string]map[string]cio.Config),
 	}
 
 	s.startEventForwarders(remotePublisher)
@@ -891,6 +901,39 @@ func (s *service) newIOProxy(logger *logrus.Entry, stdin, stdout, stderr string,
 	return ioConnectorSet, nil
 }
 
+func (s *service) addFIFOs(taskID, execID string, config cio.Config) error {
+	s.fifosMu.Lock()
+	defer s.fifosMu.Unlock()
+
+	_, exists := s.fifos[taskID]
+	if !exists {
+		s.fifos[taskID] = make(map[string]cio.Config)
+	}
+
+	value, exists := s.fifos[taskID][execID]
+	if exists {
+		return fmt.Errorf("failed to add FIFO files for task %q (exec=%q). There was %+v already", taskID, execID, value)
+	}
+	s.fifos[taskID][execID] = config
+	return nil
+}
+
+func (s *service) deleteFIFOs(taskID, execID string) error {
+	s.fifosMu.Lock()
+	defer s.fifosMu.Unlock()
+
+	_, exists := s.fifos[taskID][execID]
+	if !exists {
+		return fmt.Errorf("task %q (exec=%q) doesn't have corresponding FIFOs to delete", taskID, execID)
+	}
+	delete(s.fifos[taskID], execID)
+
+	if execID == taskExecID {
+		delete(s.fifos, taskID)
+	}
+	return nil
+}
+
 func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTaskRequest) (*taskAPI.CreateTaskResponse, error) {
 	logger := s.logger.WithField("task_id", request.ID)
 	defer logPanicAndDie(logger)
@@ -982,6 +1025,15 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 		return nil, err
 	}
 
+	err = s.addFIFOs(request.ID, taskExecID, cio.Config{
+		Stdin:  request.Stdin,
+		Stdout: request.Stdout,
+		Stderr: request.Stderr,
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	return resp, nil
 }
 
@@ -1004,6 +1056,11 @@ func (s *service) Delete(requestCtx context.Context, req *taskAPI.DeleteRequest)
 	logger.Debug("delete")
 
 	resp, err := s.taskManager.DeleteProcess(requestCtx, req, s.agentClient)
+	if err != nil {
+		return nil, err
+	}
+
+	err = s.deleteFIFOs(req.ID, req.ExecID)
 	if err != nil {
 		return nil, err
 	}
@@ -1069,6 +1126,16 @@ func (s *service) Exec(requestCtx context.Context, req *taskAPI.ExecProcessReque
 		return nil, err
 	}
 
+	err = s.addFIFOs(req.ID, req.ExecID, cio.Config{
+		Terminal: req.Terminal,
+		Stdin:    req.Stdin,
+		Stdout:   req.Stdout,
+		Stderr:   req.Stderr,
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	return resp, nil
 }
 
@@ -1094,6 +1161,14 @@ func (s *service) State(requestCtx context.Context, req *taskAPI.StateRequest) (
 	if err != nil {
 		return nil, err
 	}
+
+	// These fields are pointing files inside the VM.
+	// Replace them with the corresponding files on the host, so clients can access.
+	s.fifosMu.Lock()
+	defer s.fifosMu.Unlock()
+	resp.Stdin = s.fifos[req.ID][req.ExecID].Stdin
+	resp.Stdout = s.fifos[req.ID][req.ExecID].Stdout
+	resp.Stderr = s.fifos[req.ID][req.ExecID].Stderr
 
 	return resp, nil
 }

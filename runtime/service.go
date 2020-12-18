@@ -17,7 +17,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"net"
 	"os"
 	"runtime/debug"
@@ -63,6 +62,7 @@ import (
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	drivemount "github.com/firecracker-microvm/firecracker-containerd/proto/service/drivemount/ttrpc"
 	fccontrolTtrpc "github.com/firecracker-microvm/firecracker-containerd/proto/service/fccontrol/ttrpc"
+	"github.com/firecracker-microvm/firecracker-containerd/runtime/io"
 )
 
 func init() {
@@ -71,16 +71,14 @@ func init() {
 
 const (
 	defaultVsockPort = 10789
-	minVsockIOPort   = uint32(11000)
 
 	// vmReadyTimeout is used to control the time all requests wait a Go channel (vmReady) before calling
 	// Firecracker's API server. The channel is closed once the VM starts.
 	vmReadyTimeout = 5 * time.Second
 
-	defaultCreateVMTimeout     = 20 * time.Second
-	defaultStopVMTimeout       = 5 * time.Second
-	defaultShutdownTimeout     = 5 * time.Second
-	defaultVSockConnectTimeout = 5 * time.Second
+	defaultCreateVMTimeout = 20 * time.Second
+	defaultStopVMTimeout   = 5 * time.Second
+	defaultShutdownTimeout = 5 * time.Second
 
 	jailerStopTimeout = 3 * time.Second
 
@@ -89,10 +87,6 @@ const (
 
 	// StopEventName is the topic published to when a VM stops
 	StopEventName = "/firecracker-vm/stop"
-
-	// taskExecID is a special exec ID that is pointing its task itself.
-	// While the constant is defined here, the convention is coming from containerd.
-	taskExecID = ""
 )
 
 var (
@@ -147,14 +141,9 @@ type service struct {
 	cleanupErr  error
 	cleanupOnce sync.Once
 
-	machine          *firecracker.Machine
-	machineConfig    *firecracker.Config
-	vsockIOPortCount uint32
-	vsockPortMu      sync.Mutex
-
-	// fifos have stdio FIFOs containerd passed to the shim. The key is [taskID][execID].
-	fifos   map[string]map[string]cio.Config
-	fifosMu sync.Mutex
+	machine       *firecracker.Machine
+	machineConfig *firecracker.Config
+	ioManager     *io.Manager
 }
 
 func shimOpts(shimCtx context.Context) (*shim.Opts, error) {
@@ -207,6 +196,7 @@ func NewService(shimCtx context.Context, id string, remotePublisher shim.Publish
 		taskManager:   vm.NewTaskManager(shimCtx, logger),
 		eventExchange: exchange.NewExchange(),
 		namespace:     namespace,
+		ioManager:     io.NewManager(logger),
 
 		logger:     logger,
 		shimCtx:    shimCtx,
@@ -219,7 +209,6 @@ func NewService(shimCtx context.Context, id string, remotePublisher shim.Publish
 
 		vmReady: make(chan struct{}),
 		jailer:  newNoopJailer(shimCtx, logger, shimDir),
-		fifos:   make(map[string]map[string]cio.Config),
 	}
 
 	s.startEventForwarders(remotePublisher)
@@ -399,7 +388,7 @@ func logPanicAndDie(logger *logrus.Entry) {
 	}
 }
 
-func (s *service) generateExtraData(jsonBytes []byte, options *ptypes.Any) (*proto.ExtraData, error) {
+func (s *service) generateExtraData(jsonBytes []byte, options *ptypes.Any) proto.ExtraData {
 	var opts *ptypes.Any
 	if options != nil {
 		// Copy values of existing options over
@@ -411,30 +400,7 @@ func (s *service) generateExtraData(jsonBytes []byte, options *ptypes.Any) (*pro
 		}
 	}
 
-	return &proto.ExtraData{
-		JsonSpec:    jsonBytes,
-		RuncOptions: opts,
-		StdinPort:   s.nextVSockPort(),
-		StdoutPort:  s.nextVSockPort(),
-		StderrPort:  s.nextVSockPort(),
-	}, nil
-}
-
-// assumes caller has s.startVMMutex
-func (s *service) nextVSockPort() uint32 {
-	s.vsockPortMu.Lock()
-	defer s.vsockPortMu.Unlock()
-
-	port := minVsockIOPort + s.vsockIOPortCount
-	if port == math.MaxUint32 {
-		// given we use 3 ports per container, there would need to
-		// be about 1431652098 containers spawned in this VM for
-		// this to actually happen in practice.
-		panic("overflow of vsock ports")
-	}
-
-	s.vsockIOPortCount++
-	return port
+	return s.ioManager.ReservePorts(proto.ExtraData{JsonSpec: jsonBytes, RuncOptions: opts})
 }
 
 func (s *service) waitVMReady() error {
@@ -861,79 +827,6 @@ func (s *service) buildRootDrive(req *proto.CreateVMRequest) []models.Drive {
 	return builder.Build()
 }
 
-func (s *service) newIOProxy(logger *logrus.Entry, stdin, stdout, stderr string, extraData *proto.ExtraData) (vm.IOProxy, error) {
-	var ioConnectorSet vm.IOProxy
-
-	relVSockPath, err := s.jailer.JailPath().FirecrackerVSockRelPath()
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to get relative path to firecracker vsock")
-	}
-
-	if vm.IsAgentOnlyIO(stdout, logger) {
-		ioConnectorSet = vm.NewNullIOProxy()
-	} else {
-		var stdinConnectorPair *vm.IOConnectorPair
-		if stdin != "" {
-			stdinConnectorPair = &vm.IOConnectorPair{
-				ReadConnector:  vm.ReadFIFOConnector(stdin),
-				WriteConnector: vm.VSockDialConnector(defaultVSockConnectTimeout, relVSockPath, extraData.StdinPort),
-			}
-		}
-
-		var stdoutConnectorPair *vm.IOConnectorPair
-		if stdout != "" {
-			stdoutConnectorPair = &vm.IOConnectorPair{
-				ReadConnector:  vm.VSockDialConnector(defaultVSockConnectTimeout, relVSockPath, extraData.StdoutPort),
-				WriteConnector: vm.WriteFIFOConnector(stdout),
-			}
-		}
-
-		var stderrConnectorPair *vm.IOConnectorPair
-		if stderr != "" {
-			stderrConnectorPair = &vm.IOConnectorPair{
-				ReadConnector:  vm.VSockDialConnector(defaultVSockConnectTimeout, relVSockPath, extraData.StderrPort),
-				WriteConnector: vm.WriteFIFOConnector(stderr),
-			}
-		}
-
-		ioConnectorSet = vm.NewIOConnectorProxy(stdinConnectorPair, stdoutConnectorPair, stderrConnectorPair)
-	}
-	return ioConnectorSet, nil
-}
-
-func (s *service) addFIFOs(taskID, execID string, config cio.Config) error {
-	s.fifosMu.Lock()
-	defer s.fifosMu.Unlock()
-
-	_, exists := s.fifos[taskID]
-	if !exists {
-		s.fifos[taskID] = make(map[string]cio.Config)
-	}
-
-	value, exists := s.fifos[taskID][execID]
-	if exists {
-		return fmt.Errorf("failed to add FIFO files for task %q (exec=%q). There was %+v already", taskID, execID, value)
-	}
-	s.fifos[taskID][execID] = config
-	return nil
-}
-
-func (s *service) deleteFIFOs(taskID, execID string) error {
-	s.fifosMu.Lock()
-	defer s.fifosMu.Unlock()
-
-	_, exists := s.fifos[taskID][execID]
-	if !exists {
-		return fmt.Errorf("task %q (exec=%q) doesn't have corresponding FIFOs to delete", taskID, execID)
-	}
-	delete(s.fifos[taskID], execID)
-
-	if execID == taskExecID {
-		delete(s.fifos, taskID)
-	}
-	return nil
-}
-
 func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTaskRequest) (*taskAPI.CreateTaskResponse, error) {
 	logger := s.logger.WithField("task_id", request.ID)
 	defer logPanicAndDie(logger)
@@ -990,23 +883,17 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 		return nil, err
 	}
 
-	extraData, err := s.generateExtraData(ociConfigBytes, request.Options)
-	if err != nil {
-		err = errors.Wrap(err, "failed to generate extra data")
-		logger.WithError(err).Error()
-		return nil, err
-	}
-
-	request.Options, err = ptypes.MarshalAny(extraData)
+	extraData := s.generateExtraData(ociConfigBytes, request.Options)
+	request.Options, err = ptypes.MarshalAny(&extraData)
 	if err != nil {
 		err = errors.Wrap(err, "failed to marshal extra data")
 		logger.WithError(err).Error()
 		return nil, err
 	}
 
-	ioConnectorSet, err := s.newIOProxy(logger, request.Stdin, request.Stdout, request.Stderr, extraData)
+	relVSockPath, err := s.jailer.JailPath().FirecrackerVSockRelPath()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "failed to get relative path to firecracker vsock")
 	}
 
 	// override the request with the bundle dir that should be used inside the VM
@@ -1018,6 +905,12 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 	// requirement of patching stub drives
 	request.Rootfs = nil
 
+	config := cio.Config{
+		Stdin:  request.Stdin,
+		Stdout: request.Stdout,
+		Stderr: request.Stderr,
+	}
+	ioConnectorSet := s.ioManager.NewProxy(relVSockPath, config, extraData)
 	resp, err := s.taskManager.CreateTask(requestCtx, request, s.agentClient, ioConnectorSet)
 	if err != nil {
 		err = errors.Wrap(err, "failed to create task")
@@ -1025,11 +918,7 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 		return nil, err
 	}
 
-	err = s.addFIFOs(request.ID, taskExecID, cio.Config{
-		Stdin:  request.Stdin,
-		Stdout: request.Stdout,
-		Stderr: request.Stderr,
-	})
+	err = s.ioManager.Reserve(request.ID, io.TaskExecID, config)
 	if err != nil {
 		return nil, err
 	}
@@ -1060,7 +949,7 @@ func (s *service) Delete(requestCtx context.Context, req *taskAPI.DeleteRequest)
 		return nil, err
 	}
 
-	err = s.deleteFIFOs(req.ID, req.ExecID)
+	err = s.ioManager.Release(req.ID, req.ExecID)
 	if err != nil {
 		return nil, err
 	}
@@ -1102,36 +991,33 @@ func (s *service) Exec(requestCtx context.Context, req *taskAPI.ExecProcessReque
 	logger.Debug("exec")
 
 	// no OCI config bytes to provide for Exec, just leave those fields empty
-	extraData, err := s.generateExtraData(nil, req.Spec)
-	if err != nil {
-		err = errors.Wrap(err, "failed to generate extra data")
-		logger.WithError(err).Error()
-		return nil, err
-	}
-
-	req.Spec, err = ptypes.MarshalAny(extraData)
+	var err error
+	extraData := s.generateExtraData(nil, req.Spec)
+	req.Spec, err = ptypes.MarshalAny(&extraData)
 	if err != nil {
 		err = errors.Wrap(err, "failed to marshal extra data")
 		logger.WithError(err).Error()
 		return nil, err
 	}
 
-	ioConnectorSet, err := s.newIOProxy(logger, req.Stdin, req.Stdout, req.Stderr, extraData)
+	relVSockPath, err := s.jailer.JailPath().FirecrackerVSockRelPath()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "failed to get relative path to firecracker vsock")
 	}
 
+	config := cio.Config{
+		Terminal: req.Terminal,
+		Stdin:    req.Stdin,
+		Stdout:   req.Stdout,
+		Stderr:   req.Stderr,
+	}
+	ioConnectorSet := s.ioManager.NewProxy(relVSockPath, config, extraData)
 	resp, err := s.taskManager.ExecProcess(requestCtx, req, s.agentClient, ioConnectorSet)
 	if err != nil {
 		return nil, err
 	}
 
-	err = s.addFIFOs(req.ID, req.ExecID, cio.Config{
-		Terminal: req.Terminal,
-		Stdin:    req.Stdin,
-		Stdout:   req.Stdout,
-		Stderr:   req.Stderr,
-	})
+	err = s.ioManager.Reserve(req.ID, req.ExecID, config)
 	if err != nil {
 		return nil, err
 	}
@@ -1164,11 +1050,13 @@ func (s *service) State(requestCtx context.Context, req *taskAPI.StateRequest) (
 
 	// These fields are pointing files inside the VM.
 	// Replace them with the corresponding files on the host, so clients can access.
-	s.fifosMu.Lock()
-	defer s.fifosMu.Unlock()
-	resp.Stdin = s.fifos[req.ID][req.ExecID].Stdin
-	resp.Stdout = s.fifos[req.ID][req.ExecID].Stdout
-	resp.Stderr = s.fifos[req.ID][req.ExecID].Stderr
+	c, err := s.ioManager.Find(req.ID, req.ExecID)
+	if err != nil {
+		return nil, err
+	}
+	resp.Stdin = c.Stdin
+	resp.Stdout = c.Stdout
+	resp.Stderr = c.Stderr
 
 	return resp, nil
 }

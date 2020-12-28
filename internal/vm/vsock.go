@@ -38,7 +38,9 @@ const (
 // path and port. It will retry connect attempts if a temporary error is encountered (up
 // to a fixed timeout) or the provided request is canceled.
 func VSockDial(ctx context.Context, logger *logrus.Entry, udsPath string, port uint32) (net.Conn, error) {
-	tickerCh := time.NewTicker(vsockRetryInterval).C
+	ticker := time.NewTicker(vsockRetryInterval)
+	defer ticker.Stop()
+	tickerCh := ticker.C
 	var attemptCount int
 	for {
 		attemptCount++
@@ -92,7 +94,9 @@ func (l vsockListener) Accept() (net.Conn, error) {
 	defer cancel()
 
 	var attemptCount int
-	tickerCh := time.NewTicker(vsockRetryInterval).C
+	ticker := time.NewTicker(vsockRetryInterval)
+	defer ticker.Stop()
+	tickerCh := ticker.C
 	for {
 		attemptCount++
 		logger := l.logger.WithField("attempt", attemptCount)

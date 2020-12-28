@@ -30,7 +30,9 @@ func WaitForProcessToExist(
 	queryInterval time.Duration,
 	matcher func(context.Context, *process.Process) (bool, error),
 ) ([]*process.Process, error) {
-	for range time.NewTicker(queryInterval).C {
+	ticker := time.NewTicker(queryInterval)
+	defer ticker.Stop()
+	for range ticker.C {
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -63,7 +65,9 @@ func WaitForProcessToExist(
 // WaitForPidToExit queries running processes every `queryInterval` duration, blocking until the provided pid is found
 // to not exist or the context is canceled.
 func WaitForPidToExit(ctx context.Context, queryInterval time.Duration, pid int32) error {
-	for range time.NewTicker(queryInterval).C {
+	ticker := time.NewTicker(queryInterval)
+	defer ticker.Stop()
+	for range ticker.C {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -138,7 +142,9 @@ func sampleCPUTimes(ctx context.Context, sampleInterval time.Duration) <-chan *c
 		defer close(returnCh)
 
 		var index int
-		for range time.NewTicker(sampleInterval).C {
+		ticker := time.NewTicker(sampleInterval)
+		defer ticker.Stop()
+		for range ticker.C {
 			select {
 			case <-ctx.Done():
 				return

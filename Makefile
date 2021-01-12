@@ -35,7 +35,6 @@ export GO_CACHE_VOLUME_NAME?=gocache
 FIRECRACKER_DIR=$(SUBMODULES)/firecracker
 FIRECRACKER_TARGET?=x86_64-unknown-linux-musl
 FIRECRACKER_BIN=$(FIRECRACKER_DIR)/build/cargo_target/$(FIRECRACKER_TARGET)/release/firecracker
-JAILER_BIN=$(FIRECRACKER_DIR)/build/cargo_target/$(FIRECRACKER_TARGET)/release/jailer
 FIRECRACKER_BUILDER_NAME?=firecracker-builder
 CARGO_CACHE_VOLUME_NAME?=cargocache
 
@@ -282,12 +281,11 @@ demo-network: install-cni-bins $(FCNET_CONFIG)
 # Firecracker submodule
 ##########################
 .PHONY: firecracker
-firecracker: $(FIRECRACKER_BIN) $(JAILER_BIN)
+firecracker: $(FIRECRACKER_BIN)
 
 .PHONY: install-firecracker
 install-firecracker: firecracker
 	install -D -o root -g root -m755 -t $(INSTALLROOT)/bin $(FIRECRACKER_BIN)
-	install -D -o root -g root -m755 -t $(INSTALLROOT)/bin $(JAILER_BIN)
 
 $(FIRECRACKER_DIR)/Cargo.toml:
 	git submodule update --init --recursive $(FIRECRACKER_DIR)
@@ -299,7 +297,7 @@ tools/firecracker-builder-stamp: tools/docker/Dockerfile.firecracker-builder
 		tools/docker
 	touch $@
 
-$(FIRECRACKER_BIN) $(JAILER_BIN): $(FIRECRACKER_DIR)/Cargo.toml tools/firecracker-builder-stamp
+$(FIRECRACKER_BIN): $(FIRECRACKER_DIR)/Cargo.toml tools/firecracker-builder-stamp
 	docker run --rm -it --user $(UID) \
 		--volume $(CURDIR)/$(FIRECRACKER_DIR):/src \
 		--volume $(CARGO_CACHE_VOLUME_NAME):/usr/local/cargo/registry \
@@ -310,7 +308,7 @@ $(FIRECRACKER_BIN) $(JAILER_BIN): $(FIRECRACKER_DIR)/Cargo.toml tools/firecracke
 
 .PHONY: firecracker-clean
 firecracker-clean:
-	rm -f $(FIRECRACKER_BIN) $(JAILER_BIN)
+	rm -f $(FIRECRACKER_BIN)
 	- docker run --rm -it --user $(UID) \
 		--volume $(CURDIR)/$(FIRECRACKER_DIR):/src \
 		-e HOME=/tmp \

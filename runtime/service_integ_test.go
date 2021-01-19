@@ -2032,6 +2032,93 @@ func TestCreateVM_Isolated(t *testing.T) {
 	}
 }
 
+func TestPauseResumeVM_Isolated(t *testing.T) {
+	prepareIntegTest(t)
+	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	defer client.Close()
+
+	ctx := namespaces.WithNamespace(context.Background(), "default")
+
+	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
+	require.NoError(t, err, "failed to create ttrpc client")
+
+	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
+
+	type subtest struct {
+		name     string
+		request  proto.CreateVMRequest
+		validate func(*testing.T, error)
+		stopVM   bool
+	}
+
+	subtests := []subtest{
+		{
+			name:    "Happy Case",
+			request: proto.CreateVMRequest{},
+			validate: func(t *testing.T, err error) {
+				require.NoError(t, err)
+			},
+			stopVM: true,
+		},
+	}
+
+	runTest := func(t *testing.T, request proto.CreateVMRequest, s subtest) {
+		vmID := testNameToVMID(t.Name())
+
+		tempDir, err := ioutil.TempDir("", vmID)
+		require.NoError(t, err)
+		defer os.RemoveAll(tempDir)
+
+		logFile := filepath.Join(tempDir, "log.fifo")
+		metricsFile := filepath.Join(tempDir, "metrics.fifo")
+
+		request.VMID = vmID
+		request.LogFifoPath = logFile
+		request.MetricsFifoPath = metricsFile
+
+		resp, createVMErr := fcClient.CreateVM(ctx, &request)
+
+		// Even CreateVM fails, the log file and the metrics file must have some data.
+		requireNonEmptyFifo(t, logFile)
+		requireNonEmptyFifo(t, metricsFile)
+
+		// Some test cases are expected to have an error, some are not.
+		s.validate(t, createVMErr)
+
+		_, errPause := fcClient.PauseVM(ctx, &proto.PauseVMRequest{VMID: request.VMID})
+		require.NoError(t, errPause)
+
+		_, errResume := fcClient.ResumeVM(ctx, &proto.ResumeVMRequest{VMID: request.VMID})
+		require.NoError(t, errResume)
+
+		if createVMErr == nil && s.stopVM {
+			// Ensure the response fields are populated correctly
+			assert.Equal(t, request.VMID, resp.VMID)
+
+			_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: request.VMID})
+			require.Equal(t, status.Code(err), codes.OK)
+		}
+	}
+
+	for _, _s := range subtests {
+		s := _s
+		request := s.request
+		t.Run(s.name, func(t *testing.T) {
+			runTest(t, request, s)
+		})
+
+		requestWithJailer := s.request
+		requestWithJailer.JailerConfig = &proto.JailerConfig{
+			UID: 30000,
+			GID: 30000,
+		}
+		t.Run(s.name+"/Jailer", func(t *testing.T) {
+			runTest(t, requestWithJailer, s)
+		})
+	}
+}
+
 func TestAttach_Isolated(t *testing.T) {
 	prepareIntegTest(t)
 

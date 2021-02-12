@@ -194,7 +194,7 @@ func vsockConnectMsg(port uint32) string {
 func tryConnect(logger *logrus.Entry, udsPath string, port uint32) (net.Conn, error) {
 	conn, err := net.DialTimeout("unix", udsPath, unixDialTimeout)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "failed to dial %q within %s", udsPath, unixDialTimeout)
 	}
 
 	defer func() {
@@ -207,14 +207,19 @@ func tryConnect(logger *logrus.Entry, udsPath string, port uint32) (net.Conn, er
 		}
 	}()
 
-	err = tryConnWrite(conn, vsockConnectMsg(port), vsockConnectMsgTimeout)
+	msg := vsockConnectMsg(port)
+	err = tryConnWrite(conn, msg, vsockConnectMsgTimeout)
 	if err != nil {
-		return nil, vsockConnectMsgError{cause: err}
+		return nil, vsockConnectMsgError{
+			cause: errors.Wrapf(err, `failed to write %q within %s`, msg, vsockConnectMsgTimeout),
+		}
 	}
 
 	line, err := tryConnReadUntil(conn, '\n', vsockAckMsgTimeout)
 	if err != nil {
-		return nil, vsockAckError{cause: err}
+		return nil, vsockAckError{
+			cause: errors.Wrapf(err, `failed to read "OK <port>" within %s`, vsockAckMsgTimeout),
+		}
 	}
 
 	// The line would be "OK <assigned_hostside_port>\n", but we don't use the hostside port here.

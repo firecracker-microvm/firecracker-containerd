@@ -33,9 +33,11 @@ jobs:
           # While DCO check (on Makefile) checks latest 20 commits,
           # the checkout action automatically creates a merge commit
           # for merging "master" into a pull request branch.
-          # So we need to fetch 21 commits (including the merge commit)
-          # to have 20 actual commits from a pull request.
-          fetch-depth: 21
+          # In addition to that, Git cannot recognize merge commits when
+          # one of the parents is missing.
+          # So, we will fetch 30 commits just in case to have
+          # 20 actual commits with associated merged commits.
+          fetch-depth: 30
       - uses: actions/setup-go@v1
         with:
           go-version: ${{ matrix.go }}

@@ -2032,8 +2032,9 @@ func TestCreateVM_Isolated(t *testing.T) {
 	}
 }
 
-func TestPauseResumeVM_Isolated(t *testing.T) {
+func TestPauseResume(t *testing.T) {
 	prepareIntegTest(t)
+
 	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
 	defer client.Close()
@@ -2045,25 +2046,74 @@ func TestPauseResumeVM_Isolated(t *testing.T) {
 
 	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
 
-	type subtest struct {
-		name     string
-		request  proto.CreateVMRequest
-		validate func(*testing.T, error)
-		stopVM   bool
-	}
-
-	subtests := []subtest{
+	subtests := []struct {
+		name    string
+		request *proto.CreateVMRequest
+		state   func(ctx context.Context, resp *proto.CreateVMResponse)
+	}{
 		{
-			name:    "Happy Case",
-			request: proto.CreateVMRequest{},
-			validate: func(t *testing.T, err error) {
+			name:    "PauseVM",
+			request: &proto.CreateVMRequest{},
+			state: func(ctx context.Context, resp *proto.CreateVMResponse) {
+				_, err := fcClient.PauseVM(ctx, &proto.PauseVMRequest{VMID: resp.VMID})
 				require.NoError(t, err)
 			},
-			stopVM: true,
+		},
+		{
+			name:    "ResumeVM",
+			request: &proto.CreateVMRequest{},
+			state: func(ctx context.Context, resp *proto.CreateVMResponse) {
+				_, err := fcClient.ResumeVM(ctx, &proto.ResumeVMRequest{VMID: resp.VMID})
+				require.NoError(t, err)
+			},
+		},
+		{
+			name:    "Consecutive PauseVM",
+			request: &proto.CreateVMRequest{},
+			state: func(ctx context.Context, resp *proto.CreateVMResponse) {
+				_, err := fcClient.PauseVM(ctx, &proto.PauseVMRequest{VMID: resp.VMID})
+				require.NoError(t, err)
+
+				_, err = fcClient.PauseVM(ctx, &proto.PauseVMRequest{VMID: resp.VMID})
+				require.NoError(t, err)
+			},
+		},
+		{
+			name:    "Consecutive ResumeVM",
+			request: &proto.CreateVMRequest{},
+			state: func(ctx context.Context, resp *proto.CreateVMResponse) {
+				_, err := fcClient.ResumeVM(ctx, &proto.ResumeVMRequest{VMID: resp.VMID})
+				require.NoError(t, err)
+
+				_, err = fcClient.ResumeVM(ctx, &proto.ResumeVMRequest{VMID: resp.VMID})
+				require.NoError(t, err)
+			},
+		},
+		{
+			name:    "PauseResume",
+			request: &proto.CreateVMRequest{},
+			state: func(ctx context.Context, resp *proto.CreateVMResponse) {
+				_, err := fcClient.PauseVM(ctx, &proto.PauseVMRequest{VMID: resp.VMID})
+				require.NoError(t, err)
+
+				_, err = fcClient.ResumeVM(ctx, &proto.ResumeVMRequest{VMID: resp.VMID})
+				require.NoError(t, err)
+			},
+		},
+		{
+			name:    "ResumePause",
+			request: &proto.CreateVMRequest{},
+			state: func(ctx context.Context, resp *proto.CreateVMResponse) {
+				_, err := fcClient.ResumeVM(ctx, &proto.ResumeVMRequest{VMID: resp.VMID})
+				require.NoError(t, err)
+
+				_, err = fcClient.PauseVM(ctx, &proto.PauseVMRequest{VMID: resp.VMID})
+				require.NoError(t, err)
+			},
 		},
 	}
 
-	runTest := func(t *testing.T, request proto.CreateVMRequest, s subtest) {
+	runTest := func(t *testing.T, request *proto.CreateVMRequest, state func(ctx context.Context, resp *proto.CreateVMResponse)) {
 		vmID := testNameToVMID(t.Name())
 
 		tempDir, err := ioutil.TempDir("", vmID)
@@ -2077,48 +2127,44 @@ func TestPauseResumeVM_Isolated(t *testing.T) {
 		request.LogFifoPath = logFile
 		request.MetricsFifoPath = metricsFile
 
-		resp, createVMErr := fcClient.CreateVM(ctx, &request)
+		resp, createVMErr := fcClient.CreateVM(ctx, request)
 
 		// Even CreateVM fails, the log file and the metrics file must have some data.
 		requireNonEmptyFifo(t, logFile)
 		requireNonEmptyFifo(t, metricsFile)
 
-		// Some test cases are expected to have an error, some are not.
-		s.validate(t, createVMErr)
+		// Run test case
+		state(ctx, resp)
 
-		_, errPause := fcClient.PauseVM(ctx, &proto.PauseVMRequest{VMID: request.VMID})
-		require.NoError(t, errPause)
-
-		_, errResume := fcClient.ResumeVM(ctx, &proto.ResumeVMRequest{VMID: request.VMID})
-		require.NoError(t, errResume)
-
-		if createVMErr == nil && s.stopVM {
-			// Ensure the response fields are populated correctly
-			assert.Equal(t, request.VMID, resp.VMID)
-
-			_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: request.VMID})
-			require.Equal(t, status.Code(err), codes.OK)
+		// No VM to stop.
+		if createVMErr != nil {
+			return
 		}
+
+		// Ensure the response fields are populated correctly
+		assert.Equal(t, request.VMID, resp.VMID)
+
+		_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: request.VMID})
+		require.Equal(t, status.Code(err), codes.OK)
 	}
 
-	for _, _s := range subtests {
-		s := _s
-		request := s.request
-		t.Run(s.name, func(t *testing.T) {
-			runTest(t, request, s)
+	for _, subtest := range subtests {
+		state := subtest.state
+		request := subtest.request
+		t.Run(subtest.name, func(t *testing.T) {
+			runTest(t, request, state)
 		})
 
-		requestWithJailer := s.request
+		requestWithJailer := subtest.request
 		requestWithJailer.JailerConfig = &proto.JailerConfig{
 			UID: 30000,
 			GID: 30000,
 		}
-		t.Run(s.name+"/Jailer", func(t *testing.T) {
-			runTest(t, requestWithJailer, s)
+		t.Run(subtest.name+"/Jailer", func(t *testing.T) {
+			runTest(t, requestWithJailer, state)
 		})
 	}
 }
-
 func TestAttach_Isolated(t *testing.T) {
 	prepareIntegTest(t)
 

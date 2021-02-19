@@ -240,7 +240,7 @@ $(FIREWALL_BIN):
 
 TC_REDIRECT_TAP_BIN?=$(BINPATH)/tc-redirect-tap
 $(TC_REDIRECT_TAP_BIN):
-	GOBIN=$(dir $@) go install github.com/firecracker-microvm/firecracker-go-sdk/cni/cmd/tc-redirect-tap
+	GOBIN=$(dir $@) go install github.com/awslabs/tc-redirect-tap/cmd/tc-redirect-tap
 
 TEST_BRIDGED_TAP_BIN?=$(BINPATH)/test-bridged-tap
 $(TEST_BRIDGED_TAP_BIN): $(shell find internal/cmd/test-bridged-tap -name *.go) $(GOMOD) $(GOSUM)

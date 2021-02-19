@@ -10,6 +10,12 @@ service Firecracker {
     // Runs new Firecracker VM instance
     rpc CreateVM(CreateVMRequest) returns (CreateVMResponse);
 
+    // Pauses a VM
+    rpc PauseVM(PauseVMRequest) returns (google.protobuf.Empty);
+
+    // Resumes a VM
+    rpc ResumeVM(ResumeVMRequest) returns (google.protobuf.Empty);
+
     // Stops existing Firecracker instance by VM ID
     rpc StopVM(StopVMRequest) returns (google.protobuf.Empty);
 

@@ -634,6 +634,42 @@ func (s *service) StopVM(requestCtx context.Context, request *proto.StopVMReques
 	return &empty.Empty{}, nil
 }
 
+// ResumeVM resumes a VM
+func (s *service) ResumeVM(ctx context.Context, req *proto.ResumeVMRequest) (*empty.Empty, error) {
+	defer logPanicAndDie(s.logger)
+
+	err := s.waitVMReady()
+	if err != nil {
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	if err := s.machine.ResumeVM(ctx); err != nil {
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	return &empty.Empty{}, nil
+}
+
+// PauseVM pauses a VM
+func (s *service) PauseVM(ctx context.Context, req *proto.PauseVMRequest) (*empty.Empty, error) {
+	defer logPanicAndDie(s.logger)
+
+	err := s.waitVMReady()
+	if err != nil {
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	if err := s.machine.PauseVM(ctx); err != nil {
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	return &empty.Empty{}, nil
+}
+
 // GetVMInfo returns metadata for the VM being managed by this shim. If the VM has not been created yet, this
 // method will wait for up to a hardcoded timeout for it to exist, returning an error if the timeout is reached.
 func (s *service) GetVMInfo(requestCtx context.Context, request *proto.GetVMInfoRequest) (*proto.GetVMInfoResponse, error) {

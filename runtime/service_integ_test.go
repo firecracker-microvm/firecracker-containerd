@@ -2032,6 +2032,139 @@ func TestCreateVM_Isolated(t *testing.T) {
 	}
 }
 
+func TestPauseResume(t *testing.T) {
+	prepareIntegTest(t)
+
+	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	defer client.Close()
+
+	ctx := namespaces.WithNamespace(context.Background(), "default")
+
+	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
+	require.NoError(t, err, "failed to create ttrpc client")
+
+	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
+
+	subtests := []struct {
+		name    string
+		request *proto.CreateVMRequest
+		state   func(ctx context.Context, resp *proto.CreateVMResponse)
+	}{
+		{
+			name:    "PauseVM",
+			request: &proto.CreateVMRequest{},
+			state: func(ctx context.Context, resp *proto.CreateVMResponse) {
+				_, err := fcClient.PauseVM(ctx, &proto.PauseVMRequest{VMID: resp.VMID})
+				require.NoError(t, err)
+			},
+		},
+		{
+			name:    "ResumeVM",
+			request: &proto.CreateVMRequest{},
+			state: func(ctx context.Context, resp *proto.CreateVMResponse) {
+				_, err := fcClient.ResumeVM(ctx, &proto.ResumeVMRequest{VMID: resp.VMID})
+				require.NoError(t, err)
+			},
+		},
+		{
+			name:    "Consecutive PauseVM",
+			request: &proto.CreateVMRequest{},
+			state: func(ctx context.Context, resp *proto.CreateVMResponse) {
+				_, err := fcClient.PauseVM(ctx, &proto.PauseVMRequest{VMID: resp.VMID})
+				require.NoError(t, err)
+
+				_, err = fcClient.PauseVM(ctx, &proto.PauseVMRequest{VMID: resp.VMID})
+				require.NoError(t, err)
+			},
+		},
+		{
+			name:    "Consecutive ResumeVM",
+			request: &proto.CreateVMRequest{},
+			state: func(ctx context.Context, resp *proto.CreateVMResponse) {
+				_, err := fcClient.ResumeVM(ctx, &proto.ResumeVMRequest{VMID: resp.VMID})
+				require.NoError(t, err)
+
+				_, err = fcClient.ResumeVM(ctx, &proto.ResumeVMRequest{VMID: resp.VMID})
+				require.NoError(t, err)
+			},
+		},
+		{
+			name:    "PauseResume",
+			request: &proto.CreateVMRequest{},
+			state: func(ctx context.Context, resp *proto.CreateVMResponse) {
+				_, err := fcClient.PauseVM(ctx, &proto.PauseVMRequest{VMID: resp.VMID})
+				require.NoError(t, err)
+
+				_, err = fcClient.ResumeVM(ctx, &proto.ResumeVMRequest{VMID: resp.VMID})
+				require.NoError(t, err)
+			},
+		},
+		{
+			name:    "ResumePause",
+			request: &proto.CreateVMRequest{},
+			state: func(ctx context.Context, resp *proto.CreateVMResponse) {
+				_, err := fcClient.ResumeVM(ctx, &proto.ResumeVMRequest{VMID: resp.VMID})
+				require.NoError(t, err)
+
+				_, err = fcClient.PauseVM(ctx, &proto.PauseVMRequest{VMID: resp.VMID})
+				require.NoError(t, err)
+			},
+		},
+	}
+
+	runTest := func(t *testing.T, request *proto.CreateVMRequest, state func(ctx context.Context, resp *proto.CreateVMResponse)) {
+		vmID := testNameToVMID(t.Name())
+
+		tempDir, err := ioutil.TempDir("", vmID)
+		require.NoError(t, err)
+		defer os.RemoveAll(tempDir)
+
+		logFile := filepath.Join(tempDir, "log.fifo")
+		metricsFile := filepath.Join(tempDir, "metrics.fifo")
+
+		request.VMID = vmID
+		request.LogFifoPath = logFile
+		request.MetricsFifoPath = metricsFile
+
+		resp, createVMErr := fcClient.CreateVM(ctx, request)
+
+		// Even CreateVM fails, the log file and the metrics file must have some data.
+		requireNonEmptyFifo(t, logFile)
+		requireNonEmptyFifo(t, metricsFile)
+
+		// Run test case
+		state(ctx, resp)
+
+		// No VM to stop.
+		if createVMErr != nil {
+			return
+		}
+
+		// Ensure the response fields are populated correctly
+		assert.Equal(t, request.VMID, resp.VMID)
+
+		_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: request.VMID})
+		require.Equal(t, status.Code(err), codes.OK)
+	}
+
+	for _, subtest := range subtests {
+		state := subtest.state
+		request := subtest.request
+		t.Run(subtest.name, func(t *testing.T) {
+			runTest(t, request, state)
+		})
+
+		requestWithJailer := subtest.request
+		requestWithJailer.JailerConfig = &proto.JailerConfig{
+			UID: 30000,
+			GID: 30000,
+		}
+		t.Run(subtest.name+"/Jailer", func(t *testing.T) {
+			runTest(t, requestWithJailer, state)
+		})
+	}
+}
 func TestAttach_Isolated(t *testing.T) {
 	prepareIntegTest(t)
 

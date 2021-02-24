@@ -8,9 +8,6 @@ implementing its interfaces and extending its APIs.
 
 firecracker-containerd implements the following containerd interfaces:
 
-* [snapshotter](https://github.com/containerd/containerd/blob/v1.2.6/snapshots/snapshotter.go#L116-L323):
-  Snapshotters provide the implementation of layer storage and union filesystems
-  for containerd containers
 * [V2 runtime](https://github.com/containerd/containerd/blob/v1.2.6/runtime/v2/task/shim.proto):
   Runtimes provide the implementation for configuring and running containerized
   processes.  The V2 runtime is a containerd-specific interface and is not
@@ -26,22 +23,6 @@ APIs.
 
 There are currently several components in this repository:
 
-* Two [snapshotter](../snapshotter)s
-  that create files used as block-devices for pass-through into the
-  microVM.  These snapshotters are used for providing the container image
-  to the microVM.  Both snapshotters run as out-of-process gRPC proxy plugins.
-  The [naive](../snapshotter/cmd/naive/README.md) snapshotter is a simple
-  proof-of-concept using flat files and copy-ahead; it is useful for debugging
-  and validating, and requires no setup.  The
-  [devmapper](../snapshotter/cmd/devmapper/README.md) snapshotter leverages the
-  [Linux device mapper](https://en.wikipedia.org/wiki/Device_mapper) framework
-  and [thin
-  provisioning](https://www.kernel.org/doc/Documentation/device-mapper/thin-provisioning.txt)
-  to deduplicate storage between layers and enable copy-on-write functionality.
-  The devmapper snapshotter has been [contributed to
-  containerd](https://github.com/containerd/containerd/pull/3022), and we expect
-  to remove the devmapper snapshotter source code from this repository in the
-  future.
 * A [control plugin](../firecracker-control) managing the lifecycle of the
   runtime and implementing our [control API](../proto/firecracker.proto) by
   proxying commands to the runtime.  The control plugin is compiled in to the
@@ -59,7 +40,7 @@ There are currently several components in this repository:
   container processes.  The agent invokes [runC](https://runc.io) via
   containerd's `containerd-shim-runc-v1` to create standard Linux containers
   inside the microVM.
-  
+
 A high-level diagram of the various components and their interactions can be
 seen below:
 

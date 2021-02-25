@@ -14,7 +14,7 @@
 # Set this to pass additional commandline flags to the go compiler, e.g. "make test EXTRAGOARGS=-v"
 EXTRAGOARGS:=
 
-SRC := $(shell find . -name '*.go')
+SOURCES := $(shell find ../../../config ../../../internal ../../../proto ../../ -name '*.go')
 GOMOD := $(shell go env GOMOD)
 GOSUM := $(GOMOD:.mod=.sum)
 REVISION=$(shell git rev-parse HEAD)
@@ -24,7 +24,7 @@ all: build
 
 build: firecracker-containerd firecracker-ctr
 
-firecracker-containerd: $(SRC) $(GOMOD) $(GOSUM)
+firecracker-containerd: $(SOURCES) $(GOMOD) $(GOSUM)
 	go build $(EXTRAGOARGS) \
 		-ldflags $(VERSION_LDFLAGS) -o firecracker-containerd
 

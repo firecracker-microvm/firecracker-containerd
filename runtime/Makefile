@@ -15,7 +15,7 @@
 EXTRAGOARGS?=
 NUMBER_OF_VMS?=
 
-SOURCES:=$(shell find . -name '*.go')
+SOURCES := $(shell find ../config ../eventbridge ../firecracker-control ../internal ../proto . -name '*.go')
 GOMOD := $(shell go env GOMOD)
 GOSUM := $(GOMOD:.mod=.sum)
 DOCKER_IMAGE_TAG?=latest

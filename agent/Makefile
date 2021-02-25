@@ -15,13 +15,13 @@ EXTRAGOARGS?=
 
 GOMOD := $(shell go env GOMOD)
 GOSUM := $(GOMOD:.mod=.sum)
-SOURCES:=$(shell find . -name '*.go')
+SOURCES := $(shell find ../eventbridge ../internal ../proto . -name '*.go')
 DOCKER_IMAGE_TAG?=latest
 REVISION := $(shell git rev-parse HEAD)
 
 all: agent
 
-agent: *.go $(GOMOD) $(GOSUM)
+agent: $(SOURCES) $(GOMOD) $(GOSUM)
 ifneq ($(STATIC_AGENT),)
 	CGO_ENABLED=0 go build -installsuffix cgo -a -ldflags "-s -X main.revision=$(REVISION)" $(EXTRAGOARGS) -o agent
 else

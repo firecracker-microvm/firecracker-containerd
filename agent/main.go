@@ -37,6 +37,7 @@ import (
 	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
 
 	drivemount "github.com/firecracker-microvm/firecracker-containerd/proto/service/drivemount/ttrpc"
+	ioproxy "github.com/firecracker-microvm/firecracker-containerd/proto/service/ioproxy/ttrpc"
 )
 
 const (
@@ -110,6 +111,11 @@ func main() {
 		log.G(shimCtx).WithError(err).Fatal("failed to create drive handler")
 	}
 	drivemount.RegisterDriveMounterService(server, dh)
+
+	ioproxy.RegisterIOProxyService(server, &ioProxyHandler{
+		runcService: taskService.runcService,
+		taskManager: taskService.taskManager,
+	})
 
 	// Run ttrpc over vsock
 

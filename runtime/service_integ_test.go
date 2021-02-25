@@ -2301,7 +2301,7 @@ func TestBrokenPipe_Isolated(t *testing.T) {
 	err = t1.Start(ctx)
 	require.NoError(t, err)
 
-	time.Sleep(5 * time.Second)
+	time.Sleep(10 * time.Second)
 
 	err = t1.CloseIO(ctx, containerd.WithStdinCloser)
 	require.NoError(t, err)
@@ -2314,6 +2314,8 @@ func TestBrokenPipe_Isolated(t *testing.T) {
 	)
 	require.NoError(t, err)
 	assert.Equal(t, t1.ID(), t2.ID())
+
+	time.Sleep(10 * time.Second)
 
 	err = t2.Kill(ctx, syscall.SIGKILL)
 	assert.NoError(t, err)

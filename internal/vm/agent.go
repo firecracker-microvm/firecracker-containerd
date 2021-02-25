@@ -54,3 +54,12 @@ func (*nullIOProxy) start(proc *vmProc) (ioInitDone <-chan error, ioCopyDone <-c
 
 	return initCh, copyCh
 }
+
+// Close is no-op.
+func (*nullIOProxy) Close() {
+}
+
+// IsOpen always returns true, since this proxy implementation is no-op.
+func (*nullIOProxy) IsOpen() bool {
+	return true
+}

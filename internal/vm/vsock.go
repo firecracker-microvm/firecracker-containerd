@@ -28,9 +28,9 @@ import (
 
 const (
 	vsockRetryTimeout      = 20 * time.Second
-	vsockRetryInterval     = 100 * time.Millisecond
-	unixDialTimeout        = 100 * time.Millisecond
-	vsockConnectMsgTimeout = 100 * time.Millisecond
+	vsockRetryInterval     = 150 * time.Millisecond
+	unixDialTimeout        = 150 * time.Millisecond
+	vsockConnectMsgTimeout = 150 * time.Millisecond
 	vsockAckMsgTimeout     = 1 * time.Second
 )
 

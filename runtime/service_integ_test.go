@@ -2259,3 +2259,69 @@ func TestAttach_Isolated(t *testing.T) {
 		})
 	}
 }
+
+// errorBuffer simulates a broken pipe (EPIPE) case.
+type errorBuffer struct {
+}
+
+func (errorBuffer) Write(b []byte) (int, error) {
+	return 0, errors.Errorf("failed to write %d bytes", len(b))
+}
+
+func TestBrokenPipe_Isolated(t *testing.T) {
+	prepareIntegTest(t)
+
+	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	defer client.Close()
+
+	ctx := namespaces.WithNamespace(context.Background(), "default")
+
+	image, err := alpineImage(ctx, client, defaultSnapshotterName)
+	require.NoError(t, err, "failed to get alpine image")
+
+	name := testNameToVMID(t.Name())
+
+	c, err := client.NewContainer(ctx,
+		"container-"+name,
+		containerd.WithSnapshotter(defaultSnapshotterName),
+		containerd.WithNewSnapshot("snapshot-"+name, image),
+		containerd.WithNewSpec(oci.WithProcessArgs("/usr/bin/yes")),
+	)
+	require.NoError(t, err)
+
+	var stdout1 errorBuffer
+	var stderr1 errorBuffer
+	t1, err := c.NewTask(ctx, cio.NewCreator(cio.WithStreams(nil, &stdout1, &stderr1)))
+	require.NoError(t, err)
+
+	ch, err := t1.Wait(ctx)
+	require.NoError(t, err)
+
+	err = t1.Start(ctx)
+	require.NoError(t, err)
+
+	time.Sleep(5 * time.Second)
+
+	err = t1.CloseIO(ctx, containerd.WithStdinCloser)
+	require.NoError(t, err)
+
+	var stdout2 bytes.Buffer
+	var stderr2 bytes.Buffer
+	t2, err := c.Task(
+		ctx,
+		cio.NewAttach(cio.WithStreams(nil, &stdout2, &stderr2)),
+	)
+	require.NoError(t, err)
+	assert.Equal(t, t1.ID(), t2.ID())
+
+	err = t2.Kill(ctx, syscall.SIGKILL)
+	assert.NoError(t, err)
+
+	<-ch
+
+	_, err = t2.Delete(ctx)
+	require.NoError(t, err)
+
+	assert.NotEqual(t, "", stdout2.String())
+}

@@ -2040,7 +2040,7 @@ func TestCreateVM_Isolated(t *testing.T) {
 	}
 }
 
-func TestPauseResume(t *testing.T) {
+func TestPauseResume_Isolated(t *testing.T) {
 	prepareIntegTest(t)
 
 	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))

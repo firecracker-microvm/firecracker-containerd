@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+import "google/protobuf/empty.proto";
+
+option go_package = "ioproxy";
+
+service IOProxy {
+     rpc State(StateRequest) returns (StateResponse);
+     rpc Attach(AttachRequest) returns (google.protobuf.Empty);
+}
+
+message StateRequest {
+     string ID = 1;
+     string ExecID = 2;
+}
+
+message StateResponse {
+     bool IsOpen = 1;
+}
+
+message AttachRequest {
+     string ID = 1;
+     string ExecID = 2;
+     uint32 StdinPort = 3;
+     uint32 StdoutPort = 4;
+     uint32 StderrPort = 5;
+}

@@ -32,6 +32,7 @@ import (
 	// secure randomness
 	"math/rand" // #nosec
 
+	"github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/events/exchange"
@@ -63,6 +64,7 @@ import (
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	drivemount "github.com/firecracker-microvm/firecracker-containerd/proto/service/drivemount/ttrpc"
 	fccontrolTtrpc "github.com/firecracker-microvm/firecracker-containerd/proto/service/fccontrol/ttrpc"
+	ioproxy "github.com/firecracker-microvm/firecracker-containerd/proto/service/ioproxy/ttrpc"
 )
 
 func init() {
@@ -139,6 +141,7 @@ type service struct {
 	agentClient              taskAPI.TaskService
 	eventBridgeClient        eventbridge.Getter
 	driveMountClient         drivemount.DriveMounterService
+	ioProxyClient            ioproxy.IOProxyService
 	jailer                   jailer
 	containerStubHandler     *StubDriveHandler
 	driveMountStubs          []MountableStubDrive
@@ -590,6 +593,7 @@ func (s *service) createVM(requestCtx context.Context, request *proto.CreateVMRe
 	s.agentClient = taskAPI.NewTaskClient(rpcClient)
 	s.eventBridgeClient = eventbridge.NewGetterClient(rpcClient)
 	s.driveMountClient = drivemount.NewDriveMounterClient(rpcClient)
+	s.ioProxyClient = ioproxy.NewIOProxyClient(rpcClient)
 	s.exitAfterAllTasksDeleted = request.ExitAfterAllTasksDeleted
 
 	err = s.mountDrives(requestCtx)
@@ -1192,7 +1196,8 @@ func (s *service) ResizePty(requestCtx context.Context, req *taskAPI.ResizePtyRe
 func (s *service) State(requestCtx context.Context, req *taskAPI.StateRequest) (*taskAPI.StateResponse, error) {
 	defer logPanicAndDie(log.G(requestCtx))
 
-	log.G(requestCtx).WithFields(logrus.Fields{"task_id": req.ID, "exec_id": req.ExecID}).Debug("state")
+	logger := log.G(requestCtx).WithFields(logrus.Fields{"task_id": req.ID, "exec_id": req.ExecID})
+	logger.Debug("state")
 	resp, err := s.agentClient.State(requestCtx, req)
 	if err != nil {
 		return nil, err
@@ -1201,12 +1206,69 @@ func (s *service) State(requestCtx context.Context, req *taskAPI.StateRequest) (
 	// These fields are pointing files inside the VM.
 	// Replace them with the corresponding files on the host, so clients can access.
 	s.fifosMu.Lock()
+	host := s.fifos[req.ID][req.ExecID]
 	defer s.fifosMu.Unlock()
-	resp.Stdin = s.fifos[req.ID][req.ExecID].Stdin
-	resp.Stdout = s.fifos[req.ID][req.ExecID].Stdout
-	resp.Stderr = s.fifos[req.ID][req.ExecID].Stderr
+
+	if resp.Status != task.StatusRunning {
+		logger.Debug("task is no longer running")
+		return resp, nil
+	}
+
+	resp.Stdin = host.Stdin
+	resp.Stdout = host.Stdout
+	resp.Stderr = host.Stderr
+
+	state, err := s.ioProxyClient.State(requestCtx, &ioproxy.StateRequest{ID: req.ID, ExecID: req.ExecID})
+	if err != nil {
+		return nil, err
+	}
+	if state.IsOpen {
+		logger.Debug("proxy is still alive")
+		return resp, nil
+	}
+
+	logger.Debug("making a new proxy")
+	err = s.attachNewProxy(requestCtx, logger, req.ID, req.ExecID, host)
+	if err != nil {
+		return nil, err
+	}
 
 	return resp, nil
+}
+
+func (s *service) attachNewProxy(
+	ctx context.Context, logger *logrus.Entry,
+	taskID, execID string, host cio.Config,
+) error {
+	// Connect the set of the vsock ports to the exec in the VM.
+	attach := ioproxy.AttachRequest{
+		ID:         taskID,
+		ExecID:     execID,
+		StdinPort:  s.nextVSockPort(),
+		StdoutPort: s.nextVSockPort(),
+		StderrPort: s.nextVSockPort(),
+	}
+	_, err := s.ioProxyClient.Attach(ctx, &attach)
+	if err != nil {
+		return err
+	}
+
+	// Connect the vsock ports to the host's FIFO files.
+	proxy, err := s.newIOProxy(logger, host.Stdin, host.Stdout, host.Stderr, &proto.ExtraData{
+		StdinPort:  attach.StdinPort,
+		StdoutPort: attach.StdoutPort,
+		StderrPort: attach.StderrPort,
+	})
+	if err != nil {
+		return err
+	}
+
+	// Tell the task manager that the exec is having the new proxy.
+	err = s.taskManager.AttachIO(ctx, taskID, execID, proxy)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // Pause the container

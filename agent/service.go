@@ -91,7 +91,7 @@ func NewTaskService(
 	shimCtx context.Context,
 	shimCancel context.CancelFunc,
 	publisher shim.Publisher,
-) (taskAPI.TaskService, error) {
+) (*TaskService, error) {
 	// We provide an empty string for "id" as the service manages multiple tasks; there is no single
 	// "id" being managed. As noted in the comments of the called code, the "id" arg is only used by
 	// the Cleanup function, so it will never be invoked as part of the task service API, which is all

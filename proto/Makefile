@@ -25,6 +25,7 @@ $(PROTO_GEN_SRC): $(PROTO_SRC)
 proto: $(PROTO_GEN_SRC)
 	PROTOPATH=$(CURDIR) $(MAKE) -C service/fccontrol proto
 	PROTOPATH=$(CURDIR) $(MAKE) -C service/drivemount proto
+	PROTOPATH=$(CURDIR) $(MAKE) -C service/ioproxy proto
 
 proto-docker:
 	docker run --rm \
@@ -36,5 +37,6 @@ clean:
 	- rm -f $(PROTO_GEN_SRC)
 	- $(MAKE) -C service/fccontrol clean
 	- $(MAKE) -C service/drivemount clean
+	- $(MAKE) -C service/ioproxy clean
 
 .PHONY: clean proto proto-docker

@@ -61,6 +61,13 @@ type TaskManager interface {
 	// If any tasks are still in the TaskManager's map, no change will be made.
 	// It returns a bool indicating whether TaskManager shut down as a result of the call.
 	ShutdownIfEmpty() bool
+
+	// AttachIO attaches the given IO proxy to a task or exec.
+	AttachIO(context.Context, string, string, IOProxy) error
+
+	// IsProxyOpen returns true if the given task or exec has an IO proxy
+	// which hasn't been closed.
+	IsProxyOpen(string, string) (bool, error)
 }
 
 // NewTaskManager initializes a new TaskManager
@@ -87,10 +94,16 @@ type vmProc struct {
 	execID string
 	logger *logrus.Entry
 
-	ctx        context.Context
-	cancel     context.CancelFunc
-	ioInitDone <-chan error
+	// ctx and cancel are tied to the exec.
+	ctx    context.Context
+	cancel context.CancelFunc
+
+	// ioCopyDone guarantees that the exec's stdout and stderr are copied over,
+	// before killing this vmProc.
 	ioCopyDone <-chan error
+
+	// proxy is used to copy the exec's stdio.
+	proxy IOProxy
 }
 
 func (m *taskManager) newProc(taskID, execID string) (*vmProc, error) {
@@ -172,6 +185,7 @@ func (m *taskManager) CreateTask(
 	if err != nil {
 		return nil, err
 	}
+	proc.proxy = ioProxy
 
 	defer func() {
 		if err != nil {
@@ -182,7 +196,8 @@ func (m *taskManager) CreateTask(
 
 	// Begin initializing stdio, but don't block on the initialization so we can send the Create
 	// call (which will allow the stdio initialization to complete).
-	proc.ioInitDone, proc.ioCopyDone = ioProxy.start(proc)
+	initDone, copyDone := ioProxy.start(proc)
+	proc.ioCopyDone = copyDone
 
 	createResp, err := taskService.Create(reqCtx, req)
 	if err != nil {
@@ -190,7 +205,7 @@ func (m *taskManager) CreateTask(
 	}
 
 	// make sure stdio was initialized successfully
-	err = <-proc.ioInitDone
+	err = <-initDone
 	if err != nil {
 		return nil, err
 	}
@@ -198,6 +213,8 @@ func (m *taskManager) CreateTask(
 	proc.logger.WithField("pid_in_vm", createResp.Pid).Info("successfully created task")
 
 	go m.monitorExit(proc, taskService)
+	go monitorIO(copyDone, proc)
+
 	return createResp, nil
 }
 
@@ -214,6 +231,7 @@ func (m *taskManager) ExecProcess(
 	if err != nil {
 		return nil, err
 	}
+	proc.proxy = ioProxy
 
 	defer func() {
 		if err != nil {
@@ -224,7 +242,8 @@ func (m *taskManager) ExecProcess(
 
 	// Begin initializing stdio, but don't block on the initialization so we can send the Exec
 	// call (which will allow the stdio initialization to complete).
-	proc.ioInitDone, proc.ioCopyDone = ioProxy.start(proc)
+	initDone, copyDone := ioProxy.start(proc)
+	proc.ioCopyDone = copyDone
 
 	execResp, err := taskService.Exec(reqCtx, req)
 	if err != nil {
@@ -232,12 +251,14 @@ func (m *taskManager) ExecProcess(
 	}
 
 	// make sure stdio was initialized successfully
-	err = <-proc.ioInitDone
+	err = <-initDone
 	if err != nil {
 		return nil, err
 	}
 
 	go m.monitorExit(proc, taskService)
+	go monitorIO(copyDone, proc)
+
 	return execResp, nil
 }
 
@@ -271,6 +292,9 @@ func (m *taskManager) monitorExit(proc *vmProc, taskService taskAPI.TaskService)
 		ID:     proc.taskID,
 		ExecID: proc.execID,
 	})
+
+	// Since the process is no longer running, cancel the context to
+	// free the corresponding vmProc.
 	proc.cancel()
 
 	if waitErr == context.Canceled {
@@ -285,4 +309,66 @@ func (m *taskManager) monitorExit(proc *vmProc, taskService taskAPI.TaskService)
 			WithField("exited_at", waitResp.ExitedAt).
 			Info("exited")
 	}
+}
+
+func (m *taskManager) IsProxyOpen(taskID, execID string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	proc, err := m.findProc(taskID, execID)
+	if err != nil {
+		return false, err
+	}
+
+	return proc.proxy.IsOpen(), nil
+}
+
+// findProc returns a vmProc if exists. The function itself doesn't lock the manager's mutex.
+// The callers are responsible to lock/unlock since they may mutate the value.
+func (m *taskManager) findProc(taskID, execID string) (*vmProc, error) {
+	_, ok := m.tasks[taskID]
+	if !ok {
+		return nil, errors.Errorf("cannot find exec %q from non-existent task %q", execID, taskID)
+	}
+
+	proc, ok := m.tasks[taskID][execID]
+	if !ok {
+		return nil, errors.Errorf("cannot find non-existent exec %q from task %q", execID, taskID)
+	}
+
+	if proc.proxy == nil {
+		return nil, errors.Errorf("exec %q and task %q are present, but no proxy", taskID, execID)
+	}
+	return proc, nil
+}
+
+func (m *taskManager) AttachIO(_ context.Context, taskID, execID string, proxy IOProxy) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	proc, err := m.findProc(taskID, execID)
+	if err != nil {
+		return err
+	}
+
+	initDone, copyDone := proxy.start(proc)
+	proc.proxy = proxy
+
+	// This must be in a goroutine. Otherwise, sending to initDone channel blocks forever.
+	go func() {
+		e := <-initDone
+		if e != nil {
+			proc.logger.Error("failed to initialize an io proxy")
+			proxy.Close()
+		}
+	}()
+	go monitorIO(copyDone, proc)
+
+	return nil
+}
+
+func monitorIO(done <-chan error, proc *vmProc) {
+	<-done
+	proc.proxy.Close()
+	proc.logger.Debug("closed proxy")
 }

@@ -17,6 +17,7 @@ import (
 	"context"
 	"io"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
@@ -36,6 +37,12 @@ type IOProxy interface {
 	// process. It returns two channels, one to indicate io initialization
 	// is completed and one to indicate io copying is completed.
 	start(proc *vmProc) (ioInitDone <-chan error, ioCopyDone <-chan error)
+
+	// Close the proxy.
+	Close()
+
+	// IsOpen returns true if the proxy hasn't been closed.
+	IsOpen() bool
 }
 
 // IOConnector is function that begins initializing an IO connection (i.e.
@@ -71,6 +78,7 @@ func (connectorPair *IOConnectorPair) proxy(
 	logger *logrus.Entry,
 	timeoutAfterExit time.Duration,
 ) (ioInitDone <-chan error, ioCopyDone <-chan error) {
+	// initDone might not have to be buffered. We only send ioInitErr once.
 	initDone := make(chan error, 2)
 	copyDone := make(chan error)
 
@@ -152,6 +160,10 @@ type ioConnectorSet struct {
 	stdin  *IOConnectorPair
 	stdout *IOConnectorPair
 	stderr *IOConnectorPair
+
+	// closeMu is needed since Close() will be called from different goroutines.
+	closeMu sync.Mutex
+	closed  bool
 }
 
 // NewIOConnectorProxy implements the IOProxy interface for a set of
@@ -163,12 +175,33 @@ func NewIOConnectorProxy(stdin, stdout, stderr *IOConnectorPair) IOProxy {
 		stdin:  stdin,
 		stdout: stdout,
 		stderr: stderr,
+		closed: false,
 	}
 }
 
+func (ioConnectorSet *ioConnectorSet) Close() {
+	ioConnectorSet.closeMu.Lock()
+	defer ioConnectorSet.closeMu.Unlock()
+
+	ioConnectorSet.closed = true
+}
+
+func (ioConnectorSet *ioConnectorSet) IsOpen() bool {
+	ioConnectorSet.closeMu.Lock()
+	defer ioConnectorSet.closeMu.Unlock()
+
+	return !ioConnectorSet.closed
+}
+
+// start starts goroutines to copy stdio and returns two channels.
+// The first channel returns its initialization error. The second channel returns errors from copying.
 func (ioConnectorSet *ioConnectorSet) start(proc *vmProc) (ioInitDone <-chan error, ioCopyDone <-chan error) {
 	var initErrG errgroup.Group
-	var copyErrG errgroup.Group
+
+	// When one of the goroutines returns an error, we will cancel
+	// the rest of goroutines through the ctx below.
+	copyErrG, ctx := errgroup.WithContext(proc.ctx)
+
 	waitErrs := func(initErrCh, copyErrCh <-chan error) {
 		initErrG.Go(func() error { return <-initErrCh })
 		copyErrG.Go(func() error { return <-copyErrCh })
@@ -177,24 +210,25 @@ func (ioConnectorSet *ioConnectorSet) start(proc *vmProc) (ioInitDone <-chan err
 	if ioConnectorSet.stdin != nil {
 		// For Stdin only, provide 0 as the timeout to wait after the proc exits before closing IO streams.
 		// There's no reason to send stdin data to a proc that's already dead.
-		waitErrs(ioConnectorSet.stdin.proxy(proc.ctx, proc.logger.WithField("stream", "stdin"), 0))
-
+		waitErrs(ioConnectorSet.stdin.proxy(ctx, proc.logger.WithField("stream", "stdin"), 0))
 	} else {
 		proc.logger.Debug("skipping proxy io for unset stdin")
 	}
 
 	if ioConnectorSet.stdout != nil {
-		waitErrs(ioConnectorSet.stdout.proxy(proc.ctx, proc.logger.WithField("stream", "stdout"), defaultIOFlushTimeout))
+		waitErrs(ioConnectorSet.stdout.proxy(ctx, proc.logger.WithField("stream", "stdout"), defaultIOFlushTimeout))
 	} else {
 		proc.logger.Debug("skipping proxy io for unset stdout")
 	}
 
 	if ioConnectorSet.stderr != nil {
-		waitErrs(ioConnectorSet.stderr.proxy(proc.ctx, proc.logger.WithField("stream", "stderr"), defaultIOFlushTimeout))
+		waitErrs(ioConnectorSet.stderr.proxy(ctx, proc.logger.WithField("stream", "stderr"), defaultIOFlushTimeout))
 	} else {
 		proc.logger.Debug("skipping proxy io for unset stderr")
 	}
 
+	// These channels are not buffered, since we will close them right after having one error.
+	// Callers must read the channels.
 	initDone := make(chan error)
 	go func() {
 		defer close(initDone)
@@ -225,5 +259,31 @@ func logClose(logger *logrus.Entry, streams ...io.Closer) {
 
 	if closeErr != nil {
 		logger.WithError(closeErr).Error("error closing io stream")
+	}
+}
+
+// InputPair returns an IOConnectorPair from the given vsock port to
+// the FIFO file.
+func InputPair(src uint32, dest string) *IOConnectorPair {
+	if dest == "" {
+		return nil
+	}
+
+	return &IOConnectorPair{
+		ReadConnector:  VSockAcceptConnector(src),
+		WriteConnector: WriteFIFOConnector(dest),
+	}
+}
+
+// OutputPair returns an IOConnectorPair from the given FIFO to
+// the vsock port.
+func OutputPair(src string, dest uint32) *IOConnectorPair {
+	if src == "" {
+		return nil
+	}
+
+	return &IOConnectorPair{
+		ReadConnector:  ReadFIFOConnector(src),
+		WriteConnector: VSockAcceptConnector(dest),
 	}
 }

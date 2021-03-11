@@ -1921,10 +1921,11 @@ func TestCreateVM_Isolated(t *testing.T) {
 	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
 
 	type subtest struct {
-		name     string
-		request  proto.CreateVMRequest
-		validate func(*testing.T, error)
-		stopVM   bool
+		name                    string
+		request                 proto.CreateVMRequest
+		validate                func(*testing.T, error)
+		validateUsesFindProcess bool
+		stopVM                  bool
 	}
 
 	subtests := []subtest{
@@ -1951,7 +1952,8 @@ func TestCreateVM_Isolated(t *testing.T) {
 				require.NoError(t, err, "failed waiting for expected firecracker process %q to come up", firecrackerProcessName)
 				require.Len(t, firecrackerProcesses, 0, "expected only no firecracker processes to exist")
 			},
-			stopVM: false,
+			validateUsesFindProcess: true,
+			stopVM:                  false,
 		},
 		{
 			name: "Slow Root FS",
@@ -1983,6 +1985,12 @@ func TestCreateVM_Isolated(t *testing.T) {
 	}
 
 	runTest := func(t *testing.T, request proto.CreateVMRequest, s subtest) {
+		// If this test checks the number of the processes on the host
+		// (e.g. the number of Firecracker processes), running the test with
+		// others in parallel messes up the result.
+		if !s.validateUsesFindProcess {
+			t.Parallel()
+		}
 		vmID := testNameToVMID(t.Name())
 
 		tempDir, err := ioutil.TempDir("", vmID)

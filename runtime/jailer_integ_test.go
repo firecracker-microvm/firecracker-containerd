@@ -40,15 +40,18 @@ import (
 func TestJailer_Isolated(t *testing.T) {
 	prepareIntegTest(t)
 	t.Run("Without Jailer", func(t *testing.T) {
+		t.Parallel()
 		testJailer(t, nil)
 	})
 	t.Run("With Jailer", func(t *testing.T) {
+		t.Parallel()
 		testJailer(t, &proto.JailerConfig{
 			UID: 300001,
 			GID: 300001,
 		})
 	})
 	t.Run("With Jailer and bind-mount", func(t *testing.T) {
+		t.Parallel()
 		testJailer(t, &proto.JailerConfig{
 			UID:               300001,
 			GID:               300001,
@@ -118,9 +121,9 @@ func testJailer(t *testing.T, jailerConfig *proto.JailerConfig) {
 	require.NoError(err)
 
 	c, err := client.NewContainer(ctx,
-		"container",
+		vmID+"-container",
 		containerd.WithSnapshotter(defaultSnapshotterName),
-		containerd.WithNewSnapshot("snapshot", image),
+		containerd.WithNewSnapshot(vmID+"-snapshot", image),
 		containerd.WithNewSpec(
 			oci.WithProcessArgs(
 				"/bin/sh", "-c", "echo hello && cat /mnt/in-container/dir/hello",

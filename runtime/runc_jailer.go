@@ -41,7 +41,27 @@ import (
 
 const (
 	networkNamespaceRuncName = "network"
+	cacheTopologyPath        = "/sys/devices/system/cpu/cpu0/cache"
+	cacheFolderPrefix        = "index"
 )
+
+var cacheTopologyPaths = []string{
+	"sys",
+	"devices",
+	"system",
+	"cpu",
+	"cpu0",
+	"cache",
+}
+
+var cacheTopologyFiles = []string{
+	"level",
+	"type",
+	"size",
+	"number_of_sets",
+	"shared_cpu_map",
+	"coherency_line_size",
+}
 
 // runcJailer uses runc to set up a jailed environment for the Firecracker VM.
 type runcJailer struct {
@@ -253,6 +273,10 @@ func (j *runcJailer) BuildJailedRootHandler(cfg *config.Config, machineConfig *f
 				filename := filepath.Base(v.Path)
 				v.Path = filepath.Join("/", filename)
 				m.Cfg.VsockDevices[i] = v
+			}
+
+			if err := j.setupCacheTopology(rootPath); err != nil {
+				return err
 			}
 
 			j.logger.Debugf("Writing %q for runc", rootPathToConfig)
@@ -639,4 +663,58 @@ func (j runcJailer) Stop(force bool) error {
 		signal = syscall.SIGKILL
 	}
 	return j.runcClient.Kill(j.ctx, j.vmID, int(signal), &runc.KillOpts{All: true})
+}
+
+// setupCacheTopology will copy indexed contents from the cacheTopologyPath to
+// the jailer. This is needed for arm architecture as arm does not
+// automatically setup any cache topology
+func (j runcJailer) setupCacheTopology(path string) error {
+	j.logger.WithField("path", path).Debug("Creating cache topology")
+	const mode = os.FileMode(0700)
+
+	// builds the cache topology path from the root directory
+	for _, p := range cacheTopologyPaths {
+		path = filepath.Join(path, p)
+		if err := mkdirAndChown(path, mode, j.Config.UID, j.Config.GID); err != nil {
+			return err
+		}
+	}
+
+	err := filepath.Walk(cacheTopologyPath, func(cachePath string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			return nil
+		}
+
+		folder := filepath.Base(cachePath)
+		if !strings.HasPrefix(folder, cacheFolderPrefix) {
+			return nil
+		}
+
+		indexPath := filepath.Join(path, folder)
+		if err := mkdirAndChown(indexPath, info.Mode(), j.Config.UID, j.Config.GID); err != nil {
+			return err
+		}
+
+		j.logger.WithField("src path", cachePath).WithField("dst path", indexPath).Debug("copying cache folder")
+		for _, file := range cacheTopologyFiles {
+			cacheFilePath := filepath.Join(cachePath, file)
+			info, err := os.Stat(cacheFilePath)
+			if err != nil {
+				return err
+			}
+
+			// This is suppose to be a hard copy as intructed by the Firecracker team.
+			// Bind mounting here may cause some issues on the host's machine
+			if err := j.copyFileToJail(cacheFilePath, filepath.Join(indexPath, file), info.Mode()); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+
+	return err
 }

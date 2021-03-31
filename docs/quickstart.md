@@ -20,8 +20,8 @@ files into `/usr/local/bin`.
    on [this page](https://wiki.debian.org/Cloud/AmazonEC2Image/Buster).
    If you need help launching an EC2 instance, see the
    [EC2 getting started guide](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/EC2_GetStarted.html).
-3. Run the script below to download and install all the required components.
-   This script expects to be run from your `$HOME` directory.
+3. Run the script below to download and install all the required dependencies on a debian based instance.
+   Alternate steps for rpm based instance is provided as well. This script expects to be run from your `$HOME` directory.
 
 ```bash
 #!/bin/bash
@@ -62,6 +62,51 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get \
      docker-ce aufs-tools-
 sudo usermod -aG docker $(whoami)
 
+# Install device-mapper
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y dmsetup
+```
+
+A similar script to install dependencies for rpm based linux distro e.g. Amazon Linux 2 can be found here
+
+<details>
+
+```bash
+#!/bin/bash
+
+cd ~
+
+# Install git, Go 1.13, make, curl
+sudo yum -y update
+sudo yum -y install \
+  golang \
+  make \
+  git \
+  curl \
+  e2fsprogs \
+  util-linux \
+  bc \
+  gnupg
+
+
+# Amazon Linux 2 installs go binary is installed in /usr/bin. So no PATH changes required.
+
+cd ~
+
+# Install Docker CE
+# Docker CE includes containerd, but we need a separate containerd binary, built
+# in a later step
+sudo yum -y update
+sudo amazon-linux-extras install -y  docker
+sudo usermod -aG docker $(whoami)
+
+sudo yum -y install device-mapper
+```
+</details>
+
+4. Now run the following script below to download and install firecracker containerd.
+
+```bash
+#!/bin/bash
 cd ~
 
 # Check out firecracker-containerd and build it.  This includes:
@@ -76,7 +121,6 @@ cd ~
 #   access to networks available on the host
 git clone https://github.com/firecracker-microvm/firecracker-containerd.git
 cd firecracker-containerd
-sudo DEBIAN_FRONTEND=noninteractive apt-get install -y dmsetup
 sg docker -c 'make all image firecracker'
 sudo make install install-firecracker demo-network
 
@@ -174,13 +218,13 @@ sudo tee /etc/containerd/firecracker-runtime.json <<EOF
 EOF
 ```
 
-4. Open a new terminal and start `firecracker-containerd` in the foreground
+5. Open a new terminal and start `firecracker-containerd` in the foreground
 
 ```bash
 sudo firecracker-containerd --config /etc/firecracker-containerd/config.toml
 ```
 
-5. Open a new terminal, pull an image, and run a container!
+6. Open a new terminal, pull an image, and run a container!
 
 ```bash
 sudo firecracker-ctr --address /run/firecracker-containerd/containerd.sock \

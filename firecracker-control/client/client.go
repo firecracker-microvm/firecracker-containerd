@@ -34,7 +34,11 @@ func New(ttrpcAddress string) (*Client, error) {
 		return nil, errors.Wrap(err, "failed to create ttrpc client")
 	}
 
-	fcClient := fccontrol.NewFirecrackerClient(ttrpcClient.Client())
+	client, err := ttrpcClient.Client()
+	if err != nil {
+		return nil, err
+	}
+	fcClient := fccontrol.NewFirecrackerClient(client)
 
 	return &Client{
 		FirecrackerService: fcClient,

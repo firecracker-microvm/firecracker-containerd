@@ -25,6 +25,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/firecracker-microvm/firecracker-containerd/config"
+	"github.com/firecracker-microvm/firecracker-containerd/firecracker-control/client"
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 )
 
@@ -143,4 +144,8 @@ func runTask(ctx context.Context, c containerd.Container) (*commandResult, error
 	case <-ctx.Done():
 		return nil, errors.New("context cancelled")
 	}
+}
+
+func newFCControlClient(socket string) (*client.Client, error) {
+	return client.New(socket + ".ttrpc")
 }

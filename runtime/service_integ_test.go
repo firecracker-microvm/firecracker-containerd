@@ -36,7 +36,6 @@ import (
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/oci"
-	"github.com/containerd/containerd/pkg/ttrpcutil"
 	"github.com/containerd/containerd/runtime"
 	"github.com/containerd/go-runc"
 	"github.com/containerd/typeurl"
@@ -49,7 +48,6 @@ import (
 
 	"github.com/firecracker-microvm/firecracker-containerd/config"
 	_ "github.com/firecracker-microvm/firecracker-containerd/firecracker-control"
-	fcClient "github.com/firecracker-microvm/firecracker-containerd/firecracker-control/client"
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
@@ -298,8 +296,8 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 	image, err := alpineImage(ctx, client, defaultSnapshotterName)
 	require.NoError(t, err, "failed to get alpine image")
 
-	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
-	require.NoError(t, err, "failed to create ttrpc client")
+	fcClient, err := newFCControlClient(containerdSockPath)
+	require.NoError(t, err, "failed to create fccontrol client")
 
 	cfg, err := config.LoadConfig("")
 	require.NoError(t, err, "failed to load config")
@@ -324,7 +322,6 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 			rootfsPath := cfg.RootDrive
 
 			vmIDStr := strconv.Itoa(vmID)
-			fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
 			req := &proto.CreateVMRequest{
 				VMID: vmIDStr,
 				// Enabling Go Race Detector makes in-microVM binaries heavy in terms of CPU and memory.
@@ -591,8 +588,8 @@ func TestLongUnixSocketPath_Isolated(t *testing.T) {
 
 	ctx := namespaces.WithNamespace(context.Background(), namespace)
 
-	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
-	require.NoError(t, err, "failed to create ttrpc client")
+	fcClient, err := newFCControlClient(containerdSockPath)
+	require.NoError(t, err, "failed to create fccontrol client")
 
 	subtests := []struct {
 		name    string
@@ -618,7 +615,6 @@ func TestLongUnixSocketPath_Isolated(t *testing.T) {
 		},
 	}
 
-	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
 	for _, subtest := range subtests {
 		request := subtest.request
 		vmID := request.VMID
@@ -698,10 +694,9 @@ func TestStubBlockDevices_Isolated(t *testing.T) {
 	containerName := fmt.Sprintf("%s-%d", t.Name(), time.Now().UnixNano())
 	snapshotName := fmt.Sprintf("%s-snapshot", containerName)
 
-	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
-	require.NoError(t, err, "failed to create ttrpc client")
+	fcClient, err := newFCControlClient(containerdSockPath)
+	require.NoError(t, err, "failed to create fccontrol client")
 
-	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
 	_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
 		VMID: strconv.Itoa(vmID),
 		NetworkInterfaces: []*proto.FirecrackerNetworkInterface{
@@ -821,12 +816,11 @@ func startAndWaitTask(ctx context.Context, t *testing.T, c containerd.Container)
 func testCreateContainerWithSameName(t *testing.T, vmID string) {
 	ctx := namespaces.WithNamespace(context.Background(), "default")
 
-	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
-	require.NoError(t, err, "failed to create ttrpc client")
-
 	// Explicitly specify Container Count = 2 to workaround #230
 	if len(vmID) != 0 {
-		fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
+		fcClient, err := newFCControlClient(containerdSockPath)
+		require.NoError(t, err, "failed to create fccontrol client")
+
 		_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
 			VMID:           vmID,
 			ContainerCount: 2,
@@ -965,7 +959,7 @@ func TestDriveMount_Isolated(t *testing.T) {
 	ctrdClient, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
 
-	fcClient, err := fcClient.New(containerdSockPath + ".ttrpc")
+	fcClient, err := newFCControlClient(containerdSockPath)
 	require.NoError(t, err, "failed to create fccontrol client")
 
 	image, err := alpineImage(ctx, ctrdClient, defaultSnapshotterName)
@@ -1133,7 +1127,7 @@ func TestDriveMountFails_Isolated(t *testing.T) {
 	ctx, cancel := context.WithTimeout(namespaces.WithNamespace(context.Background(), defaultNamespace), testTimeout)
 	defer cancel()
 
-	fcClient, err := fcClient.New(containerdSockPath + ".ttrpc")
+	fcClient, err := newFCControlClient(containerdSockPath)
 	require.NoError(t, err, "failed to create fccontrol client")
 
 	testImgHostPath := internal.CreateFSImg(ctx, t, "ext4", internal.FSImgFile{
@@ -1195,9 +1189,8 @@ func TestUpdateVMMetadata_Isolated(t *testing.T) {
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
 	defer client.Close()
 
-	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
-	require.NoError(t, err, "failed to create ttrpc client")
-	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
+	fcClient, err := newFCControlClient(containerdSockPath)
+	require.NoError(t, err, "failed to create fccontrol client")
 
 	cniNetworkName := "fcnet-test"
 	err = writeCNIConf("/etc/cni/conf.d/fcnet-test.conflist",
@@ -1448,9 +1441,6 @@ func TestStopVM_Isolated(t *testing.T) {
 	image, err := alpineImage(ctx, client, defaultSnapshotterName)
 	require.NoError(err, "failed to get alpine image")
 
-	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
-	require.NoError(err, "failed to create ttrpc client")
-
 	tests := []struct {
 		name            string
 		createVMRequest proto.CreateVMRequest
@@ -1548,6 +1538,9 @@ func TestStopVM_Isolated(t *testing.T) {
 		},
 	}
 
+	fcClient, err := newFCControlClient(containerdSockPath)
+	require.NoError(err)
+
 	for _, test := range tests {
 		test := test
 
@@ -1557,7 +1550,6 @@ func TestStopVM_Isolated(t *testing.T) {
 
 			vmID := createVMRequest.VMID
 
-			fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
 			_, err = fcClient.CreateVM(ctx, &createVMRequest)
 			require.NoError(err)
 
@@ -1635,12 +1627,11 @@ func TestExec_Isolated(t *testing.T) {
 	image, err := alpineImage(ctx, client, defaultSnapshotterName)
 	require.NoError(t, err, "failed to get alpine image")
 
-	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
+	fcClient, err := newFCControlClient(containerdSockPath)
 	require.NoError(t, err, "failed to create ttrpc client")
 
 	vmID := testNameToVMID(t.Name())
 
-	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
 	_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{VMID: vmID})
 	require.NoError(t, err)
 
@@ -1755,12 +1746,11 @@ func TestEvents_Isolated(t *testing.T) {
 	image, err := alpineImage(ctx, client, defaultSnapshotterName)
 	require.NoError(err, "failed to get alpine image")
 
-	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
-	require.NoError(err, "failed to create ttrpc client")
-
 	vmID := testNameToVMID(t.Name())
 
-	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
+	fcClient, err := newFCControlClient(containerdSockPath)
+	require.NoError(err, "failed to create ttrpc client")
+
 	_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{VMID: vmID})
 	require.NoError(err)
 
@@ -1833,12 +1823,11 @@ func TestOOM_Isolated(t *testing.T) {
 	image, err := alpineImage(ctx, client, defaultSnapshotterName)
 	require.NoError(t, err, "failed to get alpine image")
 
-	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
-	require.NoError(t, err, "failed to create ttrpc client")
-
 	vmID := testNameToVMID(t.Name())
 
-	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
+	fcClient, err := newFCControlClient(containerdSockPath)
+	require.NoError(t, err, "failed to create ttrpc client")
+
 	_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{VMID: vmID})
 	require.NoError(t, err)
 
@@ -1915,10 +1904,8 @@ func TestCreateVM_Isolated(t *testing.T) {
 
 	ctx := namespaces.WithNamespace(context.Background(), "default")
 
-	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
+	fcClient, err := newFCControlClient(containerdSockPath)
 	require.NoError(t, err, "failed to create ttrpc client")
-
-	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
 
 	type subtest struct {
 		name                    string
@@ -2049,10 +2036,8 @@ func TestPauseResume(t *testing.T) {
 
 	ctx := namespaces.WithNamespace(context.Background(), "default")
 
-	pluginClient, err := ttrpcutil.NewClient(containerdSockPath + ".ttrpc")
+	fcClient, err := newFCControlClient(containerdSockPath)
 	require.NoError(t, err, "failed to create ttrpc client")
-
-	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
 
 	subtests := []struct {
 		name    string

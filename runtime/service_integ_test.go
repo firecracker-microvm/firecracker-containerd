@@ -2040,7 +2040,7 @@ func TestCreateVM_Isolated(t *testing.T) {
 	}
 }
 
-func TestPauseResume(t *testing.T) {
+func TestPauseResume_Isolated(t *testing.T) {
 	prepareIntegTest(t)
 
 	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
@@ -2151,6 +2151,10 @@ func TestPauseResume(t *testing.T) {
 
 		// Ensure the response fields are populated correctly
 		assert.Equal(t, request.VMID, resp.VMID)
+
+		// Currently StopVM doesn't work when the VM is paused, since StopVM calls its in-VM agent.
+		_, err = fcClient.ResumeVM(ctx, &proto.ResumeVMRequest{VMID: request.VMID})
+		require.Equal(t, status.Code(err), codes.OK)
 
 		_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: request.VMID})
 		require.Equal(t, status.Code(err), codes.OK)

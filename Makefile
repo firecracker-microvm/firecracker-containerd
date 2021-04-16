@@ -171,8 +171,8 @@ $(FIRECRACKER_CONTAINERD_RUNTIME_DIR) $(ETC_CONTAINERD):
 DEFAULT_VMLINUX_NAME?=default-vmlinux.bin
 $(DEFAULT_VMLINUX_NAME):
 	curl --silent --show-error --retry 3 --max-time 30 --output $@ \
-		"https://s3.amazonaws.com/spec.ccfc.min/img/hello/kernel/hello-vmlinux.bin"
-	echo "882fa465c43ab7d92e31bd4167da3ad6a82cb9230f9b0016176df597c6014cef $@" | sha256sum -c -
+		"https://s3.amazonaws.com/spec.ccfc.min/img/quickstart_guide/x86_64/kernels/vmlinux.bin"
+	echo "bc7e2dbf12cf7038937abf42056f6bcd405d3eef4d27aaa3016f0ba15069ae4b $@" | sha256sum -c -
 	chmod 0400 $@
 
 DEFAULT_VMLINUX_INSTALLPATH=$(FIRECRACKER_CONTAINERD_RUNTIME_DIR)/$(DEFAULT_VMLINUX_NAME)

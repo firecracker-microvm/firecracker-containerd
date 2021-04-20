@@ -1,0 +1,57 @@
+Host Linux
+
++-----------+
+|containerd +<------+ gRPC/unix
+|client     |       |
++-----------+       |
+                    V
++-----------------------------------+
+|firecracker containerd             |
+|                                   |
++-------------------+ +-------------+
+|firecracker control| |devmapper    |
+|plugin             | |snapshotter  |
+|cFCC               | |             |
++-+-----------------+-+---------+---+
+  |            ^                |                    creates
+  | launches   | ttrpc/unix     +-------------+------------+
+  |            |                |             |            |
+  V            V                V             V            V
++---------------+              +---------+   +---------+   +---------+
+|aws.firecracker|              |block dev+-->|block dev+-->|block dev|
+|shim           |              |{d}      |   |{d}      |   |{d}      |
+|cFCC           |              ++--------+   +---------+   +---------+
++-+-------------+               |                device mapper devices
+  |            ^                |
+  | launches   |                |
+  V            | ttrpc/unix     |
++----+         |                |
+|runc|         |                |
++-+--+         |                |
+  |            |                |
+  | launches +-+              +-+ mounts
+  |          |                |
+  V          |                |
++------------+----------------+-------+
+|firecracker |                |       |
+|            |                |       |
+|  +---------+----------------+-------+
+|  |         |                |       |
+|  |         | ttrpc/vsock    |       |
+|  |         V                V       |
+|  |       +-----+        +---------+ |
+|  |       |agent|        |container| |
+|  |       |cFCC |        |rootfs   | |
+|  |       |     |        |{d}      | |
+|  |       +-+---+        +----+----+ |
+|  |         |                 |      |
+|  |         V launches        |      |
+|  |       +-----+             |      |
+|  |       |runc |<------------+      |
+|  |       +-+---+                    |
+|  |         |                        |
+|  |         V launches               |
+|  |       +---------+                |
+|  |       |container|                |
+|  |       +---------+     Guest Linux|
++--+----------------------------------+

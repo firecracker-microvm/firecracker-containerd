@@ -46,5 +46,5 @@ To configure system-wide, uncomment and set `DefaultTasksMax=infinity`in `/etc/s
 One also needs to set `UsersTasksMax=4000000000` in `/etc/systemd/logind.conf` 
 (note that `infinity` is not a valid value here).
 
-To configure the bridges for CNI, take a look at `demo-network` target in [Makefile](https://github.com/firecracker-microvm/firecracker-containerd/blob/master/Makefile)
+To configure the bridges for CNI, take a look at `demo-network` target in [Makefile](https://github.com/firecracker-microvm/firecracker-containerd/blob/main/Makefile)
 and replicate the code to create enough bridges (1 bridge can have up to 1023 interfaces attached).

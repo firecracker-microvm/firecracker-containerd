@@ -92,6 +92,17 @@ message GetVMMetadataResponse {
     string Metadata = 1;
 }
 
+message DescribeInstanceInfoRequest {
+    string VMID = 1;
+}
+
+message DescribeInstanceInfoResponse {
+    string AppName = 1;
+    string ID = 2;
+    string State = 3;
+    string VmmVersion = 4;
+}
+
 // DriveExposePolicy is used to configure the method to expose drive files.
 // "COPY" is copying the files to the jail, which is the default behavior.
 // "BIND" is bind-mounting the files on the jail, assuming a caller pre-configures the permissions of

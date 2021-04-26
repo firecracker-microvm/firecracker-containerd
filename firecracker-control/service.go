@@ -106,3 +106,8 @@ func (s *service) GetVMMetadata(ctx context.Context, req *proto.GetVMMetadataReq
 	log.G(ctx).Debug("Getting vm metadata")
 	return s.local.GetVMMetadata(ctx, req)
 }
+
+func (s *service) DescribeInstanceInfo(ctx context.Context, req *proto.DescribeInstanceInfoRequest) (*proto.DescribeInstanceInfoResponse, error) {
+	log.G(ctx).Debug("Getting instance info")
+	return s.local.DescribeInstanceInfo(ctx, req)
+}

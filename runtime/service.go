@@ -769,6 +769,33 @@ func (s *service) GetVMMetadata(requestCtx context.Context, request *proto.GetVM
 	return &proto.GetVMMetadataResponse{Metadata: string(metadata)}, nil
 }
 
+// DescribeInstanceInfo returns vm state info
+func (s *service) DescribeInstanceInfo(requestCtx context.Context, request *proto.DescribeInstanceInfoRequest) (*proto.DescribeInstanceInfoResponse, error) {
+
+	defer logPanicAndDie(s.logger)
+
+	err := s.waitVMReady()
+	if err != nil {
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	s.logger.Info("Describe Instnace Info")
+	instanceInfo, err := s.DescribeInstanceInfo(requestCtx, request)
+	if err != nil {
+		err = errors.Wrap(err, "failed to get Instance Info")
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	return &proto.DescribeInstanceInfoResponse{
+		AppName:    instanceInfo.AppName,
+		ID:         instanceInfo.ID,
+		State:      instanceInfo.State,
+		VmmVersion: instanceInfo.VmmVersion,
+	}, err
+}
+
 func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker.Config, error) {
 	for _, driveMount := range req.DriveMounts {
 		// Verify the request specified an absolute path for the source/dest of drives.

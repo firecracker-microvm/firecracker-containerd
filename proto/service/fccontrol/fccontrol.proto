@@ -30,4 +30,7 @@ service Firecracker {
 
     // Get Vm's instance metadata
     rpc GetVMMetadata(GetVMMetadataRequest) returns (GetVMMetadataResponse);
+
+    // Get Vm's instance state info
+    rpc DescribeInstanceInfo(DescribeInstanceInfoRequest) returns (DescribeInstanceInfoResponse);
 }

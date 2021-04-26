@@ -233,6 +233,24 @@ func (s *local) shimFirecrackerClient(requestCtx context.Context, vmID string) (
 	return fcclient.New("\x00" + socketAddr)
 }
 
+// DescribeInstanceInfo returns instance state by VM ID
+func (s *local) DescribeInstanceInfo(requestCtx context.Context, req *proto.DescribeInstanceInfoRequest) (*proto.DescribeInstanceInfoResponse, error) {
+	client, err := s.shimFirecrackerClient(requestCtx, req.VMID)
+	if err != nil {
+		return nil, err
+	}
+	defer client.Close()
+
+	resp, err := client.DescribeInstanceInfo(requestCtx, req)
+	if err != nil {
+		err = errors.Wrap(err, "Failed to obtain instance state info")
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	return resp, nil
+}
+
 // StopVM stops running VM instance by VM ID. This stops the VM, all tasks within the VM and the runtime shim
 // managing the VM.
 func (s *local) StopVM(requestCtx context.Context, req *proto.StopVMRequest) (*empty.Empty, error) {

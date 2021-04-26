@@ -95,7 +95,7 @@ func TestContainerStubs(t *testing.T) {
 		mockMachine, err := firecracker.NewMachine(ctx, firecracker.Config{}, firecracker.WithClient(
 			firecracker.NewClient("/path/to/socket", nil, false, firecracker.WithOpsClient(&fctesting.MockClient{
 				PatchGuestDriveByIDFn: func(params *ops.PatchGuestDriveByIDParams) (*ops.PatchGuestDriveByIDNoContent, error) {
-					assert.Equal(t, hostPath, firecracker.StringValue(params.Body.PathOnHost))
+					assert.Equal(t, hostPath, firecracker.StringValue(&params.Body.PathOnHost))
 					return nil, nil
 				},
 			}))))
@@ -240,7 +240,7 @@ func TestDriveMountStubs(t *testing.T) {
 		mockMachine, err := firecracker.NewMachine(ctx, firecracker.Config{}, firecracker.WithClient(
 			firecracker.NewClient("/path/to/socket", nil, false, firecracker.WithOpsClient(&fctesting.MockClient{
 				PatchGuestDriveByIDFn: func(params *ops.PatchGuestDriveByIDParams) (*ops.PatchGuestDriveByIDNoContent, error) {
-					assert.Equal(t, hostPath, firecracker.StringValue(params.Body.PathOnHost))
+					assert.Equal(t, hostPath, firecracker.StringValue(&params.Body.PathOnHost))
 					return nil, nil
 				},
 			}))))

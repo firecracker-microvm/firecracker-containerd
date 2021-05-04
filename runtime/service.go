@@ -636,7 +636,8 @@ func (s *service) mountDrives(requestCtx context.Context) error {
 
 // StopVM will shutdown the VMM. Unlike Shutdown, this method is exposed to containerd clients.
 // If the VM has not been created yet and the timeout is hit waiting for it to exist, an error will be returned
-// but the shim will continue to shutdown.
+// but the shim will continue to shutdown. Similarly if we detect that the VM is in pause state, then
+// we are unable to communicate to the in-VM agent. In this case, we do a forceful shutdown.
 func (s *service) StopVM(requestCtx context.Context, request *proto.StopVMRequest) (_ *empty.Empty, err error) {
 	defer logPanicAndDie(s.logger)
 	s.logger.WithFields(logrus.Fields{"timeout_seconds": request.TimeoutSeconds}).Debug("StopVM")
@@ -644,6 +645,20 @@ func (s *service) StopVM(requestCtx context.Context, request *proto.StopVMReques
 	timeout := defaultStopVMTimeout
 	if request.TimeoutSeconds > 0 {
 		timeout = time.Duration(request.TimeoutSeconds) * time.Second
+	}
+
+	info, err := s.machine.DescribeInstanceInfo(requestCtx)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to get instance info %v", info)
+	}
+
+	if *info.State == models.InstanceInfoStatePaused {
+		s.logger.Debug("Instance is in Paused state, force shutdown in progress")
+		err = s.jailer.Stop(true)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to stop VM in paused State")
+		}
+		return &empty.Empty{}, nil
 	}
 
 	err = s.waitVMReady()

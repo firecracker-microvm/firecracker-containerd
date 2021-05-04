@@ -1537,6 +1537,7 @@ func TestStopVM_Isolated(t *testing.T) {
 		stopFunc        func(ctx context.Context, fcClient fccontrol.FirecrackerService, req proto.CreateVMRequest)
 		withStopVM      bool
 	}{
+
 		{
 			name:       "Successful",
 			withStopVM: true,
@@ -1624,6 +1625,22 @@ func TestStopVM_Isolated(t *testing.T) {
 				} else {
 					assert.Contains(err.Error(), "signal: killed")
 				}
+			},
+		},
+
+		// Test that StopVM returns success if the VM is in paused state, instead of hanging forever.
+		// VM is force shutdown in this case, so we expect no Error or hang.
+		{
+			name:       "PauseStop",
+			withStopVM: true,
+
+			createVMRequest: proto.CreateVMRequest{},
+			stopFunc: func(ctx context.Context, fcClient fccontrol.FirecrackerService, req proto.CreateVMRequest) {
+				_, err = fcClient.PauseVM(ctx, &proto.PauseVMRequest{VMID: req.VMID})
+				require.Equal(status.Code(err), codes.OK)
+
+				_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: req.VMID})
+				require.NoError(err)
 			},
 		},
 	}

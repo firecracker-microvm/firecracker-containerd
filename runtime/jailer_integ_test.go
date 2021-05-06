@@ -138,7 +138,7 @@ func testJailer(t *testing.T, jailerConfig *proto.JailerConfig) {
 	stdout := startAndWaitTask(ctx, t, c)
 	require.Equal("hello\nadditional drive\n", stdout)
 
-	stat, err := os.Stat(filepath.Join(shimBaseDir(), "default", vmID))
+	stat, err := os.Stat(filepath.Join(shimBaseDir(), "default#"+vmID))
 	require.NoError(err)
 	assert.True(t, stat.IsDir())
 
@@ -148,9 +148,13 @@ func testJailer(t *testing.T, jailerConfig *proto.JailerConfig) {
 	_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
 	require.NoError(err)
 
-	_, err = os.Stat(filepath.Join(shimBaseDir(), "default", vmID))
+	_, err = os.Stat(filepath.Join(shimBaseDir(), "default#"+vmID))
 	assert.Error(t, err)
 	assert.True(t, os.IsNotExist(err))
+
+	shimContents, err := ioutil.ReadDir(shimBaseDir())
+	require.NoError(err)
+	assert.Len(t, shimContents, 0)
 }
 
 func TestJailerCPUSet_Isolated(t *testing.T) {

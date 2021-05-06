@@ -191,10 +191,9 @@ func TestShimExitsUponContainerDelete_Isolated(t *testing.T) {
 
 		cfg, err := config.LoadConfig("")
 		require.NoError(t, err, "failed to load config")
-		namespaceShimBaseDir := filepath.Join(cfg.ShimBaseDir, namespaces.Default)
-		varRunFCContents, err := ioutil.ReadDir(namespaceShimBaseDir)
-		require.NoError(t, err, `failed to list directory "%s"`, namespaceShimBaseDir)
-		require.Len(t, varRunFCContents, 0, "expect %s to be cleared after shims shutdown", namespaceShimBaseDir)
+		varRunFCContents, err := ioutil.ReadDir(cfg.ShimBaseDir)
+		require.NoError(t, err, `failed to list directory "%s"`, cfg.ShimBaseDir)
+		require.Len(t, varRunFCContents, 0, "expect %s to be empty", cfg.ShimBaseDir)
 	case err = <-exitEventErrCh:
 		require.Fail(t, "unexpected error", "unexpectedly received on task exit error channel: %s", err.Error())
 	case <-testCtx.Done():
@@ -379,11 +378,12 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 			require.NoError(t, err, "failed to get VM Info for VM %d", vmID)
 			require.Equal(t, vmInfoResp.VMID, strconv.Itoa(vmID))
 
+			nspVMid := defaultNamespace + "#" + strconv.Itoa(vmID)
 			cfg, err := config.LoadConfig("")
 			require.NoError(t, err, "failed to load config")
-			require.Equal(t, vmInfoResp.SocketPath, filepath.Join(cfg.ShimBaseDir, defaultNamespace, strconv.Itoa(vmID), "firecracker.sock"))
-			require.Equal(t, vmInfoResp.LogFifoPath, filepath.Join(cfg.ShimBaseDir, defaultNamespace, strconv.Itoa(vmID), "fc-logs.fifo"))
-			require.Equal(t, vmInfoResp.MetricsFifoPath, filepath.Join(cfg.ShimBaseDir, defaultNamespace, strconv.Itoa(vmID), "fc-metrics.fifo"))
+			require.Equal(t, vmInfoResp.SocketPath, filepath.Join(cfg.ShimBaseDir, nspVMid, "firecracker.sock"))
+			require.Equal(t, vmInfoResp.LogFifoPath, filepath.Join(cfg.ShimBaseDir, nspVMid, "fc-logs.fifo"))
+			require.Equal(t, vmInfoResp.MetricsFifoPath, filepath.Join(cfg.ShimBaseDir, nspVMid, "fc-metrics.fifo"))
 			require.Equal(t, resp.CgroupPath, vmInfoResp.CgroupPath)
 
 			// just verify that updating the metadata doesn't return an error, a separate test case is needed
@@ -867,7 +867,7 @@ func testCreateContainerWithSameName(t *testing.T, vmID string) {
 	require.NoError(t, err, "failed to load config")
 
 	if len(vmID) != 0 {
-		shimPath := fmt.Sprintf("%s/default/%s/%s", cfg.ShimBaseDir, vmID, containerName)
+		shimPath := fmt.Sprintf("%s/default#%s/%s/%s", cfg.ShimBaseDir, vmID, vmID, containerName)
 		_, err = os.Stat(shimPath)
 		require.True(t, os.IsNotExist(err))
 	}
@@ -889,7 +889,7 @@ func testCreateContainerWithSameName(t *testing.T, vmID string) {
 	require.True(t, os.IsNotExist(err))
 
 	if len(vmID) != 0 {
-		shimPath := fmt.Sprintf("%s/default/%s/%s", cfg.ShimBaseDir, vmID, containerName)
+		shimPath := fmt.Sprintf("%s/default#%s/%s/%s", cfg.ShimBaseDir, vmID, vmID, containerName)
 		_, err = os.Stat(shimPath)
 		require.True(t, os.IsNotExist(err))
 	}

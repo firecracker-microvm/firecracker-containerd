@@ -49,7 +49,7 @@ func shimDir(varRunDir, namespace, vmID string) (Dir, error) {
 		return "", errors.Wrapf(err, "failed evaluating any symlinks in path %q", varRunDir)
 	}
 
-	return Dir(filepath.Join(resolvedVarRunDir, namespace, vmID)), nil
+	return Dir(filepath.Join(resolvedVarRunDir, namespace+"#"+vmID)), nil
 }
 
 // Dir represents the root of a firecracker-containerd VM directory, which

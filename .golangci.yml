@@ -33,3 +33,8 @@ issues:
     - G103 # Use of unsafe calls should be audited
     - G204 # Subprocess launched with variable
     - G304 # Potential file inclusion via variable
+
+linters-settings:
+  gocritic:
+    disabled-checks:
+      - appendAssign

@@ -2,9 +2,9 @@ name: Build
 
 on:
   push:
-    branches: [ master ]
+    branches: [ main ]
   pull_request:
-    branches: [ master ]
+    branches: [ main ]
 
 jobs:
   build:
@@ -32,7 +32,7 @@ jobs:
           #
           # While DCO check (on Makefile) checks latest 20 commits,
           # the checkout action automatically creates a merge commit
-          # for merging "master" into a pull request branch.
+          # for merging "main" into a pull request branch.
           # In addition to that, Git cannot recognize merge commits when
           # one of the parents is missing.
           # So, we will fetch 30 commits just in case to have

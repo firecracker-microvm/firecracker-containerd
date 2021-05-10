@@ -39,7 +39,7 @@ You need to have the following things in order to use firecracker-containerd:
   </details>
 * git
 * A root filesystem image (you can use the one
-  [described here](https://github.com/firecracker-microvm/firecracker/blob/master/docs/getting-started.md#running-firecracker)
+  [described here](https://github.com/firecracker-microvm/firecracker/blob/main/docs/getting-started.md#running-firecracker)
   as `hello-rootfs.ext4`). 
 * A recent installation of [Docker CE](https://docker.com).
 * Go 1.13 or later, which you can download from [here](https://golang.org/dl/).
@@ -356,7 +356,7 @@ quick summary:
   - Sets up firewall rules on the host that allows traffic to/from VMs via the host
     network.
 * [`tc-redirect-tap` CNI
-  plugin](https://github.com/firecracker-microvm/firecracker-go-sdk/tree/master/cni)
+  plugin](https://github.com/firecracker-microvm/firecracker-go-sdk/tree/main/cni)
   - A CNI plugin that adapts other CNI plugins to be usable by Firecracker VMs.
   [See this doc for more details](networking.md). It is used here to adapt veth
   devices created by the `ptp` plugin to tap devices provided to VMs.

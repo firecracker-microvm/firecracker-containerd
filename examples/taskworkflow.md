@@ -15,7 +15,7 @@ $ sudo /path/to/firecracker-containerd/examples/taskworkflow
 ```
 
 For a workflow with networking setup for the container, create a tap device
-for the VM by following [these instructions](https://github.com/firecracker-microvm/firecracker/blob/master/docs/network-setup.md).
+for the VM by following [these instructions](https://github.com/firecracker-microvm/firecracker/blob/main/docs/network-setup.md).
 
 This creates a tap device named `tap0`, in the local `172.16.0.1/24` subnet.
 Since the example does not rely on a DHCP client running within the VM to

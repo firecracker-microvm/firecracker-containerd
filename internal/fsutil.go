@@ -60,7 +60,7 @@ func createTestExtImg(ctx context.Context, t *testing.T, extName string, testFil
 		err = os.MkdirAll(filepath.Dir(destPath), 0750)
 		require.NoError(t, err, "failed to mkdir for contents of ext img file")
 
-		err = ioutil.WriteFile(destPath, []byte(testFile.Contents), 0750)
+		err = ioutil.WriteFile(destPath, []byte(testFile.Contents), 0600)
 		require.NoError(t, err, "failed to write file for contents of ext img")
 	}
 

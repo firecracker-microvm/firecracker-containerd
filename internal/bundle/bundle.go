@@ -101,7 +101,7 @@ func (c *OCIConfig) Bytes() ([]byte, error) {
 
 // Write will create or overwrite the config.json with the provided bytes
 func (c *OCIConfig) Write(contents []byte) error {
-	err := ioutil.WriteFile(c.path, contents, 0700)
+	err := ioutil.WriteFile(c.path, contents, 0600)
 	if err != nil {
 		return errors.Wrapf(err, "failed to write OCI config file %s", c.path)
 	}

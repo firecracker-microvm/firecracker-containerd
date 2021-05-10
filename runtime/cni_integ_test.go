@@ -363,7 +363,7 @@ func writeCNIConf(path, chainedPluginName, networkName, nameserver string) error
       "type": "%s"
     }
   ]
-}`, networkName, nameserver, chainedPluginName)), 0644)
+}`, networkName, nameserver, chainedPluginName)), 0600)
 }
 
 func withDefaultNetwork() func(c *config.Config) {

@@ -204,12 +204,12 @@ func TestFifoHandler_Isolated(t *testing.T) {
 
 			err = os.MkdirAll(filepath.Dir(logPath), 0750)
 			require.NoError(t, err)
-			err = ioutil.WriteFile(logPath, []byte("log"), 0644)
+			err = ioutil.WriteFile(logPath, []byte("log"), 0600)
 			require.NoError(t, err)
 
 			err = os.MkdirAll(filepath.Dir(metricsPath), 0750)
 			require.NoError(t, err)
-			err = ioutil.WriteFile(metricsPath, []byte("metrics"), 0644)
+			err = ioutil.WriteFile(metricsPath, []byte("metrics"), 0600)
 			require.NoError(t, err)
 
 			j := runcJailer{

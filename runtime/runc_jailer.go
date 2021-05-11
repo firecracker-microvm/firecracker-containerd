@@ -146,8 +146,7 @@ func (j *runcJailer) prepareBindMounts(mounts []*proto.FirecrackerDriveMount) er
 	return nil
 }
 
-// JailPath returns the base directory from where the jail binary will be ran
-// from
+// JailPath returns the base directory from where the jail binary will be ran from
 func (j *runcJailer) OCIBundlePath() string {
 	return j.Config.OCIBundlePath
 }
@@ -167,7 +166,7 @@ func (j *runcJailer) JailPath() vm.Dir {
 // jailed values, like SocketPath in the machineConfig.
 func (j *runcJailer) BuildJailedMachine(cfg *config.Config, machineConfig *firecracker.Config, vmID string) ([]firecracker.Opt, error) {
 	handler := j.BuildJailedRootHandler(cfg, machineConfig, vmID)
-	fifoHandler := j.BuildLinkFifoHandler()
+	fifoHandler := j.BuildBindMountFifoHandler()
 
 	var debugSDK bool
 	if level, set := cfg.DebugHelper.GetFirecrackerSDKLogLevel(); set {
@@ -189,15 +188,58 @@ func (j *runcJailer) BuildJailedMachine(cfg *config.Config, machineConfig *firec
 			m.Handlers.FcInit = m.Handlers.FcInit.Prepend(handler)
 			// The fifo handler should be appended after the creation of the fifos,
 			// ie CreateLogFilesHandlerName. The reason for this is the fifo handler
-			// that was created links the files to the jailed path, and if they do
+			// that was created bind mounts the files to the jailed path, and if they do
 			// not exist an error will occur. The fifo handler should never do
-			// anything more than link the fifos and which will make it safe from the
+			// anything more than bind mount the fifos and which will make it safe from the
 			// handler list changing order.
 			m.Handlers.FcInit = m.Handlers.FcInit.AppendAfter(firecracker.CreateLogFilesHandlerName, fifoHandler)
 		},
 	}
 
 	return opts, nil
+}
+
+func (j *runcJailer) bindMountFIFO(src, base string) (string, error) {
+	root := j.RootPath()
+
+	if strings.ContainsRune(base, os.PathSeparator) {
+		return "", fmt.Errorf("%q must not contain %q", base, os.PathSeparator)
+	}
+
+	if _, err := os.Stat(src); os.IsNotExist(err) {
+		return "", fmt.Errorf("%s is not existed", src)
+	}
+
+	dst := filepath.Join(root, base)
+	if err := j.bindMountFileToJail(src, dst); err != nil {
+		return "", err
+	}
+
+	return base, nil
+}
+
+// BuildBindMountFifoHandler will return a new firecracker.Handler with the function
+// that will allow bind mounting of the fifos making them visible to Firecracker.
+func (j *runcJailer) BuildBindMountFifoHandler() firecracker.Handler {
+	return firecracker.Handler{
+		Name: jailerFifoHandlerName,
+		Fn: func(ctx context.Context, m *firecracker.Machine) error {
+			logFifo, err := j.bindMountFIFO(m.Cfg.LogPath, internal.FirecrackerLogFifoName)
+			if err != nil {
+				return err
+			}
+			m.Cfg.LogFifo = logFifo
+
+			metricsFifo, err := j.bindMountFIFO(m.Cfg.MetricsPath, internal.FirecrackerMetricsFifoName)
+			if err != nil {
+				return err
+			}
+			m.Cfg.MetricsFifo = metricsFifo
+
+			j.started = true
+			return nil
+		},
+	}
 }
 
 // BuildJailedRootHandler will populate the jail with the necessary files, which may be
@@ -210,7 +252,6 @@ func (j *runcJailer) BuildJailedRootHandler(cfg *config.Config, machineConfig *f
 	return firecracker.Handler{
 		Name: jailerHandlerName,
 		Fn: func(ctx context.Context, m *firecracker.Machine) error {
-
 			rootPathToConfig := filepath.Join(ociBundlePath, "config.json")
 			j.logger.WithField("rootPathToConfig", rootPathToConfig).Debug("Copying config")
 			if err := copyFile(j.Config.RuncConfigPath, rootPathToConfig, 0400); err != nil {
@@ -230,7 +271,6 @@ func (j *runcJailer) BuildJailedRootHandler(cfg *config.Config, machineConfig *f
 			if err := j.copyFileToJail(m.Cfg.KernelImagePath, newKernelImagePath, 0400); err != nil {
 				return err
 			}
-
 			m.Cfg.KernelImagePath = kernelImageFileName
 
 			// copy drives to new contents path
@@ -287,53 +327,6 @@ func (j *runcJailer) BuildJailedRootHandler(cfg *config.Config, machineConfig *f
 			}
 
 			j.logger.Info("Successfully ran jailer handler")
-			j.started = true
-
-			return nil
-		},
-	}
-}
-
-// makeLinkInJail creates a hard link to `src` inside the jail directory.
-func (j *runcJailer) makeLinkInJail(src, base string) (string, error) {
-	root := j.RootPath()
-
-	if strings.ContainsRune(base, os.PathSeparator) {
-		return "", fmt.Errorf("%q must not contain %q", base, os.PathSeparator)
-	}
-
-	dst := filepath.Join(root, base)
-
-	// Since Firecracker is unaware that we are in a jailed environment and
-	// what owner/group to set this as when creating, we will manually have
-	// to adjust the permission bits ourselves
-	if err := linkAndChown(src, dst, j.Config.UID, j.Config.GID); err != nil {
-		return "", err
-	}
-
-	// this path needs to be relative to the root path, and since we are
-	// placing the file in the root path the value should just be the file name.
-	return base, nil
-}
-
-// BuildLinkFifoHandler will return a new firecracker.Handler with the function
-// that will allow linking of the fifos making them visible to Firecracker.
-func (j *runcJailer) BuildLinkFifoHandler() firecracker.Handler {
-	return firecracker.Handler{
-		Name: jailerFifoHandlerName,
-		Fn: func(ctx context.Context, m *firecracker.Machine) error {
-			logFifo, err := j.makeLinkInJail(m.Cfg.LogPath, internal.FirecrackerLogFifoName)
-			if err != nil {
-				return err
-			}
-			m.Cfg.LogFifo = logFifo
-
-			metricsFifo, err := j.makeLinkInJail(m.Cfg.MetricsPath, internal.FirecrackerMetricsFifoName)
-			if err != nil {
-				return err
-			}
-			m.Cfg.MetricsFifo = metricsFifo
-
 			return nil
 		},
 	}
@@ -436,16 +429,16 @@ func (j *runcJailer) bindMountFileToJail(src, dst string) error {
 		return err
 	}
 
-	err = os.Chown(filepath.Dir(dst), int(j.Config.UID), int(j.Config.GID))
-	if err != nil {
-		return err
-	}
-
 	f, err := os.Create(dst)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
+
+	err = os.Chown(dst, int(j.Config.UID), int(j.Config.GID))
+	if err != nil {
+		return err
+	}
 
 	rel, err := filepath.Rel(j.RootPath(), dst)
 	if err != nil {
@@ -630,18 +623,6 @@ func mkdirAllWithPermissions(path string, mode os.FileMode, uid, gid uint32) err
 		if err != nil && !os.IsExist(err) {
 			return err
 		}
-	}
-
-	return nil
-}
-
-func linkAndChown(src, dst string, uid, gid uint32) error {
-	if err := os.Link(src, dst); err != nil {
-		return err
-	}
-
-	if err := os.Chown(dst, int(uid), int(gid)); err != nil {
-		return err
 	}
 
 	return nil

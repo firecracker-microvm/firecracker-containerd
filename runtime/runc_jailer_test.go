@@ -172,6 +172,43 @@ func TestBindMountToJail_Isolated(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestBindMountFIFO_Isolated(t *testing.T) {
+	// Because of chown(2).
+	internal.RequiresIsolation(t)
+
+	dir, err := ioutil.TempDir("", t.Name())
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	srcPath := filepath.Join(dir, "src1")
+
+	err = os.MkdirAll(srcPath, 0750)
+	require.NoError(t, err)
+
+	base := "fifo1"
+	f, err := os.Create(filepath.Join(srcPath, base))
+	require.NoError(t, err)
+	defer f.Close()
+
+	j := &runcJailer{
+		started: false,
+		Config:  runcJailerConfig{OCIBundlePath: dir},
+	}
+
+	// Create the mount point. The mount point will be used by runc later.
+	_, err = j.bindMountFIFO(srcPath, base)
+	require.NoError(t, err)
+
+	_, err = os.Stat(filepath.Join(j.RootPath(), base))
+	require.NoError(t, err)
+
+	// Once runc has been started, it doesn't create a mount point and
+	// let the caller know the method cannot be used.
+	j.started = true
+	_, err = j.bindMountFIFO(srcPath, "fifo2")
+	require.Error(t, err)
+}
+
 func TestFifoHandler_Isolated(t *testing.T) {
 	// Because of chown(2).
 	internal.RequiresIsolation(t)
@@ -220,7 +257,7 @@ func TestFifoHandler_Isolated(t *testing.T) {
 			err = os.Mkdir(j.RootPath(), 0750)
 			require.NoError(t, err)
 
-			handler := j.BuildLinkFifoHandler()
+			handler := j.BuildBindMountFifoHandler()
 			err = handler.Fn(
 				context.Background(),
 				&firecracker.Machine{

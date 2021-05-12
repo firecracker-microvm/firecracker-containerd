@@ -13,7 +13,7 @@
 
 # Firecracker tends to use latest Rust versions.
 # The Rust version below should be matched with
-# https://github.com/firecracker-microvm/firecracker/blob/master/tools/devctr/Dockerfile.x86_64.
+# https://github.com/firecracker-microvm/firecracker/blob/main/tools/devctr/Dockerfile.x86_64.
 FROM rust:1.43.1-buster
 
 ENV DEBIAN_FRONTEND="noninteractive"

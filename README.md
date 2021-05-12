@@ -2,8 +2,8 @@
 
 | Automation | Status |
 |------------|--------|
-| Tests      | [![Build status](https://badge.buildkite.com/aab4ae547d5e5079a5915522e8cdb18492349aef67aae5a8c5.svg?branch=master)](https://buildkite.com/firecracker-microvm/firecracker-containerd)
-| Lint       | [![Build Status](https://travis-ci.org/firecracker-microvm/firecracker-containerd.svg?branch=master)](https://travis-ci.org/firecracker-microvm/firecracker-containerd)
+| Tests      | [![Build status](https://badge.buildkite.com/aab4ae547d5e5079a5915522e8cdb18492349aef67aae5a8c5.svg?branch=main)](https://buildkite.com/firecracker-microvm/firecracker-containerd)
+| Lint       | [![Build Status](https://travis-ci.org/firecracker-microvm/firecracker-containerd.svg?branch=main)](https://travis-ci.org/firecracker-microvm/firecracker-containerd)
 
 This repository enables the use of a container runtime,
 [containerd](https://containerd.io), to manage
@@ -87,7 +87,7 @@ If you've discovered an issue that may have security implications to
 users or developers of this software, please do not report it using
 GitHub issues, but instead follow
 [Firecracker's security reporting
-guidelines](https://github.com/firecracker-microvm/firecracker/blob/master/SECURITY-POLICY.md).
+guidelines](https://github.com/firecracker-microvm/firecracker/blob/main/SECURITY-POLICY.md).
 
 Other discussion: For general discussion, please join us in the `#containerd`
 channel on the [Firecracker Slack](https://tinyurl.com/firecracker-microvm).

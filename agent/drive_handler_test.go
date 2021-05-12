@@ -26,7 +26,7 @@ import (
 
 func TestDiscoverDrives(t *testing.T) {
 	dh, err := newDriveHandler("./testdata/block", "./testdata/dev")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, 3, len(dh.drives))
 
 	expectedDriveIDs := []string{

@@ -17,6 +17,8 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+
+	"github.com/pkg/errors"
 )
 
 const (
@@ -69,6 +71,9 @@ const (
 // MagicStubBytes used to determine whether or not a drive is a stub drive
 var MagicStubBytes = []byte{214, 244, 216, 245, 215, 177, 177, 177}
 
+// ErrNotStubDrive indicates that the passed parameter is not a stub drive.
+var ErrNotStubDrive = errors.New("not a stub drive")
+
 // IsStubDrive will check to see if the io.Reader follows our stub drive
 // format. In the event of an error, this will return false. This will only
 // return true when the first n bytes read matches that of the magic stub
@@ -95,7 +100,16 @@ func ParseStubContent(r io.Reader) (string, error) {
 	magicBytes := make([]byte, len(MagicStubBytes))
 	_, err := magicBytesReader.Read(magicBytes)
 	if err != nil {
+		// The file is too short.
+		// All stub drive files must have MagicStubBytes in the beginning.
+		if err == io.EOF {
+			return "", ErrNotStubDrive
+		}
 		return "", err
+	}
+
+	if !bytes.Equal(magicBytes, MagicStubBytes) {
+		return "", ErrNotStubDrive
 	}
 
 	sizeReader := io.LimitReader(r, 1)

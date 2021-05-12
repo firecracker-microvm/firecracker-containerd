@@ -98,10 +98,6 @@ func (dh *driveHandler) discoverDrives() error {
 			return err
 		}
 
-		if !isStubDrive(d) {
-			continue
-		}
-
 		f, err := os.Open(d.Path())
 		if err != nil {
 			return err
@@ -110,6 +106,9 @@ func (dh *driveHandler) discoverDrives() error {
 		d.DriveID, err = internal.ParseStubContent(f)
 		f.Close()
 		if err != nil {
+			if err == internal.ErrNotStubDrive {
+				continue
+			}
 			return err
 		}
 		drives[d.DriveID] = d
@@ -152,17 +151,6 @@ func (dh driveHandler) buildDrive(name string) (drive, error) {
 	d.MajorMinor = strings.TrimSpace(string(majorMinorStr))
 
 	return d, nil
-}
-
-// isStubDrive will check to see if a given drive is a stub drive.
-func isStubDrive(d drive) bool {
-	f, err := os.Open(d.Path())
-	if err != nil {
-		return false
-	}
-	defer f.Close()
-
-	return internal.IsStubDrive(f)
 }
 
 func (dh driveHandler) MountDrive(ctx context.Context, req *drivemount.MountDriveRequest) (*empty.Empty, error) {

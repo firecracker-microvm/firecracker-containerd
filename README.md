@@ -90,7 +90,7 @@ GitHub issues, but instead follow
 guidelines](https://github.com/firecracker-microvm/firecracker/blob/master/SECURITY-POLICY.md).
 
 Other discussion: For general discussion, please join us in the `#containerd`
-channel on the [Firecracker Slack](https://tinyurl.com/firecracker-microvm).
+channel on the [Firecracker Slack](https://join.slack.com/t/firecracker-microvm/shared_invite/zt-oxbm7tqt-GLlze9zZ7sdRSDY6OnXXHg).
 
 ## License
 

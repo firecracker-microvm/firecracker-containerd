@@ -127,7 +127,7 @@ sudo make install install-firecracker demo-network
 cd ~
 
 # Download kernel
-curl -fsSL -o hello-vmlinux.bin https://s3.amazonaws.com/spec.ccfc.min/img/hello/kernel/hello-vmlinux.bin
+curl -fsSL -o hello-vmlinux.bin https://s3.amazonaws.com/spec.ccfc.min/img/quickstart_guide/x86_64/kernels/vmlinux.bin
 
 # Configure our firecracker-containerd binary to use our new snapshotter and
 # separate storage from the default containerd binary

@@ -102,9 +102,9 @@ func (dh *driveHandler) discoverDrives() error {
 		if err != nil {
 			return err
 		}
+		defer f.Close() // nolint:gosec // the file is read-only.
 
 		d.DriveID, err = internal.ParseStubContent(f)
-		f.Close()
 		if err != nil {
 			if err == internal.ErrNotStubDrive {
 				continue

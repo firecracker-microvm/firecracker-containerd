@@ -79,8 +79,8 @@ type OCIConfig struct {
 	path string
 }
 
-// File opens the config.json as read-only
-func (c *OCIConfig) File() (*os.File, error) {
+// file opens the config.json as read-only
+func (c *OCIConfig) file() (*os.File, error) {
 	f, err := os.Open(c.path)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to open OCI config file %s", c.path)
@@ -111,12 +111,12 @@ func (c *OCIConfig) Write(contents []byte) error {
 
 // VMID returns the firecracker VM ID set by the client in the OCI config Annotations section, if any.
 func (c *OCIConfig) VMID() (string, error) {
-	ociConfigFile, err := c.File()
+	ociConfigFile, err := c.file()
 	if err != nil {
 		return "", err
 	}
+	defer ociConfigFile.Close() // nolint:gosec // the file is read-only.
 
-	defer ociConfigFile.Close()
 	var ociConfig struct {
 		Annotations map[string]string `json:"annotations,omitempty"`
 	}

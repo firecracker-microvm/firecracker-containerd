@@ -27,6 +27,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/firecracker-microvm/firecracker-containerd/config"
+	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 )
@@ -46,12 +47,14 @@ func TestCopyFile_simple(t *testing.T) {
 	assert.NotEqual(t, 0, int(info.Size()))
 }
 
-func createSparseFile(path string, size int) error {
+func createSparseFile(path string, size int) (retErr error) {
 	f, err := os.Create(path)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() {
+		retErr = internal.SafeClose(retErr, f)
+	}()
 
 	err = f.Truncate(int64(size))
 	if err != nil {

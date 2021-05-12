@@ -1893,7 +1893,7 @@ loop:
 func requireNonEmptyFifo(t testing.TB, path string) {
 	file, err := os.Open(path)
 	require.NoError(t, err)
-	defer file.Close()
+	defer file.Close() // nolint:gosec
 
 	reader := bufio.NewReader(file)
 

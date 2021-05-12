@@ -98,7 +98,7 @@ func testJailer(t *testing.T, jailerConfig *proto.JailerConfig) {
 	if jailerConfig != nil && jailerConfig.DriveExposePolicy == proto.DriveExposePolicy_BIND {
 		f, err := ioutil.TempFile("", fsSafeTestName(t)+"_rootfs")
 		require.NoError(err)
-		defer f.Close()
+		defer logClose(t, f)
 
 		dst := f.Name()
 

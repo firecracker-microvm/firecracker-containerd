@@ -42,17 +42,17 @@ func TestBuildJailedRootHandler_Isolated(t *testing.T) {
 	kernelImagePath := filepath.Join(dir, "kernel-image")
 	kernelImageFd, err := os.OpenFile(kernelImagePath, os.O_CREATE, 0600)
 	require.NoError(t, err, "failed to create kernel image")
-	defer kernelImageFd.Close()
+	defer logClose(t, kernelImageFd)
 
 	rootDrivePath := filepath.Join(dir, "root-drive")
 	rootDriveFd, err := os.OpenFile(rootDrivePath, os.O_CREATE, 0600)
 	require.NoError(t, err, "failed to create kernel image")
-	defer rootDriveFd.Close()
+	defer logClose(t, rootDriveFd)
 
 	firecrackerPath := filepath.Join(dir, "firecracker")
 	firecrackerFd, err := os.OpenFile(firecrackerPath, os.O_CREATE, 0600)
 	require.NoError(t, err, "failed to create firecracker")
-	defer firecrackerFd.Close()
+	defer logClose(t, firecrackerFd)
 
 	l := logrus.NewEntry(logrus.New())
 	runcConfig := runcJailerConfig{
@@ -145,7 +145,7 @@ func TestBindMountToJail_Isolated(t *testing.T) {
 
 	f, err := os.Create(filepath.Join(dir, "src1"))
 	require.NoError(t, err)
-	defer f.Close()
+	defer logClose(t, f)
 
 	j := &runcJailer{
 		started: false,

@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 )
 
@@ -138,4 +139,14 @@ func GenerateStubContent(id string) (string, error) {
 	}
 
 	return fmt.Sprintf("%s%c%s", MagicStubBytes, byte(length), id), nil
+}
+
+// SafeClose closes the given file and adds its error to err.
+// It is convenient to use from defer.
+func SafeClose(err error, f io.Closer) error {
+	closeErr := f.Close()
+	if closeErr != nil {
+		return multierror.Append(err, closeErr)
+	}
+	return err
 }

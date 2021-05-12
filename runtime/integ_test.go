@@ -68,7 +68,7 @@ func prepareIntegTest(t testing.TB, options ...func(*config.Config)) {
 	}
 }
 
-func writeRuntimeConfig(options ...func(*config.Config)) error {
+func writeRuntimeConfig(options ...func(*config.Config)) (retErr error) {
 	config := defaultRuntimeConfig
 	for _, option := range options {
 		option(&config)
@@ -78,7 +78,9 @@ func writeRuntimeConfig(options ...func(*config.Config)) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		retErr = internal.SafeClose(retErr, file)
+	}()
 
 	bytes, err := json.Marshal(config)
 	if err != nil {
@@ -142,5 +144,12 @@ func runTask(ctx context.Context, c containerd.Container) (*commandResult, error
 		}, nil
 	case <-ctx.Done():
 		return nil, errors.New("context cancelled")
+	}
+}
+
+func logClose(tb testing.TB, f *os.File) {
+	err := f.Close()
+	if err != nil {
+		tb.Logf("failed to close %q: %s", f.Name(), err)
 	}
 }

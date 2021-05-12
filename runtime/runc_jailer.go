@@ -200,6 +200,13 @@ func (j *runcJailer) BuildJailedMachine(cfg *config.Config, machineConfig *firec
 	return opts, nil
 }
 
+func (j *runcJailer) logClose(f *os.File) {
+	err := f.Close()
+	if err != nil {
+		j.logger.WithError(err).Errorf("failed to close %q", f.Name())
+	}
+}
+
 // BuildJailedRootHandler will populate the jail with the necessary files, which may be
 // device nodes, hard links, and/or bind-mount targets
 func (j *runcJailer) BuildJailedRootHandler(cfg *config.Config, machineConfig *firecracker.Config, vmID string) firecracker.Handler {
@@ -246,7 +253,7 @@ func (j *runcJailer) BuildJailedRootHandler(cfg *config.Config, machineConfig *f
 
 				// This closes the file in the event an error occurred, otherwise we
 				// call close down below.
-				defer f.Close()
+				defer j.logClose(f)
 
 				if !internal.IsStubDrive(f) {
 					mode := 0600
@@ -258,9 +265,7 @@ func (j *runcJailer) BuildJailedRootHandler(cfg *config.Config, machineConfig *f
 					}
 				}
 
-				if err := f.Close(); err != nil {
-					j.logger.WithError(err).Debug("failed to close drive file")
-				}
+				j.logClose(f)
 
 				j.logger.WithField("drive", newDrivePath).Debug("Adding drive")
 				m.Cfg.Drives[i].PathOnHost = firecracker.String(fileName)
@@ -445,7 +450,7 @@ func (j *runcJailer) bindMountFileToJail(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer j.logClose(f)
 
 	rel, err := filepath.Rel(j.RootPath(), dst)
 	if err != nil {

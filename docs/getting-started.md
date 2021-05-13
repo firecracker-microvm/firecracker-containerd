@@ -51,7 +51,7 @@ You need to have the following things in order to use firecracker-containerd:
 You can use the following kernel:
 
 ```bash
-curl -fsSL -o hello-vmlinux.bin https://s3.amazonaws.com/spec.ccfc.min/img/hello/kernel/hello-vmlinux.bin
+curl -fsSL -o hello-vmlinux.bin https://s3.amazonaws.com/spec.ccfc.min/img/quickstart_guide/x86_64/kernels/vmlinux.bin
 ```
 
 ### Install Docker

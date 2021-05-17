@@ -310,7 +310,7 @@ func (s *service) serveFCControl() error {
 	return nil
 }
 
-func (s *service) StartShim(shimCtx context.Context, containerID, containerdBinary, containerdAddress, containerdTTRPCAddress string) (string, error) {
+func (s *service) StartShim(shimCtx context.Context, opts shim.StartOpts) (string, error) {
 	// In the shim start routine, we can assume that containerd provided a "log" FIFO in the current working dir.
 	// We have to use that instead of stdout/stderr because containerd reads the stdio pipes of shim start to get
 	// either the shim address or the error returned here.
@@ -321,7 +321,7 @@ func (s *service) StartShim(shimCtx context.Context, containerID, containerdBina
 
 	logrus.SetOutput(logFifo)
 
-	log := log.G(shimCtx).WithField("task_id", containerID)
+	log := log.G(shimCtx).WithField("task_id", opts.ID)
 	log.Debug("StartShim")
 
 	// If we are running a shim start routine, we can safely assume our current working
@@ -362,7 +362,7 @@ func (s *service) StartShim(shimCtx context.Context, containerID, containerdBina
 		exitAfterAllTasksDeleted = true
 	}
 
-	client, err := ttrpcutil.NewClient(containerdTTRPCAddress)
+	client, err := ttrpcutil.NewClient(opts.TTRPCAddress)
 	if err != nil {
 		return "", err
 	}
@@ -396,7 +396,7 @@ func (s *service) StartShim(shimCtx context.Context, containerID, containerdBina
 	}
 	log.WithField("vmID", s.vmID).Infof("successfully started shim (git commit: %s).%s", revision, str)
 
-	return shim.SocketAddress(shimCtx, containerdAddress, s.vmID)
+	return shim.SocketAddress(shimCtx, opts.Address, s.vmID)
 }
 
 func logPanicAndDie(logger *logrus.Entry) {

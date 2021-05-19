@@ -287,7 +287,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 		},
 	}
 
-	testTimeout := 600 * time.Second
+	testTimeout := 10 * time.Minute
 	ctx, cancel := context.WithTimeout(namespaces.WithNamespace(context.Background(), defaultNamespace), testTimeout)
 	defer cancel()
 
@@ -327,11 +327,6 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 			fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
 			req := &proto.CreateVMRequest{
 				VMID: vmIDStr,
-				// Enabling Go Race Detector makes in-microVM binaries heavy in terms of CPU and memory.
-				MachineCfg: &proto.FirecrackerMachineConfiguration{
-					VcpuCount:  4,
-					MemSizeMib: 4096,
-				},
 				RootDrive: &proto.FirecrackerRootDrive{
 					HostPath: rootfsPath,
 				},
@@ -346,6 +341,13 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 				},
 				ContainerCount: containerCount,
 				JailerConfig:   jailerConfig,
+				// In tests, our in-VM agent has Go's race detector,
+				// which makes the agent resource-hoggy than its production build
+				// So the default VM size (128MB) is too small.
+				MachineCfg: &proto.FirecrackerMachineConfiguration{MemSizeMib: 1024},
+				// Because this test starts multiple VMs in parallel, some of them may not start within
+				// the default timeout (20 seconds).
+				TimeoutSeconds: 60,
 			}
 
 			resp, err := fcClient.CreateVM(ctx, req)

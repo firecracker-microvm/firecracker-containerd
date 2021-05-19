@@ -53,4 +53,17 @@ cat << EOF > $runtime_config_path
 EOF
 
 cp ./runtime/firecracker-runc-config.json.example $dir/config.json
-cp ./_submodules/runc/runc $bin_path/runc
+
+# runc uses /run/runc directory by default. Since our Amazon Linux 2 tests on
+# BuildKite don't use Docker, sharing the directory across multiple test
+# runs causes a race condition.
+#
+# This wrapper script gives runc /run/runc-$unique_id instead to avoid
+# the race condition.
+cp ./_submodules/runc/runc "$bin_path/runc.real"
+cat > "$bin_path/runc" <<EOF
+#! /bin/bash
+set -euo pipefail
+"$bin_path/runc.real" --root "/run/runc-$unique_id" "\$@"
+EOF
+chmod +x "$bin_path/runc"

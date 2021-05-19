@@ -83,12 +83,12 @@ else
 
     pool_create() {
         echo sudo lvcreate --type thin-pool \
-             --poolmetadatasize 16GiB \
-             --size 1G \
+             --poolmetadatasize 16MiB \
+             --size 1GiB \
              -n "$name" "$FICD_DM_VOLUME_GROUP"
         sudo lvcreate --type thin-pool \
-             --poolmetadatasize 16GiB \
-             --size 1G \
+             --poolmetadatasize 16MiB \
+             --size 1GiB \
              -n "$name" "$FICD_DM_VOLUME_GROUP"
     }
 

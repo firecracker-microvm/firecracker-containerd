@@ -1849,9 +1849,11 @@ func TestOOM_Isolated(t *testing.T) {
 		containerd.WithSnapshotter(defaultSnapshotterName),
 		containerd.WithNewSnapshot("snapshot-"+vmID, image),
 		containerd.WithNewSpec(
-			oci.WithProcessArgs("/bin/dd", "if=/dev/zero", "ibs=10M"),
-			firecrackeroci.WithVMID(vmID),
+			// The container is having 2MB of memory.
 			oci.WithMemoryLimit(2*1024*1024),
+			// But the dd command allocates 10MB of data on memory, which will be OOM killed.
+			oci.WithProcessArgs("/bin/dd", "if=/dev/zero", "ibs=10M", "of=/dev/null"),
+			firecrackeroci.WithVMID(vmID),
 		),
 	)
 	require.NoError(t, err)
@@ -2057,29 +2059,25 @@ func TestPauseResume_Isolated(t *testing.T) {
 	fcClient := fccontrol.NewFirecrackerClient(pluginClient.Client())
 
 	subtests := []struct {
-		name    string
-		request *proto.CreateVMRequest
-		state   func(ctx context.Context, resp *proto.CreateVMResponse)
+		name  string
+		state func(ctx context.Context, resp *proto.CreateVMResponse)
 	}{
 		{
-			name:    "PauseVM",
-			request: &proto.CreateVMRequest{},
+			name: "PauseVM",
 			state: func(ctx context.Context, resp *proto.CreateVMResponse) {
 				_, err := fcClient.PauseVM(ctx, &proto.PauseVMRequest{VMID: resp.VMID})
 				require.NoError(t, err)
 			},
 		},
 		{
-			name:    "ResumeVM",
-			request: &proto.CreateVMRequest{},
+			name: "ResumeVM",
 			state: func(ctx context.Context, resp *proto.CreateVMResponse) {
 				_, err := fcClient.ResumeVM(ctx, &proto.ResumeVMRequest{VMID: resp.VMID})
 				require.NoError(t, err)
 			},
 		},
 		{
-			name:    "Consecutive PauseVM",
-			request: &proto.CreateVMRequest{},
+			name: "Consecutive PauseVM",
 			state: func(ctx context.Context, resp *proto.CreateVMResponse) {
 				_, err := fcClient.PauseVM(ctx, &proto.PauseVMRequest{VMID: resp.VMID})
 				require.NoError(t, err)
@@ -2089,8 +2087,7 @@ func TestPauseResume_Isolated(t *testing.T) {
 			},
 		},
 		{
-			name:    "Consecutive ResumeVM",
-			request: &proto.CreateVMRequest{},
+			name: "Consecutive ResumeVM",
 			state: func(ctx context.Context, resp *proto.CreateVMResponse) {
 				_, err := fcClient.ResumeVM(ctx, &proto.ResumeVMRequest{VMID: resp.VMID})
 				require.NoError(t, err)
@@ -2100,8 +2097,7 @@ func TestPauseResume_Isolated(t *testing.T) {
 			},
 		},
 		{
-			name:    "PauseResume",
-			request: &proto.CreateVMRequest{},
+			name: "PauseResume",
 			state: func(ctx context.Context, resp *proto.CreateVMResponse) {
 				_, err := fcClient.PauseVM(ctx, &proto.PauseVMRequest{VMID: resp.VMID})
 				require.NoError(t, err)
@@ -2111,8 +2107,7 @@ func TestPauseResume_Isolated(t *testing.T) {
 			},
 		},
 		{
-			name:    "ResumePause",
-			request: &proto.CreateVMRequest{},
+			name: "ResumePause",
 			state: func(ctx context.Context, resp *proto.CreateVMResponse) {
 				_, err := fcClient.ResumeVM(ctx, &proto.ResumeVMRequest{VMID: resp.VMID})
 				require.NoError(t, err)
@@ -2164,18 +2159,14 @@ func TestPauseResume_Isolated(t *testing.T) {
 
 	for _, subtest := range subtests {
 		state := subtest.state
-		request := subtest.request
 		t.Run(subtest.name, func(t *testing.T) {
-			runTest(t, request, state)
+			t.Parallel()
+			runTest(t, &proto.CreateVMRequest{}, state)
 		})
 
-		requestWithJailer := subtest.request
-		requestWithJailer.JailerConfig = &proto.JailerConfig{
-			UID: 30000,
-			GID: 30000,
-		}
 		t.Run(subtest.name+"/Jailer", func(t *testing.T) {
-			runTest(t, requestWithJailer, state)
+			t.Parallel()
+			runTest(t, &proto.CreateVMRequest{JailerConfig: &proto.JailerConfig{UID: 30000, GID: 30000}}, state)
 		})
 	}
 }

@@ -377,6 +377,78 @@ func (s *local) GetVMMetadata(requestCtx context.Context, req *proto.GetVMMetada
 	return resp, nil
 }
 
+// GetBalloonConfig get balloon configuration, before or after machine startup.
+func (s *local) GetBalloonConfig(requestCtx context.Context, req *proto.GetBalloonConfigRequest) (*proto.GetBalloonConfigResponse, error) {
+	client, err := s.shimFirecrackerClient(requestCtx, req.VMID)
+	if err != nil {
+		return nil, err
+	}
+
+	defer client.Close()
+	resp, err := client.GetBalloonConfig(requestCtx, req)
+	if err != nil {
+		err = errors.Wrap(err, "shim client failed to get balloon config")
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+// UpdateBalloon updates memory size for an existing balloon device, before or after machine startup.
+func (s *local) UpdateBalloon(requestCtx context.Context, req *proto.UpdateBalloonRequest) (*empty.Empty, error) {
+	client, err := s.shimFirecrackerClient(requestCtx, req.VMID)
+	if err != nil {
+		return nil, err
+	}
+
+	defer client.Close()
+	resp, err := client.UpdateBalloon(requestCtx, req)
+	if err != nil {
+		err = errors.Wrap(err, "shim client failed to update balloon")
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+// GetBalloonStats will return the latest balloon device statistics, only if enabled pre-boot.
+func (s *local) GetBalloonStats(requestCtx context.Context, req *proto.GetBalloonStatsRequest) (*proto.GetBalloonStatsResponse, error) {
+	client, err := s.shimFirecrackerClient(requestCtx, req.VMID)
+	if err != nil {
+		return nil, err
+	}
+
+	defer client.Close()
+	resp, err := client.GetBalloonStats(requestCtx, req)
+	if err != nil {
+		err = errors.Wrap(err, "shim client failed to get balloon statistics")
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+// UpdateBalloonStats updates an existing balloon device statistics interval, before or after machine startup.
+func (s *local) UpdateBalloonStats(requestCtx context.Context, req *proto.UpdateBalloonStatsRequest) (*empty.Empty, error) {
+	client, err := s.shimFirecrackerClient(requestCtx, req.VMID)
+	if err != nil {
+		return nil, err
+	}
+
+	defer client.Close()
+	resp, err := client.UpdateBalloonStats(requestCtx, req)
+	if err != nil {
+		err = errors.Wrap(err, "shim client failed to update balloon interval")
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	return resp, nil
+}
+
 func (s *local) newShim(ns, vmID, containerdAddress string, shimSocket *net.UnixListener, fcSocket *net.UnixListener) (*exec.Cmd, error) {
 	logger := s.logger.WithField("vmID", vmID)
 

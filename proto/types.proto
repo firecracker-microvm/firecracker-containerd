@@ -167,3 +167,9 @@ message FirecrackerTokenBucket {
 	int64 RefillTime = 2; // Specifies the amount of millis it takes for the bucket to fill
 	int64 Capacity = 3; // Specifies the number of tokens this bucket can hold
 }
+
+message FirecrackerBalloonDevice {
+    int64 AmountMib = 1; //Target balloon size in MiB.
+    bool DeflateOnOom = 2; // Whether the balloon should deflate when the guest has memory pressure.
+    int64 StatsPollingIntervals = 3; // Interval in seconds between refreshing statistics.
+}

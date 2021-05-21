@@ -39,6 +39,8 @@ message CreateVMRequest {
 
     string LogFifoPath = 12;
     string MetricsFifoPath = 13;
+
+    FirecrackerBalloonDevice BalloonDevice = 14;
 }
 
 message CreateVMResponse {
@@ -135,3 +137,69 @@ message JailerConfig {
     DriveExposePolicy DriveExposePolicy = 7;
 }
 
+message UpdateBalloonRequest {
+    string VMID = 1;
+    int64 AmountMib = 2;
+}
+
+message GetBalloonConfigRequest {
+    string VMID = 1;
+}
+
+message GetBalloonConfigResponse {
+    FirecrackerBalloonDevice BalloonConfig = 1;
+}
+
+message GetBalloonStatsRequest {
+    string VMID = 1;
+}
+
+message GetBalloonStatsResponse {
+    // Actual amount of memory (in MiB) the device is holding.
+    int64 ActualMib = 1;
+
+    // Actual number of pages the device is holding.
+    int64 ActualPages = 2; 
+
+    // An estimate of how much memory is available (in bytes) for starting new applications, without pushing the system to swap.
+    int64 AvailableMemory = 3;  
+
+    // The amount of memory, in bytes, that can be quickly reclaimed without additional I/O. 
+    // Typically these pages are used for caching files from disk.
+    int64 DiskCaches = 4;
+
+    // The amount of memory not being used for any purpose (in bytes).
+    int64 FreeMemory = 5; 
+
+    // The number of successful hugetlb page allocations in the guest.
+    int64 HugetlbAllocations = 6; 	
+
+    // The number of failed hugetlb page allocations in the guest.
+    int64 HugetlbFailures = 7; 	
+
+    // The number of major page faults that have occurred.
+    int64 MajorFaults = 8; 
+    
+    // The number of minor page faults that have occurred.
+    int64 MinorFaults = 9; 
+
+    // The amount of memory that has been swapped in (in bytes).
+    int64 SwapIn = 10; 	
+
+    // The amount of memory that has been swapped out to disk (in bytes).
+    int64 SwapOut = 11;	
+
+    // Target amount of memory (in MiB) the device aims to hold.
+    int64 TargetMib = 12; 
+
+    // Target number of pages the device aims to hold.
+    int64 TargetPages = 13;	
+
+    // The total amount of memory available (in bytes).
+    int64 TotalMemory = 14; 
+}
+
+message UpdateBalloonStatsRequest {
+    string VMID = 1;
+    int64 StatsPollingIntervals = 2;
+}

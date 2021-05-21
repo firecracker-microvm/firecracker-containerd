@@ -29,5 +29,17 @@ service Firecracker {
     rpc UpdateVMMetadata(UpdateVMMetadataRequest) returns (google.protobuf.Empty);
 
     // Get Vm's instance metadata
-    rpc GetVMMetadata(GetVMMetadataRequest) returns (GetVMMetadataResponse);
+    rpc GetVMMetadata(GetVMMetadataRequest) returns (GetVMMetadataResponse);    
+
+    // Get balloon configuration
+    rpc GetBalloonConfig(GetBalloonConfigRequest) returns (GetBalloonConfigResponse); 
+
+    // Update balloon's memory
+    rpc UpdateBalloon(UpdateBalloonRequest) returns (google.protobuf.Empty); 
+    
+    // Gets a balloon device statistics
+    rpc GetBalloonStats(GetBalloonStatsRequest) returns(GetBalloonStatsResponse);
+
+    // Updates a balloon device statistics polling interval.
+    rpc UpdateBalloonStats(UpdateBalloonStatsRequest) returns(google.protobuf.Empty);
 }

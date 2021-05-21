@@ -47,8 +47,8 @@ import (
 	_ "github.com/containerd/containerd/runtime/v2/runc/options"
 
 	// Snapshotters
-	_ "github.com/containerd/containerd/snapshots/devmapper"
-	_ "github.com/containerd/containerd/snapshots/overlay"
+	_ "github.com/containerd/containerd/snapshots/devmapper/plugin"
+	_ "github.com/containerd/containerd/snapshots/overlay/plugin"
 
 	// Register fc-control plugin
 	_ "github.com/firecracker-microvm/firecracker-containerd/firecracker-control"

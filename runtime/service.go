@@ -571,6 +571,22 @@ func (s *service) createVM(requestCtx context.Context, request *proto.CreateVMRe
 	if err != nil {
 		return errors.Wrap(err, "failed to build jailed machine options")
 	}
+
+	if request.BalloonDevice == nil {
+		s.logger.Debug("No balloon device is setup")
+	} else {
+		// Creates a new balloon device if one does not already exist, otherwise updates it, before machine startup.
+		balloon, err := s.createBalloon(requestCtx, request)
+		if err != nil {
+			return errors.Wrap(err, "failed to create balloon device")
+		}
+		balloonOpts, err := s.buildBalloonDeviceOpt(balloon)
+		if err != nil {
+			return errors.Wrap(err, "failed to create balloon device options")
+		}
+		opts = append(opts, balloonOpts...)
+	}
+
 	opts = append(opts, jailedOpts...)
 
 	// In the event that a noop jailer is used, we will pass in the shim context
@@ -770,6 +786,140 @@ func (s *service) GetVMMetadata(requestCtx context.Context, request *proto.GetVM
 	}
 
 	return &proto.GetVMMetadataResponse{Metadata: string(metadata)}, nil
+}
+
+func (s *service) createBalloon(requestCtx context.Context, request *proto.CreateVMRequest) (models.Balloon, error) {
+	amountMiB := request.BalloonDevice.AmountMib
+	deflateOnOom := request.BalloonDevice.DeflateOnOom
+	statsPollingIntervals := request.BalloonDevice.StatsPollingIntervals
+
+	balloonDevice := firecracker.NewBalloonDevice(amountMiB, deflateOnOom, firecracker.WithStatsPollingIntervals(statsPollingIntervals))
+	balloon := balloonDevice.Build()
+	if balloon.AmountMib == nil || balloon.DeflateOnOom == nil {
+		return balloon, errors.Errorf("One of balloon properties is nil, please check %+v: ", balloon)
+	}
+	s.logger.Infof("Creating a balloon device: AmountMib=%d, DeflateOnOom=%t and statsPollingIntervals=%d ", *balloon.AmountMib, *balloon.DeflateOnOom, balloon.StatsPollingIntervals)
+	return balloon, nil
+}
+
+func (s *service) buildBalloonDeviceOpt(balloon models.Balloon) ([]firecracker.Opt, error) {
+	handler := firecracker.NewCreateBalloonHandler(*balloon.AmountMib, *balloon.DeflateOnOom, balloon.StatsPollingIntervals)
+	opt := []firecracker.Opt{
+		func(m *firecracker.Machine) {
+			m.Handlers.FcInit = m.Handlers.FcInit.AppendAfter(firecracker.CreateMachineHandlerName, handler)
+		},
+	}
+	return opt, nil
+}
+
+// GetBalloonConfig will get configuration for an existing balloon device, before or after machine startup
+func (s *service) GetBalloonConfig(requestCtx context.Context, req *proto.GetBalloonConfigRequest) (*proto.GetBalloonConfigResponse, error) {
+	defer logPanicAndDie(s.logger)
+
+	err := s.waitVMReady()
+	if err != nil {
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	s.logger.Info("Getting configuration for the balloon device")
+	balloon, err := s.machine.GetBalloonConfig(requestCtx)
+	if err != nil {
+		return nil, errors.Errorf("Fail to get balloon configuration. Please check if you have successfully created a balloon device")
+	}
+	balloonConfig := &proto.FirecrackerBalloonDevice{
+		AmountMib:             *balloon.AmountMib,
+		DeflateOnOom:          *balloon.DeflateOnOom,
+		StatsPollingIntervals: balloon.StatsPollingIntervals,
+	}
+	return &proto.GetBalloonConfigResponse{BalloonConfig: balloonConfig}, err
+}
+
+// UpdateBalloon will update an existing balloon device, before or after machine startup
+func (s *service) UpdateBalloon(requestCtx context.Context, req *proto.UpdateBalloonRequest) (*empty.Empty, error) {
+	defer logPanicAndDie(s.logger)
+
+	err := s.waitVMReady()
+	if err != nil {
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	s.logger.Infof("Updating balloon memory size, the new amount memory is %d MiB", req.AmountMib)
+	if err := s.machine.UpdateBalloon(requestCtx, req.AmountMib); err != nil {
+		err = errors.Wrap(err, "failed to update memory balloon")
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	return &empty.Empty{}, nil
+}
+
+// GetBalloonStats will return the latest balloon device statistics, only if enabled pre-boot.
+func (s *service) GetBalloonStats(requestCtx context.Context, req *proto.GetBalloonStatsRequest) (*proto.GetBalloonStatsResponse, error) {
+	defer logPanicAndDie(s.logger)
+
+	err := s.waitVMReady()
+	if err != nil {
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	s.logger.Info("Getting statistics for the balloon device")
+	balloonStats, err := s.machine.GetBalloonStats(requestCtx)
+	if err != nil {
+		err = errors.Wrap(err, "failed to get balloon statistics")
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	if balloonStats.ActualMib == nil ||
+		balloonStats.ActualPages == nil ||
+		balloonStats.TargetMib == nil ||
+		balloonStats.TargetPages == nil {
+		return nil, errors.Errorf("One of BalloonStats properties is nil, please check %+v: ", balloonStats)
+	}
+
+	resp := &proto.GetBalloonStatsResponse{
+		ActualMib:          *balloonStats.ActualMib,
+		ActualPages:        *balloonStats.ActualPages,
+		AvailableMemory:    balloonStats.AvailableMemory,
+		DiskCaches:         balloonStats.DiskCaches,
+		FreeMemory:         balloonStats.FreeMemory,
+		HugetlbAllocations: balloonStats.HugetlbAllocations,
+		HugetlbFailures:    balloonStats.HugetlbFailures,
+		MajorFaults:        balloonStats.MajorFaults,
+		MinorFaults:        balloonStats.MinorFaults,
+		SwapIn:             balloonStats.SwapIn,
+		SwapOut:            balloonStats.SwapOut,
+		TargetMib:          *balloonStats.TargetMib,
+		TargetPages:        *balloonStats.TargetPages,
+		TotalMemory:        balloonStats.TotalMemory,
+	}
+
+	s.logger.Info("GetBalloonStatsResponse: ", resp)
+
+	return resp, nil
+}
+
+//UpdateBalloonStats will update an existing balloon device statistics interval, before or after machine startup.
+func (s *service) UpdateBalloonStats(requestCtx context.Context, req *proto.UpdateBalloonStatsRequest) (*empty.Empty, error) {
+	defer logPanicAndDie(s.logger)
+
+	err := s.waitVMReady()
+	if err != nil {
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	s.logger.Info("updating balloon device statistics interval")
+	if err := s.machine.UpdateBalloonStats(requestCtx, req.StatsPollingIntervals); err != nil {
+		err = errors.Wrap(err, "failed to update balloon device statistics interval")
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	return &empty.Empty{}, nil
 }
 
 func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker.Config, error) {

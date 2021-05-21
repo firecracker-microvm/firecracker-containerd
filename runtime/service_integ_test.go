@@ -69,6 +69,9 @@ const (
 	numberOfVmsEnvName  = "NUMBER_OF_VMS"
 	defaultNumberOfVms  = 5
 
+	defaultBalloonMemory         = int64(66)
+	defaultStatsPollingIntervals = int64(1)
+
 	containerdSockPathEnvVar = "CONTAINERD_SOCKET"
 )
 
@@ -1280,6 +1283,91 @@ func TestUpdateVMMetadata_Isolated(t *testing.T) {
 	stdout = startAndWaitTask(ctx, t, newContainer)
 	t.Logf("stdout output from task %q: %s", containerName, stdout)
 	assert.Equalf(t, "45", stdout, "container %q did not emit expected stdout", containerName)
+}
+
+func TestMemoryBalloon_Isolated(t *testing.T) {
+	prepareIntegTest(t)
+	ctx := namespaces.WithNamespace(context.Background(), defaultNamespace)
+
+	numberOfVms := defaultNumberOfVms
+	if str := os.Getenv(numberOfVmsEnvName); str != "" {
+		_, err := strconv.Atoi(str)
+		require.NoError(t, err, "failed to get NUMBER_OF_VMS env")
+	}
+	t.Logf("TestMemoryBalloon_Isolated: will run %d vm's", numberOfVms)
+
+	var vmGroup sync.WaitGroup
+	for i := 0; i < numberOfVms; i++ {
+		vmGroup.Add(1)
+		go func(vmID int) {
+			defer vmGroup.Done()
+
+			tapName := fmt.Sprintf("tap%d", vmID)
+			err := createTapDevice(ctx, tapName)
+			defer deleteTapDevice(ctx, tapName)
+			require.NoError(t, err, "failed to create tap device for vm %d", vmID)
+
+			fcClient, err := newFCControlClient(containerdSockPath)
+			require.NoError(t, err, "failed to create fccontrol client")
+
+			_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
+				VMID: strconv.Itoa(vmID),
+				MachineCfg: &proto.FirecrackerMachineConfiguration{
+					MemSizeMib: 512,
+				},
+				NetworkInterfaces: []*proto.FirecrackerNetworkInterface{
+					{
+						AllowMMDS: true,
+						StaticConfig: &proto.StaticNetworkConfiguration{
+							HostDevName: tapName,
+							MacAddress:  vmIDtoMacAddr(uint(vmID)),
+						},
+					},
+				},
+				BalloonDevice: &proto.FirecrackerBalloonDevice{
+					AmountMib:             defaultBalloonMemory,
+					DeflateOnOom:          true,
+					StatsPollingIntervals: defaultStatsPollingIntervals,
+				},
+			})
+			require.NoError(t, err, "failed to create vm")
+
+			// Test UpdateBalloon correctly updates amount of memory for the balloon device
+			vmIDStr := strconv.Itoa(vmID)
+			newAmountMib := int64(50)
+			_, err = fcClient.UpdateBalloon(ctx, &proto.UpdateBalloonRequest{
+				VMID:      vmIDStr,
+				AmountMib: newAmountMib,
+			})
+			require.NoError(t, err, "failed to update balloon's AmountMib for VM %d", vmID)
+
+			expectedBalloonDevice := &proto.FirecrackerBalloonDevice{
+				AmountMib:             newAmountMib,
+				DeflateOnOom:          true,
+				StatsPollingIntervals: defaultStatsPollingIntervals,
+			}
+
+			// Test GetBalloonConfig gets correct configuration for the balloon device
+			resp, err := fcClient.GetBalloonConfig(ctx, &proto.GetBalloonConfigRequest{VMID: vmIDStr})
+			require.NoError(t, err, "failed to get balloon configuration for VM %d", vmID)
+			require.Equal(t, resp.BalloonConfig, expectedBalloonDevice)
+
+			// Test GetBalloonStats gets correct balloon statistics for the balloon device
+			balloonStatResp, err := fcClient.GetBalloonStats(ctx, &proto.GetBalloonStatsRequest{VMID: vmIDStr})
+			require.NoError(t, err, "failed to get balloon statistics for VM %d", vmID)
+			require.Equal(t, newAmountMib, balloonStatResp.TargetMib)
+
+			// Test UpdateBalloonStats correctly updates statistics polling interval for the balloon device
+			newStatsPollingIntervals := int64(6)
+			_, err = fcClient.UpdateBalloonStats(ctx, &proto.UpdateBalloonStatsRequest{VMID: vmIDStr, StatsPollingIntervals: newStatsPollingIntervals})
+			require.NoError(t, err, "failed to update balloon's statistics polling interval for VM %d", vmID)
+
+			balloonConfigResp, err := fcClient.GetBalloonConfig(ctx, &proto.GetBalloonConfigRequest{VMID: vmIDStr})
+			require.NoError(t, err, "failed to get balloon configuration for VM %d", vmID)
+			require.Equal(t, newStatsPollingIntervals, balloonConfigResp.BalloonConfig.StatsPollingIntervals)
+		}(i)
+	}
+	vmGroup.Wait()
 }
 
 func exitCode(err *exec.ExitError) int {

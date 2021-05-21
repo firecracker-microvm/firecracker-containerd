@@ -106,3 +106,23 @@ func (s *service) GetVMMetadata(ctx context.Context, req *proto.GetVMMetadataReq
 	log.G(ctx).Debug("Getting vm metadata")
 	return s.local.GetVMMetadata(ctx, req)
 }
+
+func (s *service) GetBalloonConfig(ctx context.Context, req *proto.GetBalloonConfigRequest) (*proto.GetBalloonConfigResponse, error) {
+	log.G(ctx).Debug("Getting balloon configuration")
+	return s.local.GetBalloonConfig(ctx, req)
+}
+
+func (s *service) UpdateBalloon(ctx context.Context, req *proto.UpdateBalloonRequest) (*empty.Empty, error) {
+	log.G(ctx).Debug("Updating balloon memory size")
+	return s.local.UpdateBalloon(ctx, req)
+}
+
+func (s *service) GetBalloonStats(ctx context.Context, req *proto.GetBalloonStatsRequest) (*proto.GetBalloonStatsResponse, error) {
+	log.G(ctx).Debug("Getting balloon statistics")
+	return s.local.GetBalloonStats(ctx, req)
+}
+
+func (s *service) UpdateBalloonStats(ctx context.Context, req *proto.UpdateBalloonStatsRequest) (*empty.Empty, error) {
+	log.G(ctx).Debug("Updating balloon device statistics polling interval")
+	return s.local.UpdateBalloonStats(ctx, req)
+}

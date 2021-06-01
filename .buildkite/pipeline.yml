@@ -103,7 +103,7 @@ steps:
       - "runtime/logs/*"
     command:
       - make -C runtime integ-test FICD_DM_POOL=build_${BUILDKITE_BUILD_NUMBER}_runtime
-    timeout_in_minutes: 15
+    timeout_in_minutes: 30
 
   - label: ":rotating_light: :exclamation: example tests"
     agents:

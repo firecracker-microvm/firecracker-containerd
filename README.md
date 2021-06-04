@@ -1,9 +1,7 @@
 # firecracker-containerd
 
-| Automation | Status |
-|------------|--------|
-| Tests      | [![Build status](https://badge.buildkite.com/aab4ae547d5e5079a5915522e8cdb18492349aef67aae5a8c5.svg?branch=main)](https://buildkite.com/firecracker-microvm/firecracker-containerd)
-| Lint       | [![Build Status](https://travis-ci.org/firecracker-microvm/firecracker-containerd.svg?branch=main)](https://travis-ci.org/firecracker-microvm/firecracker-containerd)
+[![BuildKite](https://badge.buildkite.com/aab4ae547d5e5079a5915522e8cdb18492349aef67aae5a8c5.svg?branch=main)](https://buildkite.com/firecracker-microvm/firecracker-containerd)
+[![GitHub Actions](https://github.com/firecracker-microvm/firecracker-containerd/actions/workflows/build.yaml/badge.svg)](https://github.com/firecracker-microvm/firecracker-containerd/actions)
 
 This repository enables the use of a container runtime,
 [containerd](https://containerd.io), to manage

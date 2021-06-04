@@ -290,31 +290,14 @@ install-firecracker: firecracker
 $(FIRECRACKER_DIR)/Cargo.toml:
 	git submodule update --init --recursive $(FIRECRACKER_DIR)
 
-tools/firecracker-builder-stamp: tools/docker/Dockerfile.firecracker-builder
-	docker build \
-		-t localhost/$(FIRECRACKER_BUILDER_NAME):$(DOCKER_IMAGE_TAG) \
-		-f tools/docker/Dockerfile.firecracker-builder \
-		tools/docker
-	touch $@
-
-$(FIRECRACKER_BIN): $(FIRECRACKER_DIR)/Cargo.toml tools/firecracker-builder-stamp
-	docker run --rm -it --user $(UID) \
-		--volume $(CURDIR)/$(FIRECRACKER_DIR):/src \
-		--volume $(CARGO_CACHE_VOLUME_NAME):/usr/local/cargo/registry \
-		-e HOME=/tmp \
-		--workdir /src \
-		localhost/$(FIRECRACKER_BUILDER_NAME):$(DOCKER_IMAGE_TAG) \
-		cargo build --release --target $(FIRECRACKER_TARGET)
+$(FIRECRACKER_BIN): $(FIRECRACKER_DIR)/Cargo.toml
+	$(FIRECRACKER_DIR)/tools/devtool -y build --release && \
+		$(FIRECRACKER_DIR)/tools/devtool strip
 
 .PHONY: firecracker-clean
 firecracker-clean:
-	rm -f $(FIRECRACKER_BIN)
-	- docker run --rm -it --user $(UID) \
-		--volume $(CURDIR)/$(FIRECRACKER_DIR):/src \
-		-e HOME=/tmp \
-		--workdir /src \
-		localhost/$(FIRECRACKER_BUILDER_NAME):$(DOCKER_IMAGE_TAG) \
-		cargo clean
+	- $(FIRECRACKER_DIR)/tools/devtool distclean
+	- rm $(FIRECRACKER_BIN)
 
 ##########################
 # RunC submodule

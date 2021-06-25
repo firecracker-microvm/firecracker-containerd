@@ -138,9 +138,17 @@ func newRuncJailer(
 
 func (j *runcJailer) prepareBindMounts(mounts []*proto.FirecrackerDriveMount) error {
 	for _, m := range mounts {
-		err := j.bindMountFileToJail(m.HostPath, filepath.Join(j.RootPath(), m.HostPath))
-		if err != nil {
+		stat := syscall.Stat_t{}
+		if err := syscall.Stat(m.HostPath, &stat); err != nil {
 			return err
+		}
+		// Only bindMount regular file.
+		// To avoid duplicate files, for block device, we will use system call to create device file for it.
+		if stat.Mode&syscall.S_IFMT == syscall.S_IFREG {
+			err := j.bindMountFileToJail(m.HostPath, filepath.Join(j.RootPath(), m.HostPath))
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil

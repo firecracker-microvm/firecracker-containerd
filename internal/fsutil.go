@@ -21,6 +21,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/pkg/errors"
@@ -33,7 +34,7 @@ func CreateFSImg(ctx context.Context, t *testing.T, fsType string, testFiles ...
 	t.Helper()
 
 	switch fsType {
-	case "ext3", "ext4":
+	case "ext4":
 		return createTestExtImg(ctx, t, fsType, testFiles...)
 	default:
 		require.FailNowf(t, "unsupported fs type %q", fsType)
@@ -70,6 +71,48 @@ func createTestExtImg(ctx context.Context, t *testing.T, extName string, testFil
 	output, err := exec.CommandContext(ctx, "mkfs."+extName, "-d", tempdir, imgFile.Name(), "65536").CombinedOutput()
 	require.NoErrorf(t, err, "failed to create ext img, command output:\n %s", string(output))
 	return imgFile.Name()
+}
+
+// BlockDeviceFile represents a block device
+type BlockDeviceFile struct {
+	Subpath string
+	UID     int
+	GID     int
+	Dev     int // major number
+}
+
+// CreateBlockDevice creates a block device, or block special file for testing
+func CreateBlockDevice(ctx context.Context, t *testing.T, fsType string, testFile BlockDeviceFile) string {
+	t.Helper()
+
+	switch fsType {
+	case "ext4":
+		return createTestBlockDevice(ctx, t, fsType, testFile)
+	default:
+		require.FailNowf(t, "unsupported fs type %q", fsType)
+		return ""
+	}
+}
+
+func createTestBlockDevice(ctx context.Context, t *testing.T, extName string, testFile BlockDeviceFile) string {
+	t.Helper()
+
+	deviceFile := filepath.Join("/tmp/blockExample", testFile.Subpath)
+	err := os.MkdirAll(filepath.Dir(deviceFile), 0750)
+	require.NoError(t, err, "failed to mkdir for the block device")
+
+	err = syscall.Mknod(deviceFile, syscall.S_IFBLK, testFile.Dev)
+	require.NoError(t, err, "failed to create a new block device")
+
+	err = os.Chmod(deviceFile, 0600)
+	require.NoError(t, err, "failed to change file mode for the new created block device")
+
+	err = os.Chown(deviceFile, testFile.UID, testFile.GID)
+	require.NoError(t, err, "failed to grant permission to the new created block device")
+
+	output, err := exec.CommandContext(ctx, "mkfs."+extName, "-v", deviceFile).CombinedOutput()
+	require.NoErrorf(t, err, "failed to create ext img, command output:%s \n", string(output))
+	return deviceFile
 }
 
 // MountInfo holds data parsed from a line of /proc/mounts

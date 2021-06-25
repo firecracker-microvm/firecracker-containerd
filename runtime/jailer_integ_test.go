@@ -35,6 +35,11 @@ import (
 	"github.com/firecracker-microvm/firecracker-containerd/runtime/firecrackeroci"
 )
 
+const (
+	jailerUID = 300001
+	jailerGID = 300001
+)
+
 func TestJailer_Isolated(t *testing.T) {
 	prepareIntegTest(t)
 	t.Run("Without Jailer", func(t *testing.T) {
@@ -44,15 +49,35 @@ func TestJailer_Isolated(t *testing.T) {
 	t.Run("With Jailer", func(t *testing.T) {
 		t.Parallel()
 		testJailer(t, &proto.JailerConfig{
-			UID: 300001,
-			GID: 300001,
+			UID: jailerUID,
+			GID: jailerGID,
 		})
 	})
 	t.Run("With Jailer and bind-mount", func(t *testing.T) {
 		t.Parallel()
 		testJailer(t, &proto.JailerConfig{
-			UID:               300001,
-			GID:               300001,
+			UID:               jailerUID,
+			GID:               jailerGID,
+			DriveExposePolicy: proto.DriveExposePolicy_BIND,
+		})
+	})
+}
+
+func TestAttachBlockDevice_Isolated(t *testing.T) {
+	prepareIntegTest(t)
+	t.Run("Without Jailer", func(t *testing.T) {
+		testAttachBlockDevice(t, nil)
+	})
+	t.Run("With Jailer", func(t *testing.T) {
+		testAttachBlockDevice(t, &proto.JailerConfig{
+			UID: jailerUID,
+			GID: jailerGID,
+		})
+	})
+	t.Run("With Jailer and bind-mount", func(t *testing.T) {
+		testAttachBlockDevice(t, &proto.JailerConfig{
+			UID:               jailerUID,
+			GID:               jailerGID,
 			DriveExposePolicy: proto.DriveExposePolicy_BIND,
 		})
 	})
@@ -169,4 +194,111 @@ func TestJailerCPUSet_Isolated(t *testing.T) {
 		GID:  300000,
 	}
 	testJailer(t, config)
+}
+
+func testAttachBlockDevice(t *testing.T, jailerConfig *proto.JailerConfig) {
+	require := require.New(t)
+	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	defer client.Close()
+
+	ctx := namespaces.WithNamespace(context.Background(), "default")
+
+	image, err := alpineImage(ctx, client, defaultSnapshotterName)
+	require.NoError(err, "failed to get alpine image")
+
+	fcClient, err := newFCControlClient(containerdSockPath)
+	require.NoError(err)
+
+	vmID := testNameToVMID(t.Name())
+
+	// default BlockDeviceFile setup, will change UID & GID if a jailerConfig is passed
+	deviceFile := internal.BlockDeviceFile{
+		Subpath: "dir/block1",
+		UID:     0,
+		GID:     0,
+		Dev:     259, // 259 is the major number for blkext which is one type of block devices
+	}
+
+	if jailerConfig != nil {
+		// cover "With Jailer" & "With Jailer and bind-mount" test cases
+		deviceFile.UID = int(jailerConfig.UID)
+		deviceFile.GID = int(jailerConfig.GID)
+	}
+	additionalBlockDevice := internal.CreateBlockDevice(ctx, t, "ext4", deviceFile)
+	blockExampleDir := filepath.Dir(additionalBlockDevice)
+	defer os.RemoveAll(filepath.Dir(blockExampleDir)) // clean up
+
+	request := proto.CreateVMRequest{
+		VMID:         vmID,
+		JailerConfig: jailerConfig,
+		DriveMounts: []*proto.FirecrackerDriveMount{
+			{HostPath: additionalBlockDevice, VMPath: "/home/driveMount", FilesystemType: "ext4"},
+		},
+	}
+
+	// If the drive files are bind-mounted, the files must be readable from the jailer's user.
+	if jailerConfig != nil && jailerConfig.DriveExposePolicy == proto.DriveExposePolicy_BIND {
+		f, err := ioutil.TempFile("", fsSafeTestName(t)+"_rootfs")
+		require.NoError(err)
+		defer f.Close()
+
+		dst := f.Name()
+
+		// Copy the root drive before chown, since the file is used by other tests.
+		err = copyFile(defaultRuntimeConfig.RootDrive, dst, 0400)
+		require.NoErrorf(err, "failed to copy a rootfs as %q", dst)
+
+		err = os.Chown(dst, int(jailerConfig.UID), int(jailerConfig.GID))
+		require.NoError(err, "failed to chown %q", dst)
+
+		request.RootDrive = &proto.FirecrackerRootDrive{HostPath: dst}
+
+		// The additional drive file is only used by this test.
+		err = os.Chown(additionalBlockDevice, int(jailerConfig.UID), int(jailerConfig.GID))
+		require.NoError(err, "failed to chown %q", additionalBlockDevice)
+	}
+
+	_, err = fcClient.CreateVM(ctx, &request)
+	require.NoError(err)
+
+	// create a container to test bind mount block device into the container
+	c, err := client.NewContainer(ctx,
+		vmID+"-container",
+		containerd.WithSnapshotter(defaultSnapshotterName),
+		containerd.WithNewSnapshot(vmID+"-snapshot", image),
+		containerd.WithNewSpec(
+			oci.WithProcessArgs(
+				"/bin/sh", "-c", "echo heyhey && cd /mnt/blockDeviceTest",
+			),
+			firecrackeroci.WithVMID(vmID),
+			oci.WithMounts([]specs.Mount{{
+				Source:      "/home/driveMount",
+				Destination: "/mnt/blockDeviceTest",
+				Options:     []string{"bind"},
+			}}),
+		),
+	)
+	require.NoError(err)
+
+	stdout := startAndWaitTask(ctx, t, c)
+	require.Equal("heyhey\n", stdout)
+
+	stat, err := os.Stat(filepath.Join(shimBaseDir(), "default#"+vmID))
+	require.NoError(err)
+	assert.True(t, stat.IsDir())
+
+	err = c.Delete(ctx, containerd.WithSnapshotCleanup)
+	require.NoError(err, "failed to delete a container-block-device")
+
+	_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
+	require.NoError(err)
+
+	_, err = os.Stat(filepath.Join(shimBaseDir(), "default#"+vmID))
+	assert.Error(t, err)
+	assert.True(t, os.IsNotExist(err))
+
+	shimContents, err := ioutil.ReadDir(shimBaseDir())
+	require.NoError(err)
+	assert.Len(t, shimContents, 0)
 }

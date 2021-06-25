@@ -1007,7 +1007,7 @@ func TestDriveMount_Isolated(t *testing.T) {
 		},
 		{
 			VMPath:         "/mnt",
-			FilesystemType: "ext3",
+			FilesystemType: "ext4",
 			// don't specify "ro" to validate it's automatically set via "IsWritable: false"
 			VMMountOptions: []string{"relatime"},
 			ContainerPath:  "/bar",

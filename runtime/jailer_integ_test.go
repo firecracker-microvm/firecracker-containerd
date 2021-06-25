@@ -64,7 +64,6 @@ func fsSafeTestName(tb testing.TB) string {
 
 func testJailer(t *testing.T, jailerConfig *proto.JailerConfig) {
 	require := require.New(t)
-
 	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
 	require.NoError(err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
 	defer client.Close()
@@ -74,18 +73,41 @@ func testJailer(t *testing.T, jailerConfig *proto.JailerConfig) {
 	image, err := alpineImage(ctx, client, defaultSnapshotterName)
 	require.NoError(err, "failed to get alpine image")
 
-	vmID := testNameToVMID(t.Name())
+	fcClient, err := newFCControlClient(containerdSockPath)
+	require.NoError(err)
 
+	vmID := testNameToVMID(t.Name())
+	// additionalDrive is a regular file;
+	// and the following additionalBlockDevice is a block device, aks block special file;
+	// They are used to test different bind mount cases
 	additionalDrive := internal.CreateFSImg(ctx, t, "ext4", internal.FSImgFile{
 		Subpath:  "dir/hello",
 		Contents: "additional drive\n",
 	})
 
+	// default deviceFile setup, will change UID & GID if a jailerConfig is passed
+	deviceFile := internal.DeviceFile{
+		Subpath: "dev/sda",
+		UID:     0,
+		GID:     0,
+		Dev:     259, // 259 is the major number for blkext which is one type of block devices
+	}
+	var additionalBlockDevice string
+	if jailerConfig != nil {
+		// cover "With Jailer" & "With Jailer and bind-mount" test cases
+		deviceFile.UID = int(jailerConfig.UID)
+		deviceFile.GID = int(jailerConfig.GID)
+		additionalBlockDevice = internal.CreateBlockDevice(ctx, t, "ext4", deviceFile)
+	} else {
+		// cover "Without Jailer" test case
+		additionalBlockDevice = internal.CreateBlockDevice(ctx, t, "ext4", deviceFile)
+	}
 	request := proto.CreateVMRequest{
 		VMID:         vmID,
 		JailerConfig: jailerConfig,
 		DriveMounts: []*proto.FirecrackerDriveMount{
 			{HostPath: additionalDrive, VMPath: "/mnt", FilesystemType: "ext4"},
+			{HostPath: additionalBlockDevice, VMPath: "/home/driveMount", FilesystemType: "ext4"},
 		},
 	}
 
@@ -111,14 +133,12 @@ func testJailer(t *testing.T, jailerConfig *proto.JailerConfig) {
 		require.NoError(err, "failed to chown %q", additionalDrive)
 	}
 
-	fcClient, err := newFCControlClient(containerdSockPath)
-	require.NoError(err)
-
 	_, err = fcClient.CreateVM(ctx, &request)
 	require.NoError(err)
 
-	c, err := client.NewContainer(ctx,
-		vmID+"-container",
+	// create the c1 container to test bind mount regular file into the container
+	c1, err := client.NewContainer(ctx,
+		vmID+"-container-regular-file",
 		containerd.WithSnapshotter(defaultSnapshotterName),
 		containerd.WithNewSnapshot(vmID+"-snapshot", image),
 		containerd.WithNewSpec(
@@ -135,15 +155,45 @@ func testJailer(t *testing.T, jailerConfig *proto.JailerConfig) {
 	)
 	require.NoError(err)
 
-	stdout := startAndWaitTask(ctx, t, c)
+	stdout := startAndWaitTask(ctx, t, c1)
 	require.Equal("hello\nadditional drive\n", stdout)
 
 	stat, err := os.Stat(filepath.Join(shimBaseDir(), "default#"+vmID))
 	require.NoError(err)
 	assert.True(t, stat.IsDir())
 
-	err = c.Delete(ctx, containerd.WithSnapshotCleanup)
-	require.NoError(err, "failed to delete a container")
+	err = c1.Delete(ctx, containerd.WithSnapshotCleanup)
+	require.NoError(err, "failed to delete a container-regular-file")
+
+	// create the c2 container to test bind mount block device into the container
+	c2, err := client.NewContainer(ctx,
+		vmID+"-container-block-device",
+		containerd.WithSnapshotter(defaultSnapshotterName),
+		containerd.WithNewSnapshot(vmID+"-snapshot", image),
+		containerd.WithNewSpec(
+			oci.WithProcessArgs(
+				"/bin/sh", "-c", "echo heyhey && cd /mnt/blockDeviceTest",
+			),
+			firecrackeroci.WithVMID(vmID),
+			oci.WithMounts([]specs.Mount{{
+				Source:      "/home/driveMount",
+				Destination: "/mnt/blockDeviceTest",
+				Options:     []string{"bind"},
+			}}),
+		),
+	)
+	require.NoError(err)
+
+	// Check c2 container
+	stdout = startAndWaitTask(ctx, t, c2)
+	require.Equal("heyhey\n", stdout)
+
+	stat, err = os.Stat(filepath.Join(shimBaseDir(), "default#"+vmID))
+	require.NoError(err)
+	assert.True(t, stat.IsDir())
+
+	err = c2.Delete(ctx, containerd.WithSnapshotCleanup)
+	require.NoError(err, "failed to delete a container-block-device")
 
 	_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
 	require.NoError(err)

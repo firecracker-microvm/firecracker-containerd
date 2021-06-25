@@ -21,6 +21,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/pkg/errors"
@@ -70,6 +71,55 @@ func createTestExtImg(ctx context.Context, t *testing.T, extName string, testFil
 	output, err := exec.CommandContext(ctx, "mkfs."+extName, "-d", tempdir, imgFile.Name(), "65536").CombinedOutput()
 	require.NoErrorf(t, err, "failed to create ext img, command output:\n %s", string(output))
 	return imgFile.Name()
+}
+
+// DeviceFile represents a block device
+type DeviceFile struct {
+	Subpath string
+	UID     int
+	GID     int
+	Dev     int // major number
+}
+
+// CreateBlockDevice creates a block device, or block special file for testing
+func CreateBlockDevice(ctx context.Context, t *testing.T, fsType string, testFile DeviceFile) string {
+	t.Helper()
+
+	switch fsType {
+	case "ext3", "ext4":
+		return createTestBlockDevice(ctx, t, fsType, testFile)
+	default:
+		require.FailNowf(t, "unsupported fs type %q", fsType)
+		return ""
+	}
+}
+
+func createTestBlockDevice(ctx context.Context, t *testing.T, extName string, testFile DeviceFile) string {
+	t.Helper()
+	tempdir, err := ioutil.TempDir("", "")
+	require.NoError(t, err, "failed to create temp dir for ext img")
+
+	deviceFile := filepath.Join(tempdir, testFile.Subpath)
+	if _, err := os.Stat(deviceFile); err == nil {
+		os.Remove(deviceFile)
+		require.NoError(t, err, "failed to remove duplicate block device")
+	}
+
+	os.MkdirAll(filepath.Dir(deviceFile), 0750)
+	require.NoError(t, err, "failed to mkdir for the block device")
+
+	err = syscall.Mknod(deviceFile, syscall.S_IFBLK, testFile.Dev)
+	require.NoError(t, err, "failed to create a new block device")
+
+	os.Chmod(deviceFile, 0600)
+	require.NoError(t, err, "failed to change file mode for the new created block device")
+
+	os.Chown(deviceFile, testFile.UID, testFile.GID)
+	require.NoError(t, err, "failed to grant permission to the new created block device")
+
+	_, err = exec.CommandContext(ctx, "mkfs."+extName, deviceFile).CombinedOutput()
+	require.NoError(t, err, "Can not mkfs.ext4 for the new block device, error: \n %s", err)
+	return deviceFile
 }
 
 // MountInfo holds data parsed from a line of /proc/mounts

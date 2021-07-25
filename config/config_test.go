@@ -39,17 +39,15 @@ func TestLoadConfigOverrides(t *testing.T) {
 	overrideKernelArgs := "OVERRIDE KERNEL ARGS"
 	overrideKernelPath := "OVERRIDE KERNEL PATH"
 	overrideRootfsPath := "OVERRIDE ROOTFS PATH"
-	overrideCPUCount := 42
 	overrideCPUTemplate := "OVERRIDE CPU TEMPLATE"
 	configContent := fmt.Sprintf(
 		`{
 			"kernel_args":"%s",
 			"kernel_image_path":"%s",
 			"root_drive":"%s",
-			"cpu_count": %d,
-            "cpu_template": "%s",
+			"cpu_template": "%s",
 			"log_levels": ["debug"]
-		}`, overrideKernelArgs, overrideKernelPath, overrideRootfsPath, overrideCPUCount, overrideCPUTemplate)
+		}`, overrideKernelArgs, overrideKernelPath, overrideRootfsPath, overrideCPUTemplate)
 	configFile, cleanup := createTempConfig(t, configContent)
 	defer cleanup()
 	cfg, err := LoadConfig(configFile)

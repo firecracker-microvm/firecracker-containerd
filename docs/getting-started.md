@@ -4,7 +4,7 @@ Thanks for your interest in using containerd and Firecracker together!  This
 project is currently in a very early state, and things are not yet as
 plug-and-play as we'd like.  This guide contains general instructions for
 getting started, but is more descriptive than a concrete set of step-by-step
-instructions. 
+instructions.
 
 If you prefer to follow a script, you can use the
 [quickstart guide](quickstart.md) instead.
@@ -16,12 +16,12 @@ You need to have the following things in order to use firecracker-containerd:
 * A computer with a recent-enough version of Linux (4.14+), an Intel x86_64
   processor (AMD and Arm are on the roadmap, but not yet supported), and KVM
   enabled.  An i3.metal running Amazon Linux 2 is a good candidate.
-  
+
   <details>
-  
+
   <summary>Click here to see a bash script that will check if your system meets
   the basic requirements to run Firecracker.</summary>
-  
+
   ```bash
   #!/bin/bash
   err=""; \
@@ -35,12 +35,12 @@ You need to have the following things in order to use firecracker-containerd:
     && echo "WARNING: you are running in a virtual machine. Firecracker is not well tested under nested virtualization."; \
   [ -z "$err" ] && echo "Your system looks ready for Firecracker!" || echo -e "$err"
   ```
-  
+
   </details>
 * git
 * A root filesystem image (you can use the one
   [described here](https://github.com/firecracker-microvm/firecracker/blob/main/docs/getting-started.md#running-firecracker)
-  as `hello-rootfs.ext4`). 
+  as `hello-rootfs.ext4`).
 * A recent installation of [Docker CE](https://docker.com).
 * Go 1.13 or later, which you can download from [here](https://golang.org/dl/).
 
@@ -226,8 +226,6 @@ configuration file has the following fields:
 * `root_drive` (optional) - A path where the root drive image file is located. A
   fully-qualified path is recommended.  If left undefined, the runtime looks for
   a file named `/var/lib/firecracker-containerd/runtime/default-rootfs.img`.
-* `cpu_count` (optional) - The number of vCPUs to make available to a microVM.
-  If left undefined, the default is 1.
 * `cpu_template` (required) - The Firecracker CPU emulation template.  Supported
   values are "C3" and "T2".
 * `additional_drives` (unused)
@@ -295,7 +293,7 @@ $ sudo firecracker-ctr --address /run/firecracker-containerd/containerd.sock \
   docker.io/library/busybox:latest busybox-test
 ```
 
-Alternatively you can specify `--runtime` and `--snapshotter` just once when 
+Alternatively you can specify `--runtime` and `--snapshotter` just once when
 creating a new namespace using containerd's default labels:
 
 ```bash
@@ -313,11 +311,11 @@ $ sudo firecracker-ctr --address /run/firecracker-containerd/containerd.sock \
   docker.io/library/busybox:latest busybox-test
 ```
 
-## Networking support 
-Firecracker-containerd supports the same networking options as provided by the 
+## Networking support
+Firecracker-containerd supports the same networking options as provided by the
 Firecracker Go SDK, [documented here](https://github.com/firecracker-microvm/firecracker-go-sdk#network-configuration).
 This includes support for configuring VM network interfaces both with
-pre-created tap devices and with tap devices created automatically by 
+pre-created tap devices and with tap devices created automatically by
 [CNI](https://github.com/containernetworking/cni) plugins.
 
 ### CNI Setup
@@ -330,7 +328,7 @@ Production deployments should be sure to choose a network configuration suitale
 to the specifics of the environment and workloads being hosting, with particular
 attention being given to network isolation between tasks.
 
-To install the required CNI dependencies, run the following make target from the 
+To install the required CNI dependencies, run the following make target from the
 previously cloned firecracker-containerd repository:
 
 ```bash

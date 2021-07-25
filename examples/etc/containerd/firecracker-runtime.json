@@ -3,7 +3,6 @@
   "kernel_image_path": "/var/lib/firecracker-containerd/runtime/default-vmlinux.bin",
   "kernel_args": "ro console=ttyS0 noapic reboot=k panic=1 pci=off nomodules systemd.journald.forward_to_console systemd.unit=firecracker.target init=/sbin/overlay-init",
   "root_drive": "/var/lib/firecracker-containerd/runtime/default-rootfs.img",
-  "cpu_count": 1,
   "cpu_template": "T2",
   "log_levels": ["debug"],
   "jailer": {

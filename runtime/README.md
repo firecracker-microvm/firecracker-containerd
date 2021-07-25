@@ -48,8 +48,6 @@ configuration file has the following fields:
 * `root_drive` (optional) - A path where the root drive image file is located. A
   fully-qualified path is recommended.  If left undefined, the runtime looks for
   a file named `/var/lib/firecracker-containerd/runtime/default-rootfs.img`.
-* `cpu_count` (optional) - The number of vCPUs to make available to a microVM.
-  If left undefined, the default is 1.
 * `cpu_template` (required) - The Firecracker CPU emulation template.  Supported
   values are "C3" and "T2".
 * `additional_drives` (unused)
@@ -61,5 +59,5 @@ configuration file has the following fields:
 * `debug` (optional) - Enable debug-level logging from the runtime.
 
 ## Usage
-See our [Getting Started Guide](../docs/getting-started.md) for details on how to use 
+See our [Getting Started Guide](../docs/getting-started.md) for details on how to use
 the aws.firecracker runtime.

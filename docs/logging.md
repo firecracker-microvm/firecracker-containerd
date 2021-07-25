@@ -11,7 +11,6 @@ firecracker-runtime.json file.
   "kernel_image_path": "/var/lib/firecracker-containerd/runtime/default-vmlinux.bin",
   "kernel_args": "ro console=ttyS0 noapic reboot=k panic=1 pci=off nomodules systemd.journald.forward_to_console systemd.unit=firecracker.target init=/sbin/overlay-init",
   "root_drive": "/var/lib/firecracker-containerd/runtime/default-rootfs.img",
-  "cpu_count": 1,
   "cpu_template": "T2",
   "log_levels": ["debug"],
   "jailer": {
@@ -40,7 +39,7 @@ firecracker-runtime.json file.
 | firecracker-containerd:info    | Logs any error, warn, and info level logs                                       |
 | firecracker-containerd:debug   | Most verbose logging for firecracker-containerd                                 |
 
-The firecracker:XX are mutually exclusive with other firecracker-YY meaning only one of the log levels can be set at a time. 
+The firecracker:XX are mutually exclusive with other firecracker-YY meaning only one of the log levels can be set at a time.
 However, firecracker:output may be set with other firecracker:YY settings.
 The firecracker-containerd:XX are also mutually exclusive with other firecracker-containerd-YY levels
 info, error, warning, and debug are mutually exclusive and only one can be set at a time.
@@ -51,7 +50,6 @@ info, error, warning, and debug are mutually exclusive and only one can be set a
   "kernel_image_path": "/var/lib/firecracker-containerd/runtime/default-vmlinux.bin",
   "kernel_args": "ro console=ttyS0 noapic reboot=k panic=1 pci=off nomodules systemd.journald.forward_to_console systemd.unit=firecracker.target init=/sbin/overlay-init",
   "root_drive": "/var/lib/firecracker-containerd/runtime/default-rootfs.img",
-  "cpu_count": 1,
   "cpu_template": "T2",
   "log:levels": ["info","firecracker:debug","firecracker-containerd:error"],
   "jailer": {

@@ -3,7 +3,7 @@ module github.com/firecracker-microvm/firecracker-containerd
 require (
 	github.com/StackExchange/wmi v0.0.0-20181212234831-e0a55b97c705 // indirect
 	github.com/awslabs/tc-redirect-tap v0.0.0-20200708224642-a0300978797d
-	github.com/containerd/containerd v1.5.2
+	github.com/containerd/containerd v1.5.4
 	github.com/containerd/fifo v1.0.0
 	github.com/containerd/go-runc v1.0.0
 	github.com/containerd/ttrpc v1.0.2

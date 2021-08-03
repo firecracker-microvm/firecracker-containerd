@@ -23,6 +23,7 @@ import (
 	models "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 
 	"github.com/firecracker-microvm/firecracker-containerd/config"
+	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 )
 
@@ -33,10 +34,12 @@ const (
 
 func machineConfigurationFromProto(cfg *config.Config, req *proto.FirecrackerMachineConfiguration) models.MachineConfiguration {
 	config := models.MachineConfiguration{
-		CPUTemplate: models.CPUTemplate(cfg.CPUTemplate),
-		VcpuCount:   firecracker.Int64(defaultCPUCount),
-		MemSizeMib:  firecracker.Int64(defaultMemSizeMb),
-		HtEnabled:   firecracker.Bool(cfg.HtEnabled),
+		VcpuCount:  firecracker.Int64(defaultCPUCount),
+		MemSizeMib: firecracker.Int64(defaultMemSizeMb),
+		HtEnabled:  firecracker.Bool(cfg.HtEnabled),
+	}
+	if internal.SupportCPUTemplate() {
+		config.CPUTemplate = models.CPUTemplate(cfg.CPUTemplate)
 	}
 
 	if req == nil {

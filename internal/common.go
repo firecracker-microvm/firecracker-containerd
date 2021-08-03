@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"runtime"
 )
 
 const (
@@ -124,4 +125,10 @@ func GenerateStubContent(id string) (string, error) {
 	}
 
 	return fmt.Sprintf("%s%c%s", MagicStubBytes, byte(length), id), nil
+}
+
+// SupportCPUTemplate returns true if Firecracker supports CPU templates on
+// the current architecture.
+func SupportCPUTemplate() bool {
+	return runtime.GOARCH == "amd64"
 }

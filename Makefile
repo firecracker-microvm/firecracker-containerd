@@ -32,8 +32,18 @@ FIRECRACKER_CONTAINERD_BUILDER_IMAGE?=golang:1.13-buster
 export FIRECRACKER_CONTAINERD_TEST_IMAGE?=localhost/firecracker-containerd-test
 export GO_CACHE_VOLUME_NAME?=gocache
 
+# This Makefile uses Firecracker's pre-build Linux kernels for x86_64 and aarch64.
+host_arch=$(shell arch)
+ifeq ($(host_arch),x86_64)
+	kernel_sha256sum="bc7e2dbf12cf7038937abf42056f6bcd405d3eef4d27aaa3016f0ba15069ae4b"
+else ifeq ($(host_arch),aarch64)
+	kernel_sha256sum="e2d7c3d6cc123de9e6052d1f434ca7b47635a1f630d63f7fcc1b7164958375e4"
+else
+$(error "$(host_arch) is not supported by Firecracker")
+endif
+FIRECRACKER_TARGET?=$(host_arch)-unknown-linux-musl
+
 FIRECRACKER_DIR=$(SUBMODULES)/firecracker
-FIRECRACKER_TARGET?=x86_64-unknown-linux-musl
 FIRECRACKER_BIN=$(FIRECRACKER_DIR)/build/cargo_target/$(FIRECRACKER_TARGET)/release/firecracker
 FIRECRACKER_BUILDER_NAME?=firecracker-builder
 CARGO_CACHE_VOLUME_NAME?=cargocache
@@ -171,8 +181,8 @@ $(FIRECRACKER_CONTAINERD_RUNTIME_DIR) $(ETC_CONTAINERD):
 DEFAULT_VMLINUX_NAME?=default-vmlinux.bin
 $(DEFAULT_VMLINUX_NAME):
 	curl --silent --show-error --retry 3 --max-time 30 --output $@ \
-		"https://s3.amazonaws.com/spec.ccfc.min/img/quickstart_guide/x86_64/kernels/vmlinux.bin"
-	echo "bc7e2dbf12cf7038937abf42056f6bcd405d3eef4d27aaa3016f0ba15069ae4b $@" | sha256sum -c -
+		"https://s3.amazonaws.com/spec.ccfc.min/img/quickstart_guide/$(host_arch)/kernels/vmlinux.bin"
+	echo "$(kernel_sha256sum) $@" | sha256sum -c -
 	chmod 0400 $@
 
 DEFAULT_VMLINUX_INSTALLPATH=$(FIRECRACKER_CONTAINERD_RUNTIME_DIR)/$(DEFAULT_VMLINUX_NAME)

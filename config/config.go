@@ -20,6 +20,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/debug"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	models "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
@@ -87,11 +88,18 @@ func LoadConfig(path string) (*Config, error) {
 		KernelArgs:      defaultKernelArgs,
 		KernelImagePath: defaultKernelPath,
 		RootDrive:       defaultRootfsPath,
-		CPUTemplate:     string(defaultCPUTemplate),
 		ShimBaseDir:     defaultShimBaseDir,
 		JailerConfig: JailerConfig{
 			RuncConfigPath: runcConfigPath,
 		},
+	}
+
+	flag, err := internal.SupportCPUTemplate()
+	if err != nil {
+		return nil, err
+	}
+	if flag {
+		cfg.CPUTemplate = string(defaultCPUTemplate)
 	}
 
 	if err := json.Unmarshal(data, cfg); err != nil {

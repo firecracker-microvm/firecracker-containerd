@@ -38,13 +38,23 @@ var defaultRuntimeConfig = config.Config{
 	KernelImagePath:       "/var/lib/firecracker-containerd/runtime/default-vmlinux.bin",
 	KernelArgs:            "ro console=ttyS0 noapic reboot=k panic=1 pci=off nomodules systemd.journald.forward_to_console systemd.log_color=false systemd.unit=firecracker.target init=/sbin/overlay-init",
 	RootDrive:             "/var/lib/firecracker-containerd/runtime/default-rootfs.img",
-	CPUTemplate:           "T2",
 	LogLevels:             []string{"debug"},
 	ShimBaseDir:           shimBaseDir(),
 	JailerConfig: config.JailerConfig{
 		RuncBinaryPath: "/usr/local/bin/runc",
 		RuncConfigPath: "/etc/containerd/firecracker-runc-config.json",
 	},
+}
+
+func init() {
+	flag, err := internal.SupportCPUTemplate()
+	if err != nil {
+		panic(err)
+	}
+
+	if flag {
+		defaultRuntimeConfig.CPUTemplate = "T2"
+	}
 }
 
 func shimBaseDir() string {

@@ -47,7 +47,12 @@ var defaultRuntimeConfig = config.Config{
 }
 
 func init() {
-	if internal.SupportCPUTemplate() {
+	flag, err := internal.SupportCPUTemplate()
+	if err != nil {
+		panic(err)
+	}
+
+	if flag {
 		defaultRuntimeConfig.CPUTemplate = "T2"
 	}
 }

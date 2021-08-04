@@ -967,6 +967,14 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 		VMID:       s.vmID,
 	}
 
+	flag, err := internal.SupportCPUTemplate()
+	if err != nil {
+		return nil, err
+	}
+	if !flag {
+		cfg.MachineCfg.CPUTemplate = ""
+	}
+
 	logPath := s.shimDir.FirecrackerLogFifoPath()
 	if req.LogFifoPath != "" {
 		logPath = req.LogFifoPath

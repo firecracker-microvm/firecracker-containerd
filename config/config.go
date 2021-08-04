@@ -93,7 +93,12 @@ func LoadConfig(path string) (*Config, error) {
 			RuncConfigPath: runcConfigPath,
 		},
 	}
-	if internal.SupportCPUTemplate() {
+
+	flag, err := internal.SupportCPUTemplate()
+	if err != nil {
+		return nil, err
+	}
+	if flag {
 		cfg.CPUTemplate = string(defaultCPUTemplate)
 	}
 

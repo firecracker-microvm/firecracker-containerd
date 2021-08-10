@@ -21,12 +21,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"testing"
 
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
+
+const mib = 1024 * 1024
 
 // CreateFSImg will create a file containing a filesystem image of the provided type containing
 // the provided files. It returns the path at which the image file can be found.
@@ -73,46 +74,37 @@ func createTestExtImg(ctx context.Context, t *testing.T, extName string, testFil
 	return imgFile.Name()
 }
 
-// BlockDeviceFile represents a block device
-type BlockDeviceFile struct {
-	Subpath string
-	UID     int
-	GID     int
-	Dev     int // major number
-}
-
 // CreateBlockDevice creates a block device, or block special file for testing
-func CreateBlockDevice(ctx context.Context, t *testing.T, fsType string, testFile BlockDeviceFile) string {
+func CreateBlockDevice(ctx context.Context, t *testing.T) (string, func()) {
 	t.Helper()
 
-	switch fsType {
-	case "ext4":
-		return createTestBlockDevice(ctx, t, fsType, testFile)
-	default:
-		require.FailNowf(t, "unsupported fs type %q", fsType)
-		return ""
-	}
-}
+	f, err := ioutil.TempFile("", "")
+	require.NoError(t, err)
 
-func createTestBlockDevice(ctx context.Context, t *testing.T, extName string, testFile BlockDeviceFile) string {
-	t.Helper()
+	err = f.Truncate(32 * mib)
+	require.NoError(t, err)
 
-	deviceFile := filepath.Join("/tmp/blockExample", testFile.Subpath)
-	err := os.MkdirAll(filepath.Dir(deviceFile), 0750)
-	require.NoError(t, err, "failed to mkdir for the block device")
+	out, err := exec.CommandContext(ctx, "mkfs.ext4", "-v", f.Name()).CombinedOutput()
+	require.NoErrorf(t, err, "failed to create ext img, command out:%s \n", string(out))
 
-	err = syscall.Mknod(deviceFile, syscall.S_IFBLK, testFile.Dev)
-	require.NoError(t, err, "failed to create a new block device")
+	err = f.Close()
+	require.NoError(t, err)
 
-	err = os.Chmod(deviceFile, 0600)
+	out, err = exec.CommandContext(ctx, "losetup", "--show", "--find", f.Name()).CombinedOutput()
+	require.NoError(t, err)
+
+	device := strings.TrimRight(string(out), "\n")
+
+	err = os.Chmod(device, 0600)
 	require.NoError(t, err, "failed to change file mode for the new created block device")
 
-	err = os.Chown(deviceFile, testFile.UID, testFile.GID)
-	require.NoError(t, err, "failed to grant permission to the new created block device")
-
-	output, err := exec.CommandContext(ctx, "mkfs."+extName, "-v", deviceFile).CombinedOutput()
-	require.NoErrorf(t, err, "failed to create ext img, command output:%s \n", string(output))
-	return deviceFile
+	return device, func() {
+		out, err := exec.CommandContext(ctx, "losetup", "--detach", device).CombinedOutput()
+		if len(out) > 0 {
+			t.Logf("losetup --detach: %s", out)
+		}
+		require.NoError(t, err)
+	}
 }
 
 // MountInfo holds data parsed from a line of /proc/mounts

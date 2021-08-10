@@ -66,15 +66,18 @@ func TestJailer_Isolated(t *testing.T) {
 func TestAttachBlockDevice_Isolated(t *testing.T) {
 	prepareIntegTest(t)
 	t.Run("Without Jailer", func(t *testing.T) {
+		t.Parallel()
 		testAttachBlockDevice(t, nil)
 	})
 	t.Run("With Jailer", func(t *testing.T) {
+		t.Parallel()
 		testAttachBlockDevice(t, &proto.JailerConfig{
 			UID: jailerUID,
 			GID: jailerGID,
 		})
 	})
 	t.Run("With Jailer and bind-mount", func(t *testing.T) {
+		t.Parallel()
 		testAttachBlockDevice(t, &proto.JailerConfig{
 			UID:               jailerUID,
 			GID:               jailerGID,
@@ -212,28 +215,19 @@ func testAttachBlockDevice(t *testing.T, jailerConfig *proto.JailerConfig) {
 
 	vmID := testNameToVMID(t.Name())
 
-	// default BlockDeviceFile setup, will change UID & GID if a jailerConfig is passed
-	deviceFile := internal.BlockDeviceFile{
-		Subpath: "dir/block1",
-		UID:     0,
-		GID:     0,
-		Dev:     259, // 259 is the major number for blkext which is one type of block devices
-	}
+	device, cleanup := internal.CreateBlockDevice(ctx, t)
+	defer cleanup()
 
 	if jailerConfig != nil {
-		// cover "With Jailer" & "With Jailer and bind-mount" test cases
-		deviceFile.UID = int(jailerConfig.UID)
-		deviceFile.GID = int(jailerConfig.GID)
+		err := os.Chown(device, int(jailerConfig.UID), int(jailerConfig.GID))
+		require.NoError(err)
 	}
-	additionalBlockDevice := internal.CreateBlockDevice(ctx, t, "ext4", deviceFile)
-	blockExampleDir := filepath.Dir(additionalBlockDevice)
-	defer os.RemoveAll(filepath.Dir(blockExampleDir)) // clean up
 
 	request := proto.CreateVMRequest{
 		VMID:         vmID,
 		JailerConfig: jailerConfig,
 		DriveMounts: []*proto.FirecrackerDriveMount{
-			{HostPath: additionalBlockDevice, VMPath: "/home/driveMount", FilesystemType: "ext4"},
+			{HostPath: device, VMPath: "/home/driveMount", FilesystemType: "ext4"},
 		},
 	}
 
@@ -254,9 +248,8 @@ func testAttachBlockDevice(t *testing.T, jailerConfig *proto.JailerConfig) {
 
 		request.RootDrive = &proto.FirecrackerRootDrive{HostPath: dst}
 
-		// The additional drive file is only used by this test.
-		err = os.Chown(additionalBlockDevice, int(jailerConfig.UID), int(jailerConfig.GID))
-		require.NoError(err, "failed to chown %q", additionalBlockDevice)
+		err = os.Chown(device, int(jailerConfig.UID), int(jailerConfig.GID))
+		require.NoError(err, "failed to chown %q", device)
 	}
 
 	_, err = fcClient.CreateVM(ctx, &request)

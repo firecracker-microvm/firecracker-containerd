@@ -21,13 +21,14 @@ sudo -E INSTALLROOT=$INSTALLROOT PATH=$PATH \
      make install install-firecracker install-default-rootfs
 
 cat << EOF > $dir/config.toml
-disabled_plugins = ["cri"]
+version = 2
+disabled_plugins = ["io.containerd.grpc.v1.cri"]
 root = "$dir"
 state = "$state_path"
 [grpc]
   address = "$dir/containerd.sock"
 [plugins]
-  [plugins.devmapper]
+  [plugins."io.containerd.snapshotter.v1.devmapper"]
     pool_name = "fcci--vg-$unique_id"
     base_image_size = "10GB"
     root_path = "$devmapper_path"

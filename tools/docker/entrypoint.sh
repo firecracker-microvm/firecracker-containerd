@@ -12,8 +12,9 @@ else
 fi
 
 cat > /etc/containerd/snapshotter/devmapper.toml <<EOF
+version = 2
 [plugins]
-  [plugins.devmapper]
+  [plugins."io.containerd.snapshotter.v1.devmapper"]
     pool_name = "${pool_name}"
     base_image_size = "1024MB"
 EOF

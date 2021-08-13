@@ -137,13 +137,14 @@ sudo mkdir -p /var/lib/firecracker-containerd/containerd
 # shim from
 sudo mkdir -p /var/lib/firecracker-containerd
 sudo tee /etc/firecracker-containerd/config.toml <<EOF
-disabled_plugins = ["cri"]
+version = 2
+disabled_plugins = ["io.containerd.grpc.v1.cri"]
 root = "/var/lib/firecracker-containerd/containerd"
 state = "/run/firecracker-containerd"
 [grpc]
   address = "/run/firecracker-containerd/containerd.sock"
 [plugins]
-  [plugins.devmapper]
+  [plugins."io.containerd.snapshotter.v1.devmapper"]
     pool_name = "fc-dev-thinpool"
     base_image_size = "10GB"
     root_path = "/var/lib/firecracker-containerd/snapshotter/devmapper"

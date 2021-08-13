@@ -11,16 +11,15 @@ jobs:
     env:
       GO111MODULE: on
 
-    # Intentionally use 18.04 instead of "latest" to
-    # make this build reproducible.
-    runs-on: ubuntu-18.04
-
     strategy:
       matrix:
-        go: ['1.13', '1.14']
+        os: ['ubuntu-18.04', 'ubuntu-20.04']
+        go: ['1.13', '1.14', '1.15', '1.16']
       # Build all variants regardless of failures
       fail-fast: false
-    name: Go ${{ matrix.go }}
+
+    name: ${{ matrix.os }} / Go ${{ matrix.go }}
+    runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v2

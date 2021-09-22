@@ -20,7 +20,7 @@ Potential use cases of Firecracker-based containers include:
   the overhead of Firecracker is low, the achievable container
   density per host should be comparable to
   running containers using kernel-based container runtimes,
-  without the isolation compromise of such solutions.  Multi-tentant
+  without the isolation compromise of such solutions.  Multi-tenant
   hosts would particularly benefit from this use case.
 
 To maintain compatibility with the container ecosystem, where possible, we use

@@ -35,7 +35,7 @@ export GO_CACHE_VOLUME_NAME?=gocache
 # This Makefile uses Firecracker's pre-build Linux kernels for x86_64 and aarch64.
 host_arch=$(shell arch)
 ifeq ($(host_arch),x86_64)
-	kernel_sha256sum="bc7e2dbf12cf7038937abf42056f6bcd405d3eef4d27aaa3016f0ba15069ae4b"
+	kernel_sha256sum="ea5e7d5cf494a8c4ba043259812fc018b44880d70bcbbfc4d57d2760631b1cd6"
 else ifeq ($(host_arch),aarch64)
 	kernel_sha256sum="e2d7c3d6cc123de9e6052d1f434ca7b47635a1f630d63f7fcc1b7164958375e4"
 else

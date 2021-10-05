@@ -44,3 +44,12 @@ jobs:
       - run: make
       - run: make lint
       - run: make test
+      - run: |
+          make tidy
+          git diff --exit-code
+        # The result of "go mod tidy" is different since Go 1.16.
+        # We will use the old result until we update BuildKite and other environments.
+        if: matrix.go < '1.16'
+      - run: |
+          make proto
+          git diff --exit-code

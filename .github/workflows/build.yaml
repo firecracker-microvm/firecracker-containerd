@@ -47,9 +47,13 @@ jobs:
       - run: |
           make tidy
           git diff --exit-code
-        # The result of "go mod tidy" is different since Go 1.16.
-        # We will use the old result until we update BuildKite and other environments.
-        if: matrix.go < '1.16'
+        # opencontainers/selinux uses Go 1.16's io/fs package with "go1.16"
+        # build tag. However, since go mod tidy acts as like all build tags
+        # are enabled, the file below included in go mod tidy, even
+        # Go is < 1.16.
+        # https://github.com/opencontainers/selinux/blob/v1.9.1/go-selinux/rchcon.go
+        # https://golang.org/ref/mod
+        if: matrix.go >= '1.16'
       - run: |
           make proto
           git diff --exit-code

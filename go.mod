@@ -14,7 +14,7 @@ require (
 	github.com/containerd/typeurl v1.0.2
 	github.com/containernetworking/cni v0.8.1
 	github.com/containernetworking/plugins v0.9.1
-	github.com/firecracker-microvm/firecracker-go-sdk v0.22.1-0.20210520223842-abd0815b8bf9
+	github.com/firecracker-microvm/firecracker-go-sdk v0.22.1-0.20211013171715-b18499f7d841
 	github.com/go-ole/go-ole v1.2.4 // indirect
 	github.com/gofrs/uuid v3.3.0+incompatible
 	github.com/gogo/googleapis v1.4.1 // indirect
@@ -22,8 +22,9 @@ require (
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.2
 	github.com/google/uuid v1.3.0 // indirect
-	github.com/hashicorp/go-multierror v1.1.0
+	github.com/hashicorp/go-multierror v1.1.1
 	github.com/klauspost/compress v1.13.6 // indirect
+	github.com/magefile/mage v1.10.0 // indirect
 	github.com/mdlayher/vsock v0.0.0-20190329173812-a92c53d5dcab
 	github.com/miekg/dns v1.1.25
 	github.com/opencontainers/runc v1.0.2
@@ -33,7 +34,7 @@ require (
 	github.com/shirou/gopsutil v2.18.12+incompatible
 	github.com/shirou/w32 v0.0.0-20160930032740-bb4de0191aa4 // indirect
 	github.com/sirupsen/logrus v1.8.1
-	github.com/stretchr/testify v1.6.1
+	github.com/stretchr/testify v1.7.0
 	github.com/vishvananda/netlink v1.1.1-0.20201029203352-d40f9887b852
 	go.opencensus.io v0.23.0 // indirect
 	golang.org/x/net v0.0.0-20211005001312-d4b1ae081e3b // indirect

@@ -43,7 +43,7 @@ cat << EOF > $runtime_config_path
 	"firecracker_binary_path": "$bin_path/firecracker",
 	"shim_base_dir": "$dir",
 	"kernel_image_path": "$dir/default-vmlinux.bin",
-	"kernel_args": "ro console=ttyS0 noapic reboot=k panic=1 pci=off nomodules systemd.journald.forward_to_console systemd.log_color=false systemd.unit=firecracker.target init=/sbin/overlay-init",
+	"kernel_args": "ro console=ttyS0 noapic reboot=k panic=1 pci=off nomodules systemd.unified_cgroup_hierarchy=0 systemd.journald.forward_to_console systemd.log_color=false systemd.unit=firecracker.target init=/sbin/overlay-init",
 	"log_levels": ["debug"],
 	"root_drive": "$dir/default-rootfs.img",
 	"jailer": {

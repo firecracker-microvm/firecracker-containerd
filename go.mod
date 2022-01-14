@@ -5,7 +5,7 @@ require (
 	github.com/StackExchange/wmi v0.0.0-20181212234831-e0a55b97c705 // indirect
 	github.com/awslabs/tc-redirect-tap v0.0.0-20200708224642-a0300978797d
 	github.com/bits-and-blooms/bitset v1.2.1 // indirect
-	github.com/containerd/containerd v1.5.8
+	github.com/containerd/containerd v1.5.9
 	github.com/containerd/continuity v0.2.0 // indirect
 	github.com/containerd/fifo v1.0.0
 	github.com/containerd/go-runc v1.0.0

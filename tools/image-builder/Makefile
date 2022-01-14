@@ -56,7 +56,7 @@ endif
 	debootstrap \
 		--variant=minbase \
 		--include=udev,systemd,systemd-sysv,procps,libseccomp2,haveged \
-		buster \
+		bookworm \
 		"$(WORKDIR)" $(DEBMIRROR)
 	rm -rf "$(WORKDIR)/var/cache/apt/archives" \
 	       "$(WORKDIR)/usr/share/doc" \

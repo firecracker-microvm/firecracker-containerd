@@ -25,7 +25,7 @@ require (
 	github.com/klauspost/compress v1.13.6 // indirect
 	github.com/mdlayher/vsock v0.0.0-20190329173812-a92c53d5dcab
 	github.com/miekg/dns v1.1.25
-	github.com/opencontainers/runc v1.0.2
+	github.com/opencontainers/runc v1.0.3
 	github.com/opencontainers/runtime-spec v1.0.3-0.20210910115017-0d6cc581aeea
 	github.com/opencontainers/selinux v1.8.5 // indirect
 	github.com/pkg/errors v0.9.1

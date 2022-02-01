@@ -344,9 +344,11 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 				// which makes the agent resource-hoggy than its production build
 				// So the default VM size (128MB) is too small.
 				MachineCfg: &proto.FirecrackerMachineConfiguration{MemSizeMib: 1024},
-				// Because this test starts multiple VMs in parallel, some of them may not start within
-				// the default timeout (20 seconds).
-				TimeoutSeconds: 60,
+				// CreateVM's default timeout is 20 seconds and it cannot be
+				// disabled.
+				// However because this test starts multiple VMs in parallel,
+				// some of them may not start within the default timeout.
+				TimeoutSeconds: 300,
 			}
 
 			resp, err := fcClient.CreateVM(ctx, req)

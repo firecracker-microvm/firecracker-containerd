@@ -23,7 +23,7 @@ require (
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.0
 	github.com/klauspost/compress v1.13.6 // indirect
-	github.com/mdlayher/vsock v1.0.0
+	github.com/mdlayher/vsock v1.0.1-0.20220205131902-375f3bbcc363
 	github.com/miekg/dns v1.1.25
 	github.com/opencontainers/runc v1.0.3
 	github.com/opencontainers/runtime-spec v1.0.3-0.20210910115017-0d6cc581aeea
@@ -35,8 +35,10 @@ require (
 	github.com/stretchr/testify v1.6.1
 	github.com/vishvananda/netlink v1.1.1-0.20201029203352-d40f9887b852
 	go.opencensus.io v0.23.0 // indirect
+	golang.org/x/net v0.0.0-20211005001312-d4b1ae081e3b // indirect
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	golang.org/x/sys v0.0.0-20220204135822-1c1b9b1eba6a
+	golang.org/x/text v0.3.7 // indirect
 	google.golang.org/genproto v0.0.0-20211005153810-c76a74d43a8e // indirect
 	google.golang.org/grpc v1.41.0
 )

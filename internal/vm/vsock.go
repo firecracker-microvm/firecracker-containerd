@@ -76,7 +76,7 @@ type vsockListener struct {
 // VSockListener returns a net.Listener implementation for guest-side Firecracker vsock
 // connections.
 func VSockListener(ctx context.Context, logger *logrus.Entry, port uint32) (net.Listener, error) {
-	listener, err := vsock.Listen(port)
+	listener, err := vsock.Listen(port, nil)
 	if err != nil {
 		return nil, err
 	}

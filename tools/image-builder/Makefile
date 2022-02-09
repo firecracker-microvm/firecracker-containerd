@@ -17,6 +17,8 @@ WORKDIRLOC := $(shell readlink -f $(WORKDIR))
 IMAGE_DIRS := /dev /bin /etc /etc/init.d /tmp /var /run /proc /sys /container/rootfs /agent /rom /overlay
 DIRS       := $(foreach dir,$(IMAGE_DIRS),"$(WORKDIR)$(dir)")
 DEBMIRROR  ?= http://deb.debian.org/debian
+ROOTFS_CACHE_VOLUME_NAME ?= rootfscache
+
 
 export DOCKER_IMAGE_TAG?=latest
 
@@ -103,7 +105,7 @@ builder_stamp:
 	docker run --rm \
 		--security-opt=apparmor=unconfined \
 		--volume $(CURDIR):/src \
-		--volume /src/tmp \
+		--volume $(ROOTFS_CACHE_VOLUME_NAME):/src/tmp \
 		--cap-add=sys_admin \
 		--cap-add=sys_chroot \
 		--env=DEBMIRROR \

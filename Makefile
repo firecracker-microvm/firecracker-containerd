@@ -31,6 +31,7 @@ GID:=$(shell id -g)
 FIRECRACKER_CONTAINERD_BUILDER_IMAGE?=golang:1.13-buster
 export FIRECRACKER_CONTAINERD_TEST_IMAGE?=localhost/firecracker-containerd-test
 export GO_CACHE_VOLUME_NAME?=gocache
+export ROOTFS_CACHE_VOLUME_NAME ?= rootfscache
 
 # This Makefile uses Firecracker's pre-build Linux kernels for x86_64 and aarch64.
 host_arch=$(shell arch)
@@ -98,8 +99,10 @@ distclean: clean
 	$(MAKE) -C tools/image-builder distclean
 	$(call rmi-if-exists,localhost/$(RUNC_BUILDER_NAME):$(DOCKER_IMAGE_TAG))
 	$(call rmi-if-exists,localhost/$(FIRECRACKER_BUILDER_NAME):$(DOCKER_IMAGE_TAG))
-	docker volume rm -f $(CARGO_CACHE_VOLUME_NAME)
-	docker volume rm -f $(GO_CACHE_VOLUME_NAME)
+	docker volume rm -f \
+		$(CARGO_CACHE_VOLUME_NAME) \
+		$(GO_CACHE_VOLUME_NAME) \
+		$(ROOTFS_CACHE_VOLUME_NAME)
 	$(call rmi-if-exists,$(FIRECRACKER_CONTAINERD_TEST_IMAGE):$(DOCKER_IMAGE_TAG))
 	$(call rmi-if-exists,localhost/$(PROTO_BUILDER_NAME):$(DOCKER_IMAGE_TAG))
 

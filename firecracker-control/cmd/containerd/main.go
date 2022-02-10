@@ -50,6 +50,9 @@ import (
 	_ "github.com/containerd/containerd/snapshots/devmapper/plugin"
 	_ "github.com/containerd/containerd/snapshots/overlay/plugin"
 
+	// Register cri plugin
+	_ "github.com/containerd/containerd/pkg/cri"
+
 	// Register fc-control plugin
 	_ "github.com/firecracker-microvm/firecracker-containerd/firecracker-control"
 )

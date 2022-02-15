@@ -1,3 +1,3 @@
-imports = ["/etc/containerd/snapshotter/*.toml"]
+imports = ["/etc/containerd/snapshotter/*.toml", "/etc/containerd/cri/*.toml"]
 [grpc]
   address = "/run/firecracker-containerd/containerd.sock"

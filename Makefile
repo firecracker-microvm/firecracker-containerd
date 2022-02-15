@@ -256,8 +256,12 @@ TEST_BRIDGED_TAP_BIN?=$(BINPATH)/test-bridged-tap
 $(TEST_BRIDGED_TAP_BIN): $(shell find internal/cmd/test-bridged-tap -name *.go) $(GOMOD) $(GOSUM)
 	go build -o $@ $(CURDIR)/internal/cmd/test-bridged-tap
 
+LOOPBACK_BIN?=$(BINPATH)/loopback
+$(LOOPBACK_BIN): 
+	GOBIN=$(dir $@) GO111MODULE=off go get -u github.com/containernetworking/plugins/plugins/main/loopback
+
 .PHONY: cni-bins
-cni-bins: $(BRIDGE_BIN) $(PTP_BIN) $(HOSTLOCAL_BIN) $(FIREWALL_BIN) $(TC_REDIRECT_TAP_BIN)
+cni-bins: $(BRIDGE_BIN) $(PTP_BIN) $(HOSTLOCAL_BIN) $(FIREWALL_BIN) $(TC_REDIRECT_TAP_BIN) $(LOOPBACK_BIN)
 
 .PHONY: test-cni-bins
 test-cni-bins: $(TEST_BRIDGED_TAP_BIN)
@@ -269,6 +273,7 @@ install-cni-bins: cni-bins $(CNI_BIN_ROOT)
 	install -D -o root -g root -m755 -t $(CNI_BIN_ROOT) $(HOSTLOCAL_BIN)
 	install -D -o root -g root -m755 -t $(CNI_BIN_ROOT) $(FIREWALL_BIN)
 	install -D -o root -g root -m755 -t $(CNI_BIN_ROOT) $(TC_REDIRECT_TAP_BIN)
+	install -D -o root -g root -m755 -t $(CNI_BIN_ROOT) $(LOOPBACK_BIN)
 
 .PHONY: install-test-cni-bins
 install-test-cni-bins: test-cni-bins $(CNI_BIN_ROOT)

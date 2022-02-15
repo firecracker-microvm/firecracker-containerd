@@ -28,7 +28,7 @@ import (
 
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
-	"github.com/containernetworking/cni/pkg/types/current"
+	cni "github.com/containernetworking/cni/pkg/types/100"
 	"github.com/containernetworking/cni/pkg/version"
 	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/containernetworking/plugins/pkg/utils/buildversion"
@@ -59,7 +59,7 @@ func add(args *skel.CmdArgs) error {
 			return err
 		}
 
-		var vethIPConf *current.IPConfig
+		var vethIPConf *cni.IPConfig
 		for _, ipConfig := range currentResult.IPs {
 			if ifaceIndex := ipConfig.Interface; ifaceIndex != nil && *ifaceIndex == 1 {
 				vethIPConf = ipConfig
@@ -137,7 +137,7 @@ func add(args *skel.CmdArgs) error {
 			return err
 		}
 
-		currentResult.Interfaces = append(currentResult.Interfaces, &current.Interface{
+		currentResult.Interfaces = append(currentResult.Interfaces, &cni.Interface{
 			Name:    tapLink.Attrs().Name,
 			Sandbox: args.Netns,
 			Mac:     tapLink.Attrs().HardwareAddr.String(),
@@ -145,15 +145,14 @@ func add(args *skel.CmdArgs) error {
 
 		tapMac := tapLink.Attrs().HardwareAddr
 		tapMac[1], tapMac[2] = tapMac[2], tapMac[1] // just need a different addr from the tap
-		currentResult.Interfaces = append(currentResult.Interfaces, &current.Interface{
+		currentResult.Interfaces = append(currentResult.Interfaces, &cni.Interface{
 			Name:    tapLink.Attrs().Name,
 			Sandbox: args.ContainerID,
 			Mac:     tapMac.String(),
 		})
 		vmIfaceIndex := len(currentResult.Interfaces) - 1
 
-		currentResult.IPs = append(currentResult.IPs, &current.IPConfig{
-			Version:   "4",
+		currentResult.IPs = append(currentResult.IPs, &cni.IPConfig{
 			Address:   vethIPConf.Address,
 			Gateway:   vethIPConf.Gateway,
 			Interface: &vmIfaceIndex,
@@ -163,7 +162,7 @@ func add(args *skel.CmdArgs) error {
 	})
 }
 
-func getCurrentResult(args *skel.CmdArgs) (*current.Result, error) {
+func getCurrentResult(args *skel.CmdArgs) (*cni.Result, error) {
 	// parse the previous CNI result (or throw an error if there wasn't one)
 	cniConf := types.NetConf{}
 	err := json.Unmarshal(args.StdinData, &cniConf)
@@ -180,7 +179,7 @@ func getCurrentResult(args *skel.CmdArgs) (*current.Result, error) {
 		return nil, errors.New("no previous result")
 	}
 
-	currentResult, err := current.NewResultFromResult(cniConf.PrevResult)
+	currentResult, err := cni.NewResultFromResult(cniConf.PrevResult)
 	if err != nil {
 		return nil, errors.Wrap(err,
 			"failed to generate current result from previous CNI result")

@@ -11,7 +11,7 @@ require (
 	github.com/containerd/go-runc v1.0.0
 	github.com/containerd/ttrpc v1.1.0
 	github.com/containerd/typeurl v1.0.2
-	github.com/containernetworking/cni v0.8.1
+	github.com/containernetworking/cni v1.0.1
 	github.com/containernetworking/plugins v0.9.1
 	github.com/firecracker-microvm/firecracker-go-sdk v0.22.1-0.20210520223842-abd0815b8bf9
 	github.com/go-ole/go-ole v1.2.4 // indirect

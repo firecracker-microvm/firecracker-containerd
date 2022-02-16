@@ -36,7 +36,7 @@ func machineConfigurationFromProto(cfg *config.Config, req *proto.FirecrackerMac
 		CPUTemplate: models.CPUTemplate(cfg.CPUTemplate),
 		VcpuCount:   firecracker.Int64(defaultCPUCount),
 		MemSizeMib:  firecracker.Int64(defaultMemSizeMb),
-		HtEnabled:   firecracker.Bool(cfg.HtEnabled),
+		Smt:         firecracker.Bool(cfg.SmtEnabled),
 	}
 
 	if req == nil {
@@ -55,7 +55,7 @@ func machineConfigurationFromProto(cfg *config.Config, req *proto.FirecrackerMac
 		config.MemSizeMib = firecracker.Int64(int64(size))
 	}
 
-	config.HtEnabled = firecracker.Bool(req.HtEnabled)
+	config.Smt = firecracker.Bool(req.HtEnabled)
 
 	return config
 }

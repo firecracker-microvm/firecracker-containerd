@@ -53,7 +53,7 @@ func TestMachineConfigurationFromProto(t *testing.T) {
 				CPUTemplate: models.CPUTemplateC3,
 				VcpuCount:   firecracker.Int64(vcpuCount),
 				MemSizeMib:  firecracker.Int64(memSize),
-				HtEnabled:   firecracker.Bool(true),
+				Smt:         firecracker.Bool(true),
 			},
 		},
 		{
@@ -66,7 +66,7 @@ func TestMachineConfigurationFromProto(t *testing.T) {
 				CPUTemplate: models.CPUTemplateC3,
 				VcpuCount:   firecracker.Int64(defaultCPUCount),
 				MemSizeMib:  firecracker.Int64(defaultMemSizeMb),
-				HtEnabled:   firecracker.Bool(false),
+				Smt:         firecracker.Bool(false),
 			},
 		},
 		{
@@ -78,7 +78,7 @@ func TestMachineConfigurationFromProto(t *testing.T) {
 				CPUTemplate: models.CPUTemplateC3,
 				VcpuCount:   firecracker.Int64(defaultCPUCount),
 				MemSizeMib:  firecracker.Int64(defaultMemSizeMb),
-				HtEnabled:   firecracker.Bool(false),
+				Smt:         firecracker.Bool(false),
 			},
 		},
 		{
@@ -96,7 +96,7 @@ func TestMachineConfigurationFromProto(t *testing.T) {
 				CPUTemplate: models.CPUTemplateC3,
 				VcpuCount:   firecracker.Int64(vcpuCount),
 				MemSizeMib:  firecracker.Int64(memSize),
-				HtEnabled:   firecracker.Bool(true),
+				Smt:         firecracker.Bool(true),
 			},
 		},
 	}

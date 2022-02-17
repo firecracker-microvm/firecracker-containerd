@@ -52,7 +52,7 @@ TEST_GATEWAY?=172.16.0.1
 TEST_IP?=172.16.0.2
 TEST_SUBNET?=/24
 FICD_DM_VOLUME_GROUP?=
-TEST_POOL?=testpool
+TEST_POOL?=fc-test-thinpool
 testtap:
 	ip link add br0 type bridge
 	ip tuntap add tap0 mode tap

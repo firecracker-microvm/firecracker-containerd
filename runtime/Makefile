@@ -141,6 +141,24 @@ perf-test:
 		$(FIRECRACKER_CONTAINERD_TEST_IMAGE):$(DOCKER_IMAGE_TAG) \
 		"go test -timeout 0 -v -count=1 -run \"^$(PERF_TESTNAME)$$\""
 
+.PHONY: critest
+critest:
+	$(CURDIR)/../tools/thinpool.sh reset "$(FICD_DM_POOL)"
+	docker run --rm -it \
+		--privileged \
+		--ipc=host \
+		--volume /dev:/dev \
+		--volume /run/udev/control:/run/udev/control \
+		--volume $(CURDIR)/..:/src \
+		--volume $(GO_CACHE_VOLUME_NAME):/go \
+		--env FICD_DM_VOLUME_GROUP=$(FICD_DM_VOLUME_GROUP) \
+		--env FICD_DM_POOL=$(FICD_DM_POOL) \
+		--env GOPROXY=direct \
+		--env GOSUMDB=off \
+		--workdir="/src/runtime" \
+		$(FIRECRACKER_CONTAINERD_TEST_IMAGE):$(DOCKER_IMAGE_TAG) \
+		"critest -runtime-endpoint unix:///run/firecracker-containerd/containerd.sock"
+
 clean:
 	- rm -f containerd-shim-aws-firecracker
 

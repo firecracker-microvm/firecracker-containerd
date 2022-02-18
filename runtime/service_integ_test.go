@@ -22,6 +22,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -45,6 +46,7 @@ import (
 	"github.com/shirou/gopsutil/process"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/firecracker-microvm/firecracker-containerd/config"
 	_ "github.com/firecracker-microvm/firecracker-containerd/firecracker-control"
@@ -288,14 +290,14 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 	}
 
 	testTimeout := 10 * time.Minute
-	ctx, cancel := context.WithTimeout(namespaces.WithNamespace(context.Background(), defaultNamespace), testTimeout)
+	testCtx, cancel := context.WithTimeout(namespaces.WithNamespace(context.Background(), defaultNamespace), testTimeout)
 	defer cancel()
 
 	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
 	defer client.Close()
 
-	image, err := alpineImage(ctx, client, defaultSnapshotterName)
+	image, err := alpineImage(testCtx, client, defaultSnapshotterName)
 	require.NoError(t, err, "failed to get alpine image")
 
 	fcClient, err := newFCControlClient(containerdSockPath)
@@ -307,19 +309,22 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 	// This test spawns separate VMs in parallel and ensures containers are spawned within each expected VM. It asserts each
 	// container ends up in the right VM by assigning each VM a network device with a unique mac address and having each container
 	// print the mac address it sees inside its VM.
-	var vmWg sync.WaitGroup
+	vmEg, vmEgCtx := errgroup.WithContext(testCtx)
 	for i := 0; i < numberOfVms; i++ {
 		caseTypeNumber := i % len(cases)
+		vmID := i
 		c := cases[caseTypeNumber]
-		vmWg.Add(1)
-		go func(vmID int, containerCount int32, jailerConfig *proto.JailerConfig) {
-			defer vmWg.Done()
+
+		f := func(ctx context.Context) error {
+			containerCount := c.MaxContainers
+			jailerConfig := c.JailerConfig
 
 			tapName := fmt.Sprintf("tap%d", vmID)
 			err := createTapDevice(ctx, tapName)
+			if err != nil {
+				return err
+			}
 			defer deleteTapDevice(ctx, tapName)
-
-			require.NoError(t, err, "failed to create tap device for vm %d", vmID)
 
 			rootfsPath := cfg.RootDrive
 
@@ -351,42 +356,60 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 				TimeoutSeconds: 300,
 			}
 
-			resp, err := fcClient.CreateVM(ctx, req)
-			require.NoError(t, err, "failed to create vm")
+			resp, createVMErr := fcClient.CreateVM(ctx, req)
+			if createVMErr != nil {
+				matches, err := findProcess(ctx, findFirecracker)
+				if err != nil {
+					return err
+				}
+				return fmt.Errorf(
+					"failed to create a VM while there are %d Firecracker processes: %w",
+					len(matches),
+					createVMErr,
+				)
+			}
 
-			var containerWg sync.WaitGroup
+			containerEg, containerCtx := errgroup.WithContext(vmEgCtx)
 			for containerID := 0; containerID < int(containerCount); containerID++ {
-				containerWg.Add(1)
-				go func(containerID int) {
-					defer containerWg.Done()
-					testMultipleExecs(
-						ctx,
-						t,
+				containerID := containerID
+				containerEg.Go(func() error {
+					return testMultipleExecs(
+						containerCtx,
 						vmID,
 						containerID,
 						client, image,
 						jailerConfig,
 						resp.CgroupPath,
 					)
-				}(containerID)
+				})
 			}
 
 			// verify duplicate CreateVM call fails with right error
 			_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{VMID: strconv.Itoa(vmID)})
-			require.Error(t, err, "did not receive expected error for duplicate CreateVM call")
+			if err == nil {
+				return fmt.Errorf("creating the same VM must return an error")
+			}
 
 			// verify GetVMInfo returns expected data
 			vmInfoResp, err := fcClient.GetVMInfo(ctx, &proto.GetVMInfoRequest{VMID: strconv.Itoa(vmID)})
-			require.NoError(t, err, "failed to get VM Info for VM %d", vmID)
-			require.Equal(t, vmInfoResp.VMID, strconv.Itoa(vmID))
+			if err != nil {
+				return err
+			}
+			if vmInfoResp.VMID != strconv.Itoa(vmID) {
+				return fmt.Errorf("%q must be %q", vmInfoResp.VMID, strconv.Itoa(vmID))
+			}
 
 			nspVMid := defaultNamespace + "#" + strconv.Itoa(vmID)
 			cfg, err := config.LoadConfig("")
-			require.NoError(t, err, "failed to load config")
-			require.Equal(t, vmInfoResp.SocketPath, filepath.Join(cfg.ShimBaseDir, nspVMid, "firecracker.sock"))
-			require.Equal(t, vmInfoResp.LogFifoPath, filepath.Join(cfg.ShimBaseDir, nspVMid, "fc-logs.fifo"))
-			require.Equal(t, vmInfoResp.MetricsFifoPath, filepath.Join(cfg.ShimBaseDir, nspVMid, "fc-metrics.fifo"))
-			require.Equal(t, resp.CgroupPath, vmInfoResp.CgroupPath)
+			if err != nil {
+				return err
+			}
+			if vmInfoResp.SocketPath != filepath.Join(cfg.ShimBaseDir, nspVMid, "firecracker.sock") ||
+				vmInfoResp.LogFifoPath != filepath.Join(cfg.ShimBaseDir, nspVMid, "fc-logs.fifo") ||
+				vmInfoResp.MetricsFifoPath != filepath.Join(cfg.ShimBaseDir, nspVMid, "fc-metrics.fifo") ||
+				resp.CgroupPath != vmInfoResp.CgroupPath {
+				return fmt.Errorf("unexpected result from GetVMInfo: %+v", vmInfoResp)
+			}
 
 			// just verify that updating the metadata doesn't return an error, a separate test case is needed
 			// to very the MMDS update propagates to the container correctly
@@ -394,28 +417,44 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 				VMID:     strconv.Itoa(vmID),
 				Metadata: "{}",
 			})
-			require.NoError(t, err, "failed to set VM Metadata for VM %d", vmID)
+			if err != nil {
+				return err
+			}
 
-			containerWg.Wait()
+			err = containerEg.Wait()
+			if err != nil {
+				return fmt.Errorf("unexpected error from the containers in VM %d: %w", vmID, err)
+			}
 
 			_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: strconv.Itoa(vmID), TimeoutSeconds: 5})
-			require.NoError(t, err, "failed to stop VM %d", vmID)
-		}(i, c.MaxContainers, c.JailerConfig)
+			if err != nil {
+				return err
+			}
+			return nil
+		}
+
+		vmEg.Go(func() error {
+			err := f(vmEgCtx)
+			if err != nil {
+				return fmt.Errorf("unexpected errors from VM %d: %w", vmID, err)
+			}
+			return nil
+		})
 	}
 
-	vmWg.Wait()
+	err = vmEg.Wait()
+	require.NoError(t, err)
 }
 
 func testMultipleExecs(
 	ctx context.Context,
-	t *testing.T,
 	vmID int,
 	containerID int,
 	client *containerd.Client,
 	image containerd.Image,
 	jailerConfig *proto.JailerConfig,
 	cgroupPath string,
-) {
+) error {
 	vmIDStr := strconv.Itoa(vmID)
 	testTimeout := 600 * time.Second
 
@@ -438,7 +477,9 @@ func testMultipleExecs(
 			firecrackeroci.WithVMID(vmIDStr),
 		),
 	)
-	require.NoError(t, err, "failed to create container %s", containerName)
+	if err != nil {
+		return err
+	}
 	defer newContainer.Delete(ctx)
 
 	var taskStdout bytes.Buffer
@@ -446,13 +487,19 @@ func testMultipleExecs(
 
 	newTask, err := newContainer.NewTask(ctx,
 		cio.NewCreator(cio.WithStreams(nil, &taskStdout, &taskStderr)))
-	require.NoError(t, err, "failed to create task for container %s", containerName)
+	if err != nil {
+		return err
+	}
 
 	taskExitCh, err := newTask.Wait(ctx)
-	require.NoError(t, err, "failed to wait on task for container %s", containerName)
+	if err != nil {
+		return err
+	}
 
 	err = newTask.Start(ctx)
-	require.NoError(t, err, "failed to start task for container %s", containerName)
+	if err != nil {
+		return err
+	}
 
 	// Create a few execs for the task, including one with the same ID as the taskID (to provide
 	// regression coverage for a bug related to using the same task and exec ID).
@@ -465,20 +512,29 @@ func testMultipleExecs(
 	// This is a rudimentary way of asserting that each exec was created in the expected task.
 	execIDs := []string{fmt.Sprintf("exec-%d-%d", vmID, containerID), containerName}
 	execStdouts := make(chan string, len(execIDs))
-	var execWg sync.WaitGroup
+	var eg, _ = errgroup.WithContext(ctx)
 	for _, execID := range execIDs {
-		execWg.Add(1)
-		go func(execID string) {
-			defer execWg.Done()
-			execStdouts <- getMountNamespace(ctx, t, client, containerName, newTask, execID)
-		}(execID)
+		execID := execID
+		eg.Go(func() error {
+			ns, err := getMountNamespace(ctx, client, containerName, newTask, execID)
+			if err != nil {
+				return err
+			}
+			execStdouts <- ns
+			return nil
+		})
 	}
-	execWg.Wait()
+	err = eg.Wait()
+	if err != nil {
+		return fmt.Errorf("unexpected error from the execs in container %d: %w", containerID, err)
+	}
 	close(execStdouts)
 
 	if jailerConfig != nil {
 		dir, err := vm.ShimDir(shimBaseDir(), "default", vmIDStr)
-		require.NoError(t, err)
+		if err != nil {
+			return err
+		}
 
 		jailer := &runcJailer{
 			Config: runcJailerConfig{
@@ -487,10 +543,21 @@ func testMultipleExecs(
 			vmID: vmIDStr,
 		}
 		_, err = os.Stat(jailer.RootPath())
-		require.NoError(t, err, "failed to stat root path of jailer")
+		if err != nil {
+			return err
+		}
 		_, err = os.Stat(filepath.Join("/sys/fs/cgroup/cpu", cgroupPath))
-		require.NoError(t, err, "failed to stat cgroup path of jailer")
-		assert.Regexp(t, fmt.Sprintf(".+/%s", vmIDStr), cgroupPath)
+		if err != nil {
+			return err
+		}
+
+		ok, err := regexp.Match(".+/"+vmIDStr, []byte(cgroupPath))
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return fmt.Errorf("%q doesn't match %q", cgroupPath, vmIDStr)
+		}
 	}
 
 	// Verify each exec had the same stdout and use that value as the mount namespace that will be compared
@@ -502,18 +569,23 @@ func testMultipleExecs(
 			// in the execID loop above.
 			execMntNS = execStdout
 		}
-
-		require.Equal(t, execMntNS, execStdout, "execs in same task unexpectedly have different outputs")
+		if execStdout != execMntNS {
+			return fmt.Errorf("%q must be %q", execStdout, execMntNS)
+		}
 	}
 
 	// Now kill the task and verify it was in the right VM and has the same mnt namespace as its execs
 	err = newTask.Kill(ctx, syscall.SIGKILL)
-	require.NoError(t, err, "failed to kill task %q", containerName)
+	if err != nil {
+		return err
+	}
 
 	select {
 	case <-taskExitCh:
 		_, err = newTask.Delete(ctx)
-		require.NoError(t, err, "failed to delete task %q", containerName)
+		if err != nil {
+			return err
+		}
 
 		// if there was anything on stderr, print it to assist debugging
 		stderrOutput := taskStderr.String()
@@ -521,23 +593,20 @@ func testMultipleExecs(
 			fmt.Printf("stderr output from task %q: %q", containerName, stderrOutput)
 		}
 
-		stdoutLines := strings.Split(strings.TrimSpace(taskStdout.String()), "\n")
-		lines := 2
-		require.Len(t, stdoutLines, lines)
+		stdout := taskStdout.String()
+		expected := fmt.Sprintf("%s\n%s\n", vmIDtoMacAddr(uint(vmID)), execMntNS)
 
-		printedVMID := strings.TrimSpace(stdoutLines[0])
-		require.Equal(t, vmIDtoMacAddr(uint(vmID)), printedVMID, "unexpected VMID output from container %q", containerName)
-
-		taskMntNS := strings.TrimSpace(stdoutLines[1])
-		require.Equal(t, execMntNS, taskMntNS, "unexpected mnt NS output from container %q", containerName)
-
+		if stdout != expected {
+			return fmt.Errorf("%q must be %q", stdout, expected)
+		}
 	case <-ctx.Done():
-		require.Fail(t, "context cancelled",
-			"context cancelled while waiting for container %s to exit, err: %v", containerName, ctx.Err())
+		return ctx.Err()
 	}
+
+	return nil
 }
 
-func getMountNamespace(ctx context.Context, t *testing.T, client *containerd.Client, containerName string, newTask containerd.Task, execID string) string {
+func getMountNamespace(ctx context.Context, client *containerd.Client, containerName string, newTask containerd.Task, execID string) (string, error) {
 	var execStdout bytes.Buffer
 	var execStderr bytes.Buffer
 
@@ -545,18 +614,26 @@ func getMountNamespace(ctx context.Context, t *testing.T, client *containerd.Cli
 		Args: []string{"/usr/bin/readlink", "/proc/self/ns/mnt"},
 		Cwd:  "/",
 	}, cio.NewCreator(cio.WithStreams(nil, &execStdout, &execStderr)))
-	require.NoError(t, err, "failed to exec %s", execID)
+	if err != nil {
+		return "", err
+	}
 
 	execExitCh, err := newExec.Wait(ctx)
-	require.NoError(t, err, "failed to wait on exec %s", execID)
+	if err != nil {
+		return "", err
+	}
 
 	err = newExec.Start(ctx)
-	require.NoError(t, err, "failed to start exec %s", execID)
+	if err != nil {
+		return "", err
+	}
 
 	select {
 	case exitStatus := <-execExitCh:
 		_, err = newExec.Delete(ctx)
-		require.NoError(t, err, "failed to delete exec %q", execID)
+		if err != nil {
+			return "", err
+		}
 
 		// if there was anything on stderr, print it to assist debugging
 		stderrOutput := execStderr.String()
@@ -565,16 +642,15 @@ func getMountNamespace(ctx context.Context, t *testing.T, client *containerd.Cli
 		}
 
 		mntNS := strings.TrimSpace(execStdout.String())
-		require.NotEmptyf(t, mntNS, "no stdout output for task %q exec %q", containerName, execID)
+		code := exitStatus.ExitCode()
+		if code != 0 {
+			return "", fmt.Errorf("exit code %d != 0, stdout=%q stderr=%q", code, execStdout.String(), stderrOutput)
+		}
 
-		require.Equal(t, uint32(0), exitStatus.ExitCode())
-
-		return mntNS
+		return mntNS, nil
 	case <-ctx.Done():
-		require.Fail(t, "context cancelled",
-			"context cancelled while waiting for exec %s to exit, err: %v", execID, ctx.Err())
+		return "", ctx.Err()
 	}
-	return ""
 }
 
 func TestLongUnixSocketPath_Isolated(t *testing.T) {

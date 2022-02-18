@@ -34,7 +34,6 @@ import (
 
 	"github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/containerd/cio"
-	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/events/exchange"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/namespaces"
@@ -46,8 +45,7 @@ import (
 	"github.com/firecracker-microvm/firecracker-go-sdk"
 	"github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 	"github.com/gofrs/uuid"
-	ptypes "github.com/gogo/protobuf/types"
-	"github.com/golang/protobuf/ptypes/empty"
+	"github.com/gogo/protobuf/types"
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -405,13 +403,13 @@ func logPanicAndDie(logger *logrus.Entry) {
 	}
 }
 
-func (s *service) generateExtraData(jsonBytes []byte, options *ptypes.Any) (*proto.ExtraData, error) {
-	var opts *ptypes.Any
+func (s *service) generateExtraData(jsonBytes []byte, options *types.Any) (*proto.ExtraData, error) {
+	var opts *types.Any
 	if options != nil {
 		// Copy values of existing options over
 		valCopy := make([]byte, len(options.Value))
 		copy(valCopy, options.Value)
-		opts = &ptypes.Any{
+		opts = &types.Any{
 			TypeUrl: options.TypeUrl,
 			Value:   valCopy,
 		}
@@ -638,7 +636,7 @@ func (s *service) mountDrives(requestCtx context.Context) error {
 // If the VM has not been created yet and the timeout is hit waiting for it to exist, an error will be returned
 // but the shim will continue to shutdown. Similarly if we detect that the VM is in pause state, then
 // we are unable to communicate to the in-VM agent. In this case, we do a forceful shutdown.
-func (s *service) StopVM(requestCtx context.Context, request *proto.StopVMRequest) (_ *empty.Empty, err error) {
+func (s *service) StopVM(requestCtx context.Context, request *proto.StopVMRequest) (_ *types.Empty, err error) {
 	defer logPanicAndDie(s.logger)
 	s.logger.WithFields(logrus.Fields{"timeout_seconds": request.TimeoutSeconds}).Debug("StopVM")
 
@@ -653,11 +651,11 @@ func (s *service) StopVM(requestCtx context.Context, request *proto.StopVMReques
 	if err = s.terminate(ctx); err != nil {
 		return nil, err
 	}
-	return &empty.Empty{}, nil
+	return &types.Empty{}, nil
 }
 
 // ResumeVM resumes a VM
-func (s *service) ResumeVM(ctx context.Context, req *proto.ResumeVMRequest) (*empty.Empty, error) {
+func (s *service) ResumeVM(ctx context.Context, req *proto.ResumeVMRequest) (*types.Empty, error) {
 	defer logPanicAndDie(s.logger)
 
 	err := s.waitVMReady()
@@ -671,11 +669,11 @@ func (s *service) ResumeVM(ctx context.Context, req *proto.ResumeVMRequest) (*em
 		return nil, err
 	}
 
-	return &empty.Empty{}, nil
+	return &types.Empty{}, nil
 }
 
 // PauseVM pauses a VM
-func (s *service) PauseVM(ctx context.Context, req *proto.PauseVMRequest) (*empty.Empty, error) {
+func (s *service) PauseVM(ctx context.Context, req *proto.PauseVMRequest) (*types.Empty, error) {
 	defer logPanicAndDie(s.logger)
 
 	err := s.waitVMReady()
@@ -689,7 +687,7 @@ func (s *service) PauseVM(ctx context.Context, req *proto.PauseVMRequest) (*empt
 		return nil, err
 	}
 
-	return &empty.Empty{}, nil
+	return &types.Empty{}, nil
 }
 
 // GetVMInfo returns metadata for the VM being managed by this shim. If the VM has not been created yet, this
@@ -719,7 +717,7 @@ func (s *service) GetVMInfo(requestCtx context.Context, request *proto.GetVMInfo
 
 // SetVMMetadata will update the VM being managed by this shim with the provided metadata. If the VM has not been created yet, this
 // method will wait for up to a hardcoded timeout for it to exist, returning an error if the timeout is reached.
-func (s *service) SetVMMetadata(requestCtx context.Context, request *proto.SetVMMetadataRequest) (*empty.Empty, error) {
+func (s *service) SetVMMetadata(requestCtx context.Context, request *proto.SetVMMetadataRequest) (*types.Empty, error) {
 	defer logPanicAndDie(s.logger)
 
 	err := s.waitVMReady()
@@ -736,13 +734,13 @@ func (s *service) SetVMMetadata(requestCtx context.Context, request *proto.SetVM
 		return nil, err
 	}
 
-	return &empty.Empty{}, nil
+	return &types.Empty{}, nil
 }
 
 // UpdateVMMetadata updates the VM being managed by this shim with the provided metadata patch.
 // If the vm has not been created yet, this method will wait for up to the hardcoded timeout for it
 // to exist, returning an error if the timeout is reached.
-func (s *service) UpdateVMMetadata(requestCtx context.Context, request *proto.UpdateVMMetadataRequest) (*empty.Empty, error) {
+func (s *service) UpdateVMMetadata(requestCtx context.Context, request *proto.UpdateVMMetadataRequest) (*types.Empty, error) {
 
 	defer logPanicAndDie(s.logger)
 
@@ -760,7 +758,7 @@ func (s *service) UpdateVMMetadata(requestCtx context.Context, request *proto.Up
 		return nil, err
 	}
 
-	return &empty.Empty{}, nil
+	return &types.Empty{}, nil
 }
 
 // GetVMMetadata returns the metadata for the vm managed by this shim..
@@ -835,7 +833,7 @@ func (s *service) GetBalloonConfig(requestCtx context.Context, req *proto.GetBal
 }
 
 // UpdateBalloon will update an existing balloon device, before or after machine startup
-func (s *service) UpdateBalloon(requestCtx context.Context, req *proto.UpdateBalloonRequest) (*empty.Empty, error) {
+func (s *service) UpdateBalloon(requestCtx context.Context, req *proto.UpdateBalloonRequest) (*types.Empty, error) {
 	defer logPanicAndDie(s.logger)
 
 	err := s.waitVMReady()
@@ -851,7 +849,7 @@ func (s *service) UpdateBalloon(requestCtx context.Context, req *proto.UpdateBal
 		return nil, err
 	}
 
-	return &empty.Empty{}, nil
+	return &types.Empty{}, nil
 }
 
 // GetBalloonStats will return the latest balloon device statistics, only if enabled pre-boot.
@@ -902,7 +900,7 @@ func (s *service) GetBalloonStats(requestCtx context.Context, req *proto.GetBall
 }
 
 //UpdateBalloonStats will update an existing balloon device statistics interval, before or after machine startup.
-func (s *service) UpdateBalloonStats(requestCtx context.Context, req *proto.UpdateBalloonStatsRequest) (*empty.Empty, error) {
+func (s *service) UpdateBalloonStats(requestCtx context.Context, req *proto.UpdateBalloonStatsRequest) (*types.Empty, error) {
 	defer logPanicAndDie(s.logger)
 
 	err := s.waitVMReady()
@@ -918,7 +916,7 @@ func (s *service) UpdateBalloonStats(requestCtx context.Context, req *proto.Upda
 		return nil, err
 	}
 
-	return &empty.Empty{}, nil
+	return &types.Empty{}, nil
 }
 
 func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker.Config, error) {
@@ -1203,7 +1201,7 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 		return nil, err
 	}
 
-	request.Options, err = ptypes.MarshalAny(extraData)
+	request.Options, err = types.MarshalAny(extraData)
 	if err != nil {
 		err = errors.Wrap(err, "failed to marshal extra data")
 		logger.WithError(err).Error()
@@ -1305,7 +1303,7 @@ func (s *service) Delete(requestCtx context.Context, req *taskAPI.DeleteRequest)
 }
 
 // Exec an additional process inside the container
-func (s *service) Exec(requestCtx context.Context, req *taskAPI.ExecProcessRequest) (*ptypes.Empty, error) {
+func (s *service) Exec(requestCtx context.Context, req *taskAPI.ExecProcessRequest) (*types.Empty, error) {
 	defer logPanicAndDie(log.G(requestCtx))
 	logger := s.logger.WithField("task_id", req.ID).WithField("exec_id", req.ExecID)
 	logger.Debug("exec")
@@ -1318,7 +1316,7 @@ func (s *service) Exec(requestCtx context.Context, req *taskAPI.ExecProcessReque
 		return nil, err
 	}
 
-	req.Spec, err = ptypes.MarshalAny(extraData)
+	req.Spec, err = types.MarshalAny(extraData)
 	if err != nil {
 		err = errors.Wrap(err, "failed to marshal extra data")
 		logger.WithError(err).Error()
@@ -1349,7 +1347,7 @@ func (s *service) Exec(requestCtx context.Context, req *taskAPI.ExecProcessReque
 }
 
 // ResizePty of a process
-func (s *service) ResizePty(requestCtx context.Context, req *taskAPI.ResizePtyRequest) (*ptypes.Empty, error) {
+func (s *service) ResizePty(requestCtx context.Context, req *taskAPI.ResizePtyRequest) (*types.Empty, error) {
 	defer logPanicAndDie(log.G(requestCtx))
 
 	log.G(requestCtx).WithFields(logrus.Fields{"task_id": req.ID, "exec_id": req.ExecID}).Debug("resize_pty")
@@ -1441,7 +1439,7 @@ func (s *service) attachNewProxy(
 }
 
 // Pause the container
-func (s *service) Pause(requestCtx context.Context, req *taskAPI.PauseRequest) (*ptypes.Empty, error) {
+func (s *service) Pause(requestCtx context.Context, req *taskAPI.PauseRequest) (*types.Empty, error) {
 	defer logPanicAndDie(log.G(requestCtx))
 
 	log.G(requestCtx).WithField("task_id", req.ID).Debug("pause")
@@ -1454,7 +1452,7 @@ func (s *service) Pause(requestCtx context.Context, req *taskAPI.PauseRequest) (
 }
 
 // Resume the container
-func (s *service) Resume(requestCtx context.Context, req *taskAPI.ResumeRequest) (*ptypes.Empty, error) {
+func (s *service) Resume(requestCtx context.Context, req *taskAPI.ResumeRequest) (*types.Empty, error) {
 	defer logPanicAndDie(log.G(requestCtx))
 
 	log.G(requestCtx).WithField("task_id", req.ID).Debug("resume")
@@ -1467,7 +1465,7 @@ func (s *service) Resume(requestCtx context.Context, req *taskAPI.ResumeRequest)
 }
 
 // Kill a process with the provided signal
-func (s *service) Kill(requestCtx context.Context, req *taskAPI.KillRequest) (*ptypes.Empty, error) {
+func (s *service) Kill(requestCtx context.Context, req *taskAPI.KillRequest) (*types.Empty, error) {
 	defer logPanicAndDie(log.G(requestCtx))
 
 	log.G(requestCtx).WithFields(logrus.Fields{"task_id": req.ID, "exec_id": req.ExecID}).Debug("kill")
@@ -1492,7 +1490,7 @@ func (s *service) Pids(requestCtx context.Context, req *taskAPI.PidsRequest) (*t
 }
 
 // CloseIO of a process
-func (s *service) CloseIO(requestCtx context.Context, req *taskAPI.CloseIORequest) (*ptypes.Empty, error) {
+func (s *service) CloseIO(requestCtx context.Context, req *taskAPI.CloseIORequest) (*types.Empty, error) {
 	defer logPanicAndDie(log.G(requestCtx))
 
 	log.G(requestCtx).WithFields(logrus.Fields{"task_id": req.ID, "exec_id": req.ExecID}).Debug("close_io")
@@ -1505,7 +1503,7 @@ func (s *service) CloseIO(requestCtx context.Context, req *taskAPI.CloseIOReques
 }
 
 // Checkpoint the container
-func (s *service) Checkpoint(requestCtx context.Context, req *taskAPI.CheckpointTaskRequest) (*ptypes.Empty, error) {
+func (s *service) Checkpoint(requestCtx context.Context, req *taskAPI.CheckpointTaskRequest) (*types.Empty, error) {
 	defer logPanicAndDie(log.G(requestCtx))
 
 	log.G(requestCtx).WithFields(logrus.Fields{"task_id": req.ID, "path": req.Path}).Info("checkpoint")
@@ -1521,12 +1519,13 @@ func (s *service) Checkpoint(requestCtx context.Context, req *taskAPI.Checkpoint
 func (s *service) Connect(requestCtx context.Context, req *taskAPI.ConnectRequest) (*taskAPI.ConnectResponse, error) {
 	defer logPanicAndDie(log.G(requestCtx))
 
-	// Since task_pid inside the micro VM wouldn't make sense for clients,
-	// we intentionally return ErrNotImplemented instead of forwarding that to the guest-side shim.
-	// https://github.com/firecracker-microvm/firecracker-containerd/issues/210
-	log.G(requestCtx).WithField("task_id", req.ID).Error(`"connect" is not implemented by the shim`)
+	log.G(requestCtx).WithField("id", req.ID).Debug("connect")
+	resp, err := s.agentClient.Connect(requestCtx, req)
+	if err != nil {
+		return nil, err
+	}
 
-	return nil, errdefs.ErrNotImplemented
+	return resp, nil
 }
 
 // Shutdown will shutdown of the VMM. Unlike StopVM, this method is only exposed to containerd itself.
@@ -1538,23 +1537,23 @@ func (s *service) Connect(requestCtx context.Context, req *taskAPI.ConnectReques
 // containerd calls this API on behalf of the user in the following cases:
 // * After any task is deleted via containerd's API
 // * After any task Create call returns an error
-func (s *service) Shutdown(requestCtx context.Context, req *taskAPI.ShutdownRequest) (*ptypes.Empty, error) {
+func (s *service) Shutdown(requestCtx context.Context, req *taskAPI.ShutdownRequest) (*types.Empty, error) {
 	defer logPanicAndDie(log.G(requestCtx))
 	s.logger.WithFields(logrus.Fields{"task_id": req.ID, "now": req.Now}).Debug("Shutdown")
 
 	shouldShutdown := req.Now || s.exitAfterAllTasksDeleted && s.taskManager.ShutdownIfEmpty()
 	if !shouldShutdown {
-		return &ptypes.Empty{}, nil
+		return &types.Empty{}, nil
 	}
 
 	ctx, cancel := context.WithTimeout(requestCtx, defaultShutdownTimeout)
 	defer cancel()
 
 	if err := s.terminate(ctx); err != nil {
-		return &ptypes.Empty{}, err
+		return &types.Empty{}, err
 	}
 
-	return &ptypes.Empty{}, nil
+	return &types.Empty{}, nil
 }
 
 func (s *service) isPaused(ctx context.Context) (bool, error) {
@@ -1636,7 +1635,7 @@ func (s *service) Stats(requestCtx context.Context, req *taskAPI.StatsRequest) (
 }
 
 // Update a running container
-func (s *service) Update(requestCtx context.Context, req *taskAPI.UpdateTaskRequest) (*ptypes.Empty, error) {
+func (s *service) Update(requestCtx context.Context, req *taskAPI.UpdateTaskRequest) (*types.Empty, error) {
 	defer logPanicAndDie(log.G(requestCtx))
 	log.G(requestCtx).WithField("task_id", req.ID).Debug("update")
 

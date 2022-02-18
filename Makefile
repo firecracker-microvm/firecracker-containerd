@@ -28,7 +28,7 @@ SUBMODULES=_submodules
 UID:=$(shell id -u)
 GID:=$(shell id -g)
 
-FIRECRACKER_CONTAINERD_BUILDER_IMAGE?=golang:1.15-buster
+FIRECRACKER_CONTAINERD_BUILDER_IMAGE?=golang:1.16-buster
 export FIRECRACKER_CONTAINERD_TEST_IMAGE?=localhost/firecracker-containerd-test
 export GO_CACHE_VOLUME_NAME?=gocache
 
@@ -257,7 +257,7 @@ $(TEST_BRIDGED_TAP_BIN): $(shell find internal/cmd/test-bridged-tap -name *.go) 
 	go build -o $@ $(CURDIR)/internal/cmd/test-bridged-tap
 
 LOOPBACK_BIN?=$(BINPATH)/loopback
-$(LOOPBACK_BIN): 
+$(LOOPBACK_BIN):
 	GOBIN=$(dir $@) GO111MODULE=off go get -u github.com/containernetworking/plugins/plugins/main/loopback
 
 .PHONY: cni-bins

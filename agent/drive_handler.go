@@ -26,7 +26,7 @@ import (
 	"github.com/containerd/containerd/mount"
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	drivemount "github.com/firecracker-microvm/firecracker-containerd/proto/service/drivemount/ttrpc"
-	"github.com/golang/protobuf/ptypes/empty"
+	"github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
 )
 
@@ -165,7 +165,7 @@ func isStubDrive(d drive) bool {
 	return internal.IsStubDrive(f)
 }
 
-func (dh driveHandler) MountDrive(ctx context.Context, req *drivemount.MountDriveRequest) (*empty.Empty, error) {
+func (dh driveHandler) MountDrive(ctx context.Context, req *drivemount.MountDriveRequest) (*types.Empty, error) {
 	logger := log.G(ctx)
 	logger.Debugf("%+v", req.String())
 	logger = logger.WithField("drive_id", req.DriveID)
@@ -201,7 +201,7 @@ func (dh driveHandler) MountDrive(ctx context.Context, req *drivemount.MountDriv
 			Options: req.Options,
 		}}, req.DestinationPath)
 		if err == nil {
-			return &empty.Empty{}, nil
+			return &types.Empty{}, nil
 		}
 
 		if isRetryableMountError(err) {
@@ -218,7 +218,7 @@ func (dh driveHandler) MountDrive(ctx context.Context, req *drivemount.MountDriv
 		drive.Path(), req.DestinationPath)
 }
 
-func (dh driveHandler) UnmountDrive(ctx context.Context, req *drivemount.UnmountDriveRequest) (*empty.Empty, error) {
+func (dh driveHandler) UnmountDrive(ctx context.Context, req *drivemount.UnmountDriveRequest) (*types.Empty, error) {
 	drive, ok := dh.GetDrive(req.DriveID)
 	if !ok {
 		return nil, fmt.Errorf("drive %q could not be found", req.DriveID)
@@ -226,7 +226,7 @@ func (dh driveHandler) UnmountDrive(ctx context.Context, req *drivemount.Unmount
 
 	err := mount.Unmount(drive.Path(), 0)
 	if err == nil {
-		return &empty.Empty{}, nil
+		return &types.Empty{}, nil
 	}
 
 	return nil, errors.Errorf("failed to unmount the drive %q",

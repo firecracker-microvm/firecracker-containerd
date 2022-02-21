@@ -2021,8 +2021,8 @@ func TestOOM_Isolated(t *testing.T) {
 		containerd.WithSnapshotter(defaultSnapshotterName),
 		containerd.WithNewSnapshot("snapshot-"+vmID, image),
 		containerd.WithNewSpec(
-			// The container is having 2MB of memory.
-			oci.WithMemoryLimit(2*1024*1024),
+			// The container is having 3MB of memory.
+			oci.WithMemoryLimit(3*1024*1024),
 			// But the dd command allocates 10MB of data on memory, which will be OOM killed.
 			oci.WithProcessArgs("/bin/dd", "if=/dev/zero", "ibs=10M", "of=/dev/null"),
 			firecrackeroci.WithVMID(vmID),

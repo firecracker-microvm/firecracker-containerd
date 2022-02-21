@@ -28,7 +28,7 @@ import (
 
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
-	"github.com/containernetworking/cni/pkg/types/current"
+	current "github.com/containernetworking/cni/pkg/types/100"
 	"github.com/containernetworking/cni/pkg/version"
 	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/containernetworking/plugins/pkg/utils/buildversion"
@@ -153,7 +153,6 @@ func add(args *skel.CmdArgs) error {
 		vmIfaceIndex := len(currentResult.Interfaces) - 1
 
 		currentResult.IPs = append(currentResult.IPs, &current.IPConfig{
-			Version:   "4",
 			Address:   vethIPConf.Address,
 			Gateway:   vethIPConf.Gateway,
 			Interface: &vmIfaceIndex,

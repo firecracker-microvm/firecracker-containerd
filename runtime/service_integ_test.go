@@ -360,7 +360,10 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 			if createVMErr != nil {
 				matches, err := findProcess(ctx, findFirecracker)
 				if err != nil {
-					return err
+					return fmt.Errorf(
+						"failed to create a VM and couldn't find Firecracker due to %s: %w",
+						createVMErr, err,
+					)
 				}
 				return fmt.Errorf(
 					"failed to create a VM while there are %d Firecracker processes: %w",
@@ -1984,6 +1987,12 @@ func findProcWithName(name string) func(context.Context, *process.Process) (bool
 	return func(ctx context.Context, p *process.Process) (bool, error) {
 		processExecutable, err := p.ExeWithContext(ctx)
 		if err != nil {
+			// The call above reads /proc filesystem.
+			// If the process is died before reading the filesystem,
+			// the call would return ENOENT and that's fine.
+			if os.IsNotExist(err) {
+				return false, nil
+			}
 			return false, err
 		}
 

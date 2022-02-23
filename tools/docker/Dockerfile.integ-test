@@ -50,7 +50,7 @@ ENV VERSION="v1.23.0"
 RUN wget https://github.com/kubernetes-sigs/cri-tools/releases/download/$VERSION/critest-$VERSION-linux-amd64.tar.gz && \
   tar zxvf critest-$VERSION-linux-amd64.tar.gz -C /tmp/ && \
   install -D -o root -g root -m755 -t /usr/local/bin /tmp/critest && \
-  rm -f critest-$VERSION-linux-amd64.tar.gz
+  rm -f critest-$VERSION-linux-amd64.tar.gz /tmp/critest
 
 # Install everything we need in this image. Due to the bind-mount, if the host has already
 # up-to-date versions of everything built, this step will be a very quick copy

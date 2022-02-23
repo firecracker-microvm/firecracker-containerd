@@ -1,0 +1,67 @@
+[Fail] [k8s.io] Security Context SeccompProfilePath [It] runtime should support an seccomp profile that blocks setting hostname with SYS_ADMIN 
+[Fail] [k8s.io] Security Context SeccompProfilePath [It] should support seccomp localhost/profile on the container 
+[Fail] [k8s.io] Container runtime should support adding volume and device [BeforeEach] runtime should support starting container with volume [Conformance] 
+[Fail] [k8s.io] Security Context bucket [It] runtime should support that ReadOnlyRootfs is false 
+[Fail] [k8s.io] PodSandbox runtime should support basic operations on PodSandbox [It] runtime should support running PodSandbox [Conformance] 
+[Fail] [k8s.io] Security Context NamespaceOption [It] runtime should support HostIpc is false 
+[Fail] [k8s.io] Security Context NamespaceOption [It] runtime should support ContainerPID 
+[Fail] [k8s.io] Security Context bucket [It] runtime should return error if RunAsGroup is set without RunAsUser 
+[Fail] [k8s.io] Security Context NoNewPrivs [BeforeEach] should allow privilege escalation when false 
+[Fail] [k8s.io] Networking runtime should support networking [It] runtime should support set hostname [Conformance] 
+[Fail] [k8s.io] Security Context bucket [It] runtime should support dropping ALL capabilities 
+[Fail] [k8s.io] Security Context bucket [It] runtime should support dropping capability 
+[Fail] [k8s.io] Security Context SeccompProfilePath docker/default [It] runtime should support setting hostname with docker/default seccomp profile and SYS_ADMIN 
+[Fail] [k8s.io] Security Context bucket [It] runtime should support ReadonlyPaths 
+[Fail] [k8s.io] Security Context bucket [It] runtime should support MaskedPaths 
+[Fail] [k8s.io] PodSandbox runtime should support basic operations on PodSandbox [It] runtime should support removing PodSandbox [Conformance] 
+[Fail] [k8s.io] Container Mount Propagation runtime should support mount propagation [BeforeEach] mount with 'rshared' should support propagation from host to container and vice versa 
+[Fail] [k8s.io] Security Context bucket [It] runtime should support that ReadOnlyRootfs is true 
+[Fail] [k8s.io] Security Context NamespaceOption [It] runtime should support HostPID 
+[Fail] [k8s.io] Security Context bucket [It] runtime should support RunAsUserName 
+[Fail] [k8s.io] Container runtime should support log [BeforeEach] runtime should support starting container with log [Conformance] 
+[Fail] [k8s.io] Container Mount Propagation runtime should support mount propagation [BeforeEach] mount with 'rslave' should support propagation from host to container 
+[Fail] [k8s.io] Security Context bucket [It] runtime should support SupplementalGroups 
+[Fail] [k8s.io] Security Context bucket [It] runtime should support Privileged is true 
+[Fail] [k8s.io] Security Context NamespaceOption [It] runtime should support HostNetwork is true 
+[Fail] [k8s.io] Security Context SeccompProfilePath [It] runtime should not support a custom seccomp profile without using localhost/ as a prefix 
+[Fail] [k8s.io] Security Context SeccompProfilePath [It] runtime should ignore a seccomp profile that blocks setting hostname when privileged 
+[Fail] [k8s.io] Streaming runtime should support streaming interfaces [It] runtime should support exec with tty=false and stdin=false [Conformance] 
+[Fail] [k8s.io] Multiple Containers [Conformance] when running multiple containers in a pod [BeforeEach] should support network 
+[Fail] [k8s.io] Container runtime should support basic operations on container [BeforeEach] runtime should support stopping container [Conformance] 
+[Fail] [k8s.io] Multiple Containers [Conformance] when running multiple containers in a pod [BeforeEach] should support container exec 
+[Fail] [k8s.io] Security Context NoNewPrivs [BeforeEach] should not allow privilege escalation when true 
+[Fail] [k8s.io] Container runtime should support basic operations on container [BeforeEach] runtime should support execSync [Conformance] 
+[Fail] [k8s.io] Container runtime should support basic operations on container [BeforeEach] runtime should support execSync with timeout [Conformance] 
+[Fail] [k8s.io] Streaming runtime should support streaming interfaces [It] runtime should support attach [Conformance] 
+[Fail] [k8s.io] Container runtime should support basic operations on container [BeforeEach] runtime should support starting container [Conformance] 
+[Fail] [k8s.io] Security Context SeccompProfilePath [It] runtime should not block setting host name with unconfined seccomp and SYS_ADMIN 
+[Fail] [k8s.io] PodSandbox runtime should support sysctls [It] should support unsafe sysctls 
+[Fail] [k8s.io] PodSandbox runtime should support basic operations on PodSandbox [It] runtime should support stopping PodSandbox [Conformance] 
+[Fail] [k8s.io] Streaming runtime should support streaming interfaces [It] runtime should support exec with tty=true and stdin=true [Conformance] 
+[Fail] [k8s.io] Security Context SeccompProfilePath docker/default [It] runtime should block sethostname with docker/default seccomp profile and no extra caps 
+[Fail] [k8s.io] Security Context SeccompProfilePath docker/default [It] should support seccomp docker/default on the container 
+[Fail] [k8s.io] Networking runtime should support networking [It] runtime should support DNS config [Conformance] 
+[Fail] [k8s.io] Security Context bucket [It] runtime should support RunAsUser 
+[Fail] [k8s.io] Container runtime should support log [BeforeEach] runtime should support reopening container log [Conformance] 
+[Fail] [k8s.io] Container runtime should support adding volume and device [BeforeEach] runtime should support starting container with volume when host path is a symlink [Conformance] 
+[Fail] [k8s.io] Security Context bucket [It] runtime should support adding capability 
+[Fail] [k8s.io] Multiple Containers [Conformance] when running multiple containers in a pod [BeforeEach] should support container log 
+[Fail] [k8s.io] Streaming runtime should support streaming interfaces [It] runtime should support portforward [Conformance] 
+[Fail] [k8s.io] Container Mount Propagation runtime should support mount propagation [BeforeEach] mount with 'rprivate' should not support propagation 
+[Fail] [k8s.io] Container runtime should support basic operations on container [BeforeEach] runtime should support creating container [Conformance] 
+[Fail] [k8s.io] Container runtime should support basic operations on container [BeforeEach] runtime should support removing running container [Conformance] 
+[Fail] [k8s.io] Security Context NamespaceOption [It] runtime should support PodPID 
+[Fail] [k8s.io] Container runtime should support basic operations on container [BeforeEach] runtime should support listing container stats [Conformance] 
+[Fail] [k8s.io] Networking runtime should support networking [It] runtime should support port mapping with host port and container port [Conformance] 
+[Fail] [k8s.io] Security Context bucket [It] runtime should support RunAsGroup 
+[Fail] [k8s.io] Security Context SeccompProfilePath [It] should support seccomp unconfined on the container 
+[Fail] [k8s.io] PodSandbox runtime should support sysctls [It] should support safe sysctls 
+[Fail] [k8s.io] Security Context bucket [It] runtime should support adding ALL capabilities 
+[Fail] [k8s.io] Security Context SeccompProfilePath [It] should support seccomp default which is unconfined on the container 
+[Fail] [k8s.io] Container runtime should support basic operations on container [BeforeEach] runtime should support removing stopped container [Conformance] 
+[Fail] [k8s.io] Security Context bucket [It] runtime should support Privileged is false 
+[Fail] [k8s.io] Security Context NamespaceOption [It] runtime should support HostIpc is true 
+[Fail] [k8s.io] Security Context NamespaceOption [It] runtime should support HostNetwork is false 
+[Fail] [k8s.io] Streaming runtime should support streaming interfaces [It] runtime should support portforward in host network 
+[Fail] [k8s.io] Networking runtime should support networking [It] runtime should support port mapping with only container port [Conformance] 
+[Fail] [k8s.io] Container runtime should support basic operations on container [BeforeEach] runtime should support removing created container [Conformance] 

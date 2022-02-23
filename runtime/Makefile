@@ -153,6 +153,7 @@ critest:
 		--volume $(CURDIR)/../examples/etc/containerd/firecracker-runtime.json:/etc/containerd/firecracker-runtime.json \
 		--volume $(CURDIR)/../tools/demo/fc-br0.interface:/etc/network/interfaces.d/fc-br0 \
 		--volume $(CURDIR)/logs:/var/log/firecracker-containerd-test \
+		--volume $(CURDIR)/../tools/critest:/src/runtime/critest \
 		--volume $(GO_CACHE_VOLUME_NAME):/go \
 		--env FICD_DM_VOLUME_GROUP=$(FICD_DM_VOLUME_GROUP) \
 		--env FICD_DM_POOL=$(FICD_DM_POOL) \
@@ -161,7 +162,8 @@ critest:
       	--env ACK_GINKGO_DEPRECATIONS=1.16.5 \
 		--workdir="/src/runtime" \
 		$(FIRECRACKER_CONTAINERD_TEST_IMAGE):$(DOCKER_IMAGE_TAG) \
-		"make -C ../examples testtap && critest -runtime-endpoint unix:///run/firecracker-containerd/containerd.sock"
+		"sleep 1 && critest -ginkgo.noColor -runtime-endpoint unix:///run/firecracker-containerd/containerd.sock | \
+		./critest/critest_diff.sh"
 
 clean:
 	- rm -f containerd-shim-aws-firecracker

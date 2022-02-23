@@ -34,8 +34,7 @@ RUN mkdir -p \
 # installs so we can minimize re-runs of the time-expensive downloading of images.
 COPY tools/docker/config.toml /etc/containerd/config.toml
 COPY tools/docker/do_not_edit_for_firecracker-control.config.json /etc/containerd/firecracker-runtime.json
-COPY tools/docker/critest/10-mynet.conf /etc/cni/net.d
-COPY tools/docker/critest/99-loopback.conf /etc/cni/net.d
+COPY tools/demo/fcnet.conflist /etc/cni/net.d/10-fcnet.conflist
 
 RUN --mount=type=bind,source=firecracker-control/cmd/containerd,target=/src \
   make -C /src install && \

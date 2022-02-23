@@ -1,5 +1,5 @@
 {
-  "cniVersion": "0.4.0",
+  "cniVersion": "1.0.0",
   "name": "fcnet",
   "plugins": [
     {
@@ -21,6 +21,9 @@
     },
     {
       "type": "tc-redirect-tap"
+    },
+    {
+      "type": "loopback"
     }
   ]
 }

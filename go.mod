@@ -6,7 +6,7 @@ require (
 	github.com/awslabs/tc-redirect-tap v0.0.0-20211025175357-e30dfca224c2
 	github.com/bits-and-blooms/bitset v1.2.1 // indirect
 	github.com/containerd/containerd v1.5.9
-	github.com/containerd/continuity v0.2.0 // indirect
+	github.com/containerd/continuity v0.2.0
 	github.com/containerd/fifo v1.0.0
 	github.com/containerd/go-cni v1.1.1 // indirect
 	github.com/containerd/go-runc v1.0.0
@@ -25,6 +25,7 @@ require (
 	github.com/klauspost/compress v1.13.6 // indirect
 	github.com/mdlayher/vsock v1.1.0
 	github.com/miekg/dns v1.1.25
+	github.com/opencontainers/image-spec v1.0.2
 	github.com/opencontainers/runc v1.0.3
 	github.com/opencontainers/runtime-spec v1.0.3-0.20210910115017-0d6cc581aeea
 	github.com/opencontainers/selinux v1.8.5 // indirect

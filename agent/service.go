@@ -189,6 +189,16 @@ func (ts *TaskService) Create(requestCtx context.Context, req *taskAPI.CreateTas
 		return nil
 	})
 
+	isVmLocalRootFs := len(req.Rootfs) > 0 && vm.IsLocalMount(req.Rootfs[0])
+
+	// If the rootfs is inside the VM, then the DriveMount call didn't happen and therefore
+	// the bundledir was not created. Create it here.
+	if isVmLocalRootFs {
+		if err := os.MkdirAll(bundleDir.RootfsPath(), 0700); err != nil {
+			return nil, errors.Wrapf(err, "Failed to create bundle's rootfs path from inside the vm %q", bundleDir.RootfsPath())
+		}
+	}
+
 	// check the rootfs dir has been created (presumed to be by a previous MountDrive call)
 	rootfsStat, err := os.Stat(bundleDir.RootfsPath())
 	if err != nil {
@@ -204,8 +214,24 @@ func (ts *TaskService) Create(requestCtx context.Context, req *taskAPI.CreateTas
 		}
 		return nil
 	})
+	specData := extraData.JsonSpec
 
-	err = bundleDir.OCIConfig().Write(extraData.JsonSpec)
+	// If the rootfs is inside the VM then:
+	// a) the rootfs mount type has a prefix that we used to identify this which needs to be stripped before passing to runc
+	// b) we were not able to inspect the container's rootfs from the client when setting up the spec. Do that here.
+	if isVmLocalRootFs {
+		req.Rootfs[0] = vm.StripLocalMountIdentifier(req.Rootfs[0])
+		rootfsMount := mount.Mount{
+			Type:    req.Rootfs[0].Type,
+			Source:  req.Rootfs[0].Source,
+			Options: req.Rootfs[0].Options,
+		}
+		specData, err = vm.UpdateUserInSpec(requestCtx, specData, rootfsMount)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to update spec")
+		}
+	}
+	err = bundleDir.OCIConfig().Write(specData)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to write oci config file")
 	}

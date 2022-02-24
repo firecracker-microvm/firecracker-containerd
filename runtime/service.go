@@ -1193,12 +1193,18 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 	}
 	rootfsMnt := request.Rootfs[0]
 
-	err = s.containerStubHandler.Reserve(requestCtx, request.ID,
-		rootfsMnt.Source, vmBundleDir.RootfsPath(), "ext4", nil, s.driveMountClient, s.machine)
-	if err != nil {
-		err = errors.Wrapf(err, "failed to get stub drive for task %q", request.ID)
-		logger.WithError(err).Error()
-		return nil, err
+	isVmLocalRootfs := vm.IsLocalMount(rootfsMnt)
+
+	// Only mount the container's rootfs as a block device if the mount doesn't
+	// signal that it is only accessible from inside the VM.
+	if !isVmLocalRootfs {
+		err = s.containerStubHandler.Reserve(requestCtx, request.ID,
+			rootfsMnt.Source, vmBundleDir.RootfsPath(), "ext4", nil, s.driveMountClient, s.machine)
+		if err != nil {
+			err = errors.Wrapf(err, "failed to get stub drive for task %q", request.ID)
+			logger.WithError(err).Error()
+			return nil, err
+		}
 	}
 
 	ociConfigBytes, err := hostBundleDir.OCIConfig().Bytes()
@@ -1228,11 +1234,14 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 	// override the request with the bundle dir that should be used inside the VM
 	request.Bundle = vmBundleDir.RootPath()
 
-	// The rootfs is mounted via a MountDrive call, so unset Rootfs in the request.
-	// We unfortunately can't rely on just having the runc shim inside the VM do
-	// the mount for us because we sometimes need to do mount retries due to our
-	// requirement of patching stub drives
-	request.Rootfs = nil
+	if !isVmLocalRootfs {
+		// If the rootfs is not inside the VM, it is mounted via a MountDrive call,
+		// so unset Rootfs in the request.
+		// We unfortunately can't rely on just having the runc shim inside the VM do
+		// the mount for us because we sometimes need to do mount retries due to our
+		// requirement of patching stub drives
+		request.Rootfs = nil
+	}
 
 	resp, err := s.taskManager.CreateTask(requestCtx, request, s.agentClient, ioConnectorSet)
 	if err != nil {

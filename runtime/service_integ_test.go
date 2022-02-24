@@ -1599,6 +1599,10 @@ func findProcess(
 	return matches, nil
 }
 
+func pidExists(pid int) bool {
+	return syscall.ESRCH.Is(syscall.Kill(pid, 0))
+}
+
 func TestStopVM_Isolated(t *testing.T) {
 	prepareIntegTest(t)
 	require := require.New(t)
@@ -1725,6 +1729,25 @@ func TestStopVM_Isolated(t *testing.T) {
 				require.NoError(err)
 			},
 		},
+
+		{
+			name:       "Suspend",
+			withStopVM: true,
+
+			createVMRequest: proto.CreateVMRequest{},
+			stopFunc: func(ctx context.Context, fcClient fccontrol.FirecrackerService, req proto.CreateVMRequest) {
+				firecrackerProcesses, err := findProcess(ctx, findFirecracker)
+				require.NoError(err, "failed waiting for expected firecracker process %q to come up", firecrackerProcessName)
+				require.Len(firecrackerProcesses, 1, "expected only one firecracker process to exist")
+				firecrackerProcess := firecrackerProcesses[0]
+
+				err = firecrackerProcess.Suspend()
+				require.NoError(err, "failed to suspend Firecracker")
+
+				_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: req.VMID})
+				assert.NotNil(err)
+			},
+		},
 	}
 
 	fcClient, err := newFCControlClient(containerdSockPath)
@@ -1768,13 +1791,13 @@ func TestStopVM_Isolated(t *testing.T) {
 			// If the function above uses StopVMRequest, all underlying processes must be dead
 			// (either gracefully or forcibly) at the end of the request.
 			if test.withStopVM {
-				fcExists, err := process.PidExists(fcProcess.Pid)
-				require.NoError(err, "failed to find firecracker")
-				require.False(fcExists, "firecracker %s is still there", vmID)
+				fcExists := pidExists(int(fcProcess.Pid))
+				assert.NoError(err, "failed to find firecracker")
+				assert.False(fcExists, "firecracker %s (pid=%d) is still there", vmID, fcProcess.Pid)
 
-				shimExists, err := process.PidExists(shimProcess.Pid)
-				require.NoError(err, "failed to find shim")
-				require.False(shimExists, "shim %s is still there", vmID)
+				shimExists := pidExists(int(shimProcess.Pid))
+				assert.NoError(err, "failed to find shim")
+				assert.False(shimExists, "shim %s (pid=%d) is still there", vmID, shimProcess.Pid)
 			}
 
 			err = internal.WaitForPidToExit(ctx, time.Second, shimProcess.Pid)

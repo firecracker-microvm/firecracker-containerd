@@ -1648,15 +1648,9 @@ func TestStopVM_Isolated(t *testing.T) {
 			},
 			stopFunc: func(ctx context.Context, fcClient fccontrol.FirecrackerService, req proto.CreateVMRequest) {
 				_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: req.VMID})
-				errCode := status.Code(err)
-				assert.Equal(codes.Internal, errCode, "the error code must be Internal")
-
-				if req.JailerConfig != nil {
-					// No "signal: ..." error with runc since it traps the signal
-					assert.Contains(err.Error(), "exit status 1")
-				} else {
-					assert.Contains(err.Error(), "signal: terminated", "must be 'terminated', not 'killed'")
-				}
+				require.Error(err)
+				assert.Equal(codes.Internal, status.Code(err))
+				assert.Contains(err.Error(), "forcefully terminated")
 			},
 		},
 
@@ -1705,12 +1699,10 @@ func TestStopVM_Isolated(t *testing.T) {
 					TimeoutSeconds: 10,
 				})
 
-				if req.JailerConfig != nil {
-					// No "signal: ..." error with runc since it traps the signal
-					assert.Contains(err.Error(), "exit status 137")
-				} else {
-					assert.Contains(err.Error(), "signal: killed")
-				}
+				require.Error(err)
+				assert.Equal(codes.Internal, status.Code(err))
+				// This is technically not accurate (the test is terminating the VM) though.
+				assert.Contains(err.Error(), "forcefully terminated")
 			},
 		},
 
@@ -1726,7 +1718,9 @@ func TestStopVM_Isolated(t *testing.T) {
 				require.Equal(status.Code(err), codes.OK)
 
 				_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: req.VMID})
-				require.NoError(err)
+				require.Error(err)
+				assert.Equal(codes.Internal, status.Code(err))
+				assert.Contains(err.Error(), "forcefully terminated")
 			},
 		},
 
@@ -1745,7 +1739,9 @@ func TestStopVM_Isolated(t *testing.T) {
 				require.NoError(err, "failed to suspend Firecracker")
 
 				_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: req.VMID})
-				assert.NotNil(err)
+				require.Error(err)
+				assert.Equal(codes.Internal, status.Code(err))
+				assert.Contains(err.Error(), "forcefully terminated")
 			},
 		},
 	}
@@ -2350,8 +2346,12 @@ func TestPauseResume_Isolated(t *testing.T) {
 		// Ensure the response fields are populated correctly
 		assert.Equal(t, request.VMID, resp.VMID)
 
-		_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: request.VMID})
-		require.Equal(t, status.Code(err), codes.OK)
+		// Resume the VM since state() may pause the VM.
+		_, err = fcClient.ResumeVM(ctx, &proto.ResumeVMRequest{VMID: vmID})
+		require.NoError(t, err)
+
+		_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
+		require.NoError(t, err)
 	}
 
 	for _, subtest := range subtests {

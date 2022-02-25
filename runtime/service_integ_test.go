@@ -71,6 +71,8 @@ const (
 	numberOfVmsEnvName  = "NUMBER_OF_VMS"
 	defaultNumberOfVms  = 5
 
+	tapPrefixEnvName = "TAP_PREFIX"
+
 	defaultBalloonMemory         = int64(66)
 	defaultStatsPollingIntervals = int64(1)
 
@@ -260,6 +262,8 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 	}
 	t.Logf("TestMultipleVMs_Isolated: will run %d vm's", numberOfVms)
 
+	tapPrefix := os.Getenv(tapPrefixEnvName)
+
 	cases := []struct {
 		MaxContainers int32
 		JailerConfig  *proto.JailerConfig
@@ -316,7 +320,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 			containerCount := c.MaxContainers
 			jailerConfig := c.JailerConfig
 
-			tapName := fmt.Sprintf("tap%d", vmID)
+			tapName := fmt.Sprintf("%stap%d", tapPrefix, vmID)
 			err := createTapDevice(ctx, tapName)
 			if err != nil {
 				return err

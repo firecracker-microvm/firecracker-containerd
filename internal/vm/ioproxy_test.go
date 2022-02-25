@@ -41,14 +41,12 @@ func fileConnector(path string, flag int) IOConnector {
 }
 
 func TestProxy(t *testing.T) {
-	dir, err := ioutil.TempDir("", t.Name())
-	require.NoError(t, err)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 
 	ctx := context.Background()
 	content := "hello world"
 
-	err = ioutil.WriteFile(filepath.Join(dir, "input"), []byte(content), 0600)
+	err := ioutil.WriteFile(filepath.Join(dir, "input"), []byte(content), 0600)
 	require.NoError(t, err)
 
 	pair := &IOConnectorPair{

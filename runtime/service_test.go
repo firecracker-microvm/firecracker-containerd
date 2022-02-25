@@ -16,7 +16,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -234,9 +233,7 @@ func TestBuildVMConfiguration(t *testing.T) {
 				config:    tc.config,
 			}
 
-			tempDir, err := ioutil.TempDir(os.TempDir(), namespace)
-			assert.NoError(t, err)
-			defer os.RemoveAll(tempDir)
+			tempDir := t.TempDir()
 
 			svc.shimDir = vm.Dir(tempDir)
 			svc.jailer = newNoopJailer(context.Background(), svc.logger, svc.shimDir)
@@ -304,13 +301,7 @@ func TestDebugConfig(t *testing.T) {
 		},
 	}
 
-	cwd, err := os.Getwd()
-	require.NoError(t, err, "failed to get working dir")
-
-	path, err := ioutil.TempDir(cwd, "TestDebugConfig")
-	assert.NoError(t, err, "failed to create temp directory")
-
-	defer os.RemoveAll(path)
+	path := t.TempDir()
 
 	for i, c := range cases {
 		c := c

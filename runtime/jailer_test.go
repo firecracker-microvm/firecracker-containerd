@@ -15,7 +15,6 @@ package main
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -62,14 +61,12 @@ func createSparseFile(path string, size int) error {
 }
 
 func TestCopyFile_sparse(t *testing.T) {
-	dir, err := ioutil.TempDir("", t.Name())
-	require.NoError(t, err)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 
 	expectedSize := 1024
 
 	src := filepath.Join(dir, "original-sparse-file")
-	err = createSparseFile(src, expectedSize)
+	err := createSparseFile(src, expectedSize)
 	require.NoError(t, err)
 
 	dst := filepath.Join(dir, "copied-as-sparse")
@@ -104,9 +101,7 @@ func TestJailer_invalidUIDGID(t *testing.T) {
 func TestNewJailer_Isolated(t *testing.T) {
 	prepareIntegTest(t)
 
-	ociBundlePath, err := ioutil.TempDir("", t.Name())
-	require.NoError(t, err)
-	defer os.RemoveAll(ociBundlePath)
+	ociBundlePath := t.TempDir()
 	b, err := exec.Command(
 		"cp",
 		"firecracker-runc-config.json.example",

@@ -314,9 +314,9 @@ func (e vsockAckError) Temporary() bool {
 // error, according to the interface defined here:
 // https://golang.org/pkg/net/#Error
 func isTemporaryNetErr(err error) bool {
-	terr, ok := err.(interface {
+	type tempError interface {
 		Temporary() bool
-	})
-
-	return err != nil && ok && terr.Temporary()
+	}
+	var terr tempError
+	return err != nil && errors.As(err, &terr) && terr.Temporary()
 }

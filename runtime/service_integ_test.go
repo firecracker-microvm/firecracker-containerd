@@ -1599,6 +1599,10 @@ func findProcess(
 	return matches, nil
 }
 
+func pidExists(pid int) bool {
+	return syscall.ESRCH.Is(syscall.Kill(pid, 0))
+}
+
 func TestStopVM_Isolated(t *testing.T) {
 	prepareIntegTest(t)
 	require := require.New(t)
@@ -1644,15 +1648,9 @@ func TestStopVM_Isolated(t *testing.T) {
 			},
 			stopFunc: func(ctx context.Context, fcClient fccontrol.FirecrackerService, req proto.CreateVMRequest) {
 				_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: req.VMID})
-				errCode := status.Code(err)
-				assert.Equal(codes.Internal, errCode, "the error code must be Internal")
-
-				if req.JailerConfig != nil {
-					// No "signal: ..." error with runc since it traps the signal
-					assert.Contains(err.Error(), "exit status 1")
-				} else {
-					assert.Contains(err.Error(), "signal: terminated", "must be 'terminated', not 'killed'")
-				}
+				require.Error(err)
+				assert.Equal(codes.Internal, status.Code(err))
+				assert.Contains(err.Error(), "forcefully terminated")
 			},
 		},
 
@@ -1701,12 +1699,10 @@ func TestStopVM_Isolated(t *testing.T) {
 					TimeoutSeconds: 10,
 				})
 
-				if req.JailerConfig != nil {
-					// No "signal: ..." error with runc since it traps the signal
-					assert.Contains(err.Error(), "exit status 137")
-				} else {
-					assert.Contains(err.Error(), "signal: killed")
-				}
+				require.Error(err)
+				assert.Equal(codes.Internal, status.Code(err))
+				// This is technically not accurate (the test is terminating the VM) though.
+				assert.Contains(err.Error(), "forcefully terminated")
 			},
 		},
 
@@ -1722,7 +1718,30 @@ func TestStopVM_Isolated(t *testing.T) {
 				require.Equal(status.Code(err), codes.OK)
 
 				_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: req.VMID})
-				require.NoError(err)
+				require.Error(err)
+				assert.Equal(codes.Internal, status.Code(err))
+				assert.Contains(err.Error(), "forcefully terminated")
+			},
+		},
+
+		{
+			name:       "Suspend",
+			withStopVM: true,
+
+			createVMRequest: proto.CreateVMRequest{},
+			stopFunc: func(ctx context.Context, fcClient fccontrol.FirecrackerService, req proto.CreateVMRequest) {
+				firecrackerProcesses, err := findProcess(ctx, findFirecracker)
+				require.NoError(err, "failed waiting for expected firecracker process %q to come up", firecrackerProcessName)
+				require.Len(firecrackerProcesses, 1, "expected only one firecracker process to exist")
+				firecrackerProcess := firecrackerProcesses[0]
+
+				err = firecrackerProcess.Suspend()
+				require.NoError(err, "failed to suspend Firecracker")
+
+				_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: req.VMID})
+				require.Error(err)
+				assert.Equal(codes.Internal, status.Code(err))
+				assert.Contains(err.Error(), "forcefully terminated")
 			},
 		},
 	}
@@ -1768,13 +1787,13 @@ func TestStopVM_Isolated(t *testing.T) {
 			// If the function above uses StopVMRequest, all underlying processes must be dead
 			// (either gracefully or forcibly) at the end of the request.
 			if test.withStopVM {
-				fcExists, err := process.PidExists(fcProcess.Pid)
-				require.NoError(err, "failed to find firecracker")
-				require.False(fcExists, "firecracker %s is still there", vmID)
+				fcExists := pidExists(int(fcProcess.Pid))
+				assert.NoError(err, "failed to find firecracker")
+				assert.False(fcExists, "firecracker %s (pid=%d) is still there", vmID, fcProcess.Pid)
 
-				shimExists, err := process.PidExists(shimProcess.Pid)
-				require.NoError(err, "failed to find shim")
-				require.False(shimExists, "shim %s is still there", vmID)
+				shimExists := pidExists(int(shimProcess.Pid))
+				assert.NoError(err, "failed to find shim")
+				assert.False(shimExists, "shim %s (pid=%d) is still there", vmID, shimProcess.Pid)
 			}
 
 			err = internal.WaitForPidToExit(ctx, time.Second, shimProcess.Pid)
@@ -2327,8 +2346,12 @@ func TestPauseResume_Isolated(t *testing.T) {
 		// Ensure the response fields are populated correctly
 		assert.Equal(t, request.VMID, resp.VMID)
 
-		_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: request.VMID})
-		require.Equal(t, status.Code(err), codes.OK)
+		// Resume the VM since state() may pause the VM.
+		_, err = fcClient.ResumeVM(ctx, &proto.ResumeVMRequest{VMID: vmID})
+		require.NoError(t, err)
+
+		_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
+		require.NoError(t, err)
 	}
 
 	for _, subtest := range subtests {

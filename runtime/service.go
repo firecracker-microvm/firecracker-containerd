@@ -647,26 +647,10 @@ func (s *service) StopVM(requestCtx context.Context, request *proto.StopVMReques
 		timeout = time.Duration(request.TimeoutSeconds) * time.Second
 	}
 
-	info, err := s.machine.DescribeInstanceInfo(requestCtx)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to get instance info %v", info)
-	}
+	ctx, cancel := context.WithTimeout(requestCtx, timeout)
+	defer cancel()
 
-	if *info.State == models.InstanceInfoStatePaused {
-		s.logger.Debug("Instance is in Paused state, force shutdown in progress")
-		err = s.jailer.Stop(true)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to stop VM in paused State")
-		}
-		return &empty.Empty{}, nil
-	}
-
-	err = s.waitVMReady()
-	if err != nil {
-		return nil, err
-	}
-
-	if err = s.shutdown(requestCtx, timeout, &taskAPI.ShutdownRequest{Now: true}); err != nil {
+	if err = s.terminate(ctx); err != nil {
 		return nil, err
 	}
 	return &empty.Empty{}, nil
@@ -1563,94 +1547,80 @@ func (s *service) Shutdown(requestCtx context.Context, req *taskAPI.ShutdownRequ
 		return &ptypes.Empty{}, nil
 	}
 
-	if err := s.shutdown(requestCtx, defaultShutdownTimeout, req); err != nil {
+	ctx, cancel := context.WithTimeout(requestCtx, defaultShutdownTimeout)
+	defer cancel()
+
+	if err := s.terminate(ctx); err != nil {
 		return &ptypes.Empty{}, err
 	}
 
 	return &ptypes.Empty{}, nil
 }
 
-func (s *service) shutdown(
-	requestCtx context.Context,
-	timeout time.Duration,
-	req *taskAPI.ShutdownRequest,
-) error {
-	s.logger.Info("stopping the VM")
-
-	go func() {
-		s.shutdownLoop(requestCtx, timeout, req)
-	}()
-
-	var result *multierror.Error
-	if err := s.machine.Wait(context.Background()); err != nil {
-		result = multierror.Append(result, err)
+func (s *service) isPaused(ctx context.Context) (bool, error) {
+	info, err := s.machine.DescribeInstanceInfo(ctx)
+	if err != nil {
+		return false, errors.Wrapf(err, "failed to get instance info %v", info)
 	}
-	if err := s.cleanup(); err != nil {
-		result = multierror.Append(result, err)
-	}
-
-	if err := result.ErrorOrNil(); err != nil {
-		return status.Error(codes.Internal, fmt.Sprintf("the VMM was killed forcibly: %v", err))
-	}
-	return nil
+	return *info.State == models.InstanceInfoStatePaused, nil
 }
 
-// shutdownLoop sends multiple different shutdown requests to stop the VMM.
-// 1) send a request to the in-VM agent, which is presumed to cause the VM to begin a reboot.
-// 2) stop the VM through jailer#Stop(). The signal should be visible from the VMM (e.g. SIGTERM)
-// 3) stop the VM through cancelling the associated context. The signal would not be visible from the VMM (e.g. SIGKILL)
-func (s *service) shutdownLoop(
-	requestCtx context.Context,
-	timeout time.Duration,
-	req *taskAPI.ShutdownRequest,
-) {
-	actions := []struct {
-		name     string
-		shutdown func() error
-		timeout  time.Duration
-	}{
-		{
-			name: "send a request to the in-VM agent",
-			shutdown: func() error {
-				_, err := s.agentClient.Shutdown(requestCtx, req)
-				if err != nil {
-					return err
-				}
-				return nil
-			},
-			timeout: timeout,
-		},
-		{
-			name: "stop the jailer by SIGTERM",
-			shutdown: func() error {
-				return s.jailer.Stop(false)
-			},
-			timeout: jailerStopTimeout,
-		},
-		{
-			name: "stop the jailer by SIGKILL",
-			shutdown: func() error {
-				return s.jailer.Stop(true)
-			},
-			timeout: jailerStopTimeout,
-		},
+func (s *service) forceTerminate(ctx context.Context) error {
+	s.logger.Errorf("forcefully terminate VM %s", s.vmID)
+
+	err := s.jailer.Stop(true)
+	if err != nil {
+		s.logger.WithError(err).Error("failed to stop")
 	}
 
-	for _, action := range actions {
-		pid, err := s.machine.PID()
-		if pid == 0 && err != nil {
-			break // we have nothing to kill
-		}
-
-		s.logger.Debug(action.name)
-		err = action.shutdown()
-		if err != nil {
-			// if sending an request doesn't succeed, don't wait and carry on.
-			s.logger.WithError(err).Errorf("failed to %s", action.name)
-		} else {
-			time.Sleep(action.timeout)
-		}
+	err = s.cleanup()
+	if err != nil {
+		s.logger.WithError(err).Error("failed to cleanup")
 	}
+
+	return status.Errorf(codes.Internal, "forcefully terminated VM %s", s.vmID)
+}
+
+func (s *service) terminate(ctx context.Context) (retErr error) {
+	var success bool
+	defer func() {
+		if !success {
+			retErr = s.forceTerminate(ctx)
+		}
+	}()
+
+	err := s.waitVMReady()
+	if err != nil {
+		s.logger.WithError(err).Error("failed to wait VM")
+		return
+	}
+
+	paused, err := s.isPaused(ctx)
+	if err != nil {
+		s.logger.WithError(err).Error("failed to check VM")
+		return
+	}
+
+	if paused {
+		s.logger.Error("VM is paused and cannot take requests")
+		return
+	}
+
+	s.logger.Info("gracefully shutdown VM")
+	_, err = s.agentClient.Shutdown(ctx, &taskAPI.ShutdownRequest{ID: s.vmID, Now: true})
+	if err != nil {
+		s.logger.WithError(err).Error("failed to call in-VM agent")
+		return
+	}
+
+	err = s.machine.Wait(ctx)
+	if err != nil {
+		s.logger.WithError(err).Error("failed to wait VM")
+		return
+	}
+
+	success = true
+	return
 }
 
 func (s *service) Stats(requestCtx context.Context, req *taskAPI.StatsRequest) (*taskAPI.StatsResponse, error) {

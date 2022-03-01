@@ -71,6 +71,8 @@ const (
 	numberOfVmsEnvName  = "NUMBER_OF_VMS"
 	defaultNumberOfVms  = 5
 
+	tapPrefixEnvName = "TAP_PREFIX"
+
 	defaultBalloonMemory         = int64(66)
 	defaultStatsPollingIntervals = int64(1)
 
@@ -223,30 +225,27 @@ func vmIDtoMacAddr(vmID uint) string {
 	return strings.Join(addrParts, ":")
 }
 
-func deleteTapDevice(ctx context.Context, tapName string) error {
-	if err := exec.CommandContext(ctx, "ip", "link", "delete", tapName).Run(); err != nil {
-		return err
+func ipCommand(ctx context.Context, args ...string) error {
+	out, err := exec.CommandContext(ctx, "ip", args...).CombinedOutput()
+	if err != nil {
+		s := strings.Trim(string(out), "\n")
+		return fmt.Errorf("failed to execute ip %s: %s: %w", strings.Join(args, " "), s, err)
 	}
-
-	if err := exec.CommandContext(ctx, "ip", "tuntap", "del", tapName, "mode", "tap").Run(); err != nil {
-		return err
-	}
-
 	return nil
 }
 
+func deleteTapDevice(ctx context.Context, tapName string) error {
+	if err := ipCommand(ctx, "link", "delete", tapName); err != nil {
+		return err
+	}
+	return ipCommand(ctx, "tuntap", "del", tapName, "mode", "tap")
+}
+
 func createTapDevice(ctx context.Context, tapName string) error {
-	err := exec.CommandContext(ctx, "ip", "tuntap", "add", tapName, "mode", "tap").Run()
-	if err != nil {
-		return errors.Wrapf(err, "failed to create tap device %s", tapName)
+	if err := ipCommand(ctx, "tuntap", "add", tapName, "mode", "tap"); err != nil {
+		return err
 	}
-
-	err = exec.CommandContext(ctx, "ip", "link", "set", tapName, "up").Run()
-	if err != nil {
-		return errors.Wrapf(err, "failed to up tap device %s", tapName)
-	}
-
-	return nil
+	return ipCommand(ctx, "link", "set", tapName, "up")
 }
 
 func TestMultipleVMs_Isolated(t *testing.T) {
@@ -262,6 +261,8 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 		require.NoError(t, err, "failed to get NUMBER_OF_VMS env")
 	}
 	t.Logf("TestMultipleVMs_Isolated: will run %d vm's", numberOfVms)
+
+	tapPrefix := os.Getenv(tapPrefixEnvName)
 
 	cases := []struct {
 		MaxContainers int32
@@ -319,7 +320,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 			containerCount := c.MaxContainers
 			jailerConfig := c.JailerConfig
 
-			tapName := fmt.Sprintf("tap%d", vmID)
+			tapName := fmt.Sprintf("%stap%d", tapPrefix, vmID)
 			err := createTapDevice(ctx, tapName)
 			if err != nil {
 				return err

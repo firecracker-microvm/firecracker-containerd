@@ -11,13 +11,12 @@ require (
 	github.com/containerd/typeurl v1.0.2
 	github.com/containernetworking/cni v1.0.1
 	github.com/containernetworking/plugins v1.0.1
-	github.com/firecracker-microvm/firecracker-go-sdk v0.22.1-0.20220214213810-2380785d98b7
+	github.com/firecracker-microvm/firecracker-go-sdk v0.22.1-0.20220302172044-565c88a871e2
 	github.com/go-ole/go-ole v1.2.4 // indirect
 	github.com/gofrs/uuid v3.3.0+incompatible
 	github.com/gogo/protobuf v1.3.2
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/klauspost/compress v1.13.6 // indirect
-	github.com/mdlayher/vsock v1.1.0
 	github.com/miekg/dns v1.1.25
 	github.com/opencontainers/image-spec v1.0.2-0.20211117181255-693428a734f5
 	github.com/opencontainers/runc v1.1.0

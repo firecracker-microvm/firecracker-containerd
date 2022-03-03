@@ -19,7 +19,7 @@ GID?=$(shell id -g)
 
 $(PROTO_GEN_SRC): $(PROTO_SRC)
 	protoc \
-		--gogo_out=Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types:. \
+		--gogo_out=Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/empty.proto=github.com/gogo/protobuf/types:. \
 		$^
 
 proto: $(PROTO_GEN_SRC)

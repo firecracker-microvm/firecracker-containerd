@@ -30,7 +30,7 @@ import (
 	"github.com/containerd/containerd/plugin"
 	"github.com/containerd/containerd/runtime/v2/shim"
 	"github.com/containerd/containerd/sys"
-	"github.com/golang/protobuf/ptypes/empty"
+	"github.com/gogo/protobuf/types"
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -231,7 +231,7 @@ func (s *local) shimFirecrackerClient(requestCtx context.Context, vmID string) (
 
 // StopVM stops running VM instance by VM ID. This stops the VM, all tasks within the VM and the runtime shim
 // managing the VM.
-func (s *local) StopVM(requestCtx context.Context, req *proto.StopVMRequest) (*empty.Empty, error) {
+func (s *local) StopVM(requestCtx context.Context, req *proto.StopVMRequest) (*types.Empty, error) {
 	client, err := s.shimFirecrackerClient(requestCtx, req.VMID)
 	if err != nil {
 		return nil, err
@@ -249,7 +249,7 @@ func (s *local) StopVM(requestCtx context.Context, req *proto.StopVMRequest) (*e
 }
 
 // PauseVM pauses a VM
-func (s *local) PauseVM(ctx context.Context, req *proto.PauseVMRequest) (*empty.Empty, error) {
+func (s *local) PauseVM(ctx context.Context, req *proto.PauseVMRequest) (*types.Empty, error) {
 	client, err := s.shimFirecrackerClient(ctx, req.VMID)
 	if err != nil {
 		return nil, err
@@ -267,7 +267,7 @@ func (s *local) PauseVM(ctx context.Context, req *proto.PauseVMRequest) (*empty.
 }
 
 // ResumeVM resumes a VM
-func (s *local) ResumeVM(ctx context.Context, req *proto.ResumeVMRequest) (*empty.Empty, error) {
+func (s *local) ResumeVM(ctx context.Context, req *proto.ResumeVMRequest) (*types.Empty, error) {
 	client, err := s.shimFirecrackerClient(ctx, req.VMID)
 	if err != nil {
 		return nil, err
@@ -322,7 +322,7 @@ func (s *local) GetVMInfo(requestCtx context.Context, req *proto.GetVMInfoReques
 }
 
 // SetVMMetadata sets Firecracker instance metadata for the VM with the given VMID.
-func (s *local) SetVMMetadata(requestCtx context.Context, req *proto.SetVMMetadataRequest) (*empty.Empty, error) {
+func (s *local) SetVMMetadata(requestCtx context.Context, req *proto.SetVMMetadataRequest) (*types.Empty, error) {
 	client, err := s.shimFirecrackerClient(requestCtx, req.VMID)
 	if err != nil {
 		return nil, err
@@ -341,7 +341,7 @@ func (s *local) SetVMMetadata(requestCtx context.Context, req *proto.SetVMMetada
 }
 
 // UpdateVMMetadata updates Firecracker instance metadata for the VM with the given VMID.
-func (s *local) UpdateVMMetadata(requestCtx context.Context, req *proto.UpdateVMMetadataRequest) (*empty.Empty, error) {
+func (s *local) UpdateVMMetadata(requestCtx context.Context, req *proto.UpdateVMMetadataRequest) (*types.Empty, error) {
 	client, err := s.shimFirecrackerClient(requestCtx, req.VMID)
 	if err != nil {
 		return nil, err
@@ -396,7 +396,7 @@ func (s *local) GetBalloonConfig(requestCtx context.Context, req *proto.GetBallo
 }
 
 // UpdateBalloon updates memory size for an existing balloon device, before or after machine startup.
-func (s *local) UpdateBalloon(requestCtx context.Context, req *proto.UpdateBalloonRequest) (*empty.Empty, error) {
+func (s *local) UpdateBalloon(requestCtx context.Context, req *proto.UpdateBalloonRequest) (*types.Empty, error) {
 	client, err := s.shimFirecrackerClient(requestCtx, req.VMID)
 	if err != nil {
 		return nil, err
@@ -432,7 +432,7 @@ func (s *local) GetBalloonStats(requestCtx context.Context, req *proto.GetBalloo
 }
 
 // UpdateBalloonStats updates an existing balloon device statistics interval, before or after machine startup.
-func (s *local) UpdateBalloonStats(requestCtx context.Context, req *proto.UpdateBalloonStatsRequest) (*empty.Empty, error) {
+func (s *local) UpdateBalloonStats(requestCtx context.Context, req *proto.UpdateBalloonStatsRequest) (*types.Empty, error) {
 	client, err := s.shimFirecrackerClient(requestCtx, req.VMID)
 	if err != nil {
 		return nil, err

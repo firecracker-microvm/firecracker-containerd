@@ -29,7 +29,7 @@ import (
 	firecracker "github.com/firecracker-microvm/firecracker-go-sdk"
 	ops "github.com/firecracker-microvm/firecracker-go-sdk/client/operations"
 	"github.com/firecracker-microvm/firecracker-go-sdk/fctesting"
-	"github.com/golang/protobuf/ptypes/empty"
+	"github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -43,7 +43,7 @@ type MockDriveMounter struct {
 	expectedOptions         []string
 }
 
-func (m *MockDriveMounter) MountDrive(ctx context.Context, req *drivemount.MountDriveRequest) (*empty.Empty, error) {
+func (m *MockDriveMounter) MountDrive(ctx context.Context, req *drivemount.MountDriveRequest) (*types.Empty, error) {
 	assert.Equal(m.t, m.expectedDestinationPath, req.DestinationPath)
 	assert.Equal(m.t, m.expectedFilesystemType, req.FilesytemType)
 	assert.Equal(m.t, m.expectedOptions, req.Options)

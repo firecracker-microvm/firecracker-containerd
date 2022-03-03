@@ -8,7 +8,7 @@ import (
 	fmt "fmt"
 	github_com_containerd_ttrpc "github.com/containerd/ttrpc"
 	proto "github.com/gogo/protobuf/proto"
-	empty "github.com/golang/protobuf/ptypes/empty"
+	types "github.com/gogo/protobuf/types"
 	io "io"
 	math "math"
 	math_bits "math/bits"
@@ -443,7 +443,7 @@ func valueToStringIoproxy(v interface{}) string {
 
 type IOProxyService interface {
 	State(ctx context.Context, req *StateRequest) (*StateResponse, error)
-	Attach(ctx context.Context, req *AttachRequest) (*empty.Empty, error)
+	Attach(ctx context.Context, req *AttachRequest) (*types.Empty, error)
 }
 
 func RegisterIOProxyService(srv *github_com_containerd_ttrpc.Server, svc IOProxyService) {
@@ -483,8 +483,8 @@ func (c *iOProxyClient) State(ctx context.Context, req *StateRequest) (*StateRes
 	return &resp, nil
 }
 
-func (c *iOProxyClient) Attach(ctx context.Context, req *AttachRequest) (*empty.Empty, error) {
-	var resp empty.Empty
+func (c *iOProxyClient) Attach(ctx context.Context, req *AttachRequest) (*types.Empty, error) {
+	var resp types.Empty
 	if err := c.client.Call(ctx, "IOProxy", "Attach", req, &resp); err != nil {
 		return nil, err
 	}
@@ -589,10 +589,7 @@ func (m *StateRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthIoproxy
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthIoproxy
 			}
 			if (iNdEx + skippy) > l {
@@ -663,10 +660,7 @@ func (m *StateResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthIoproxy
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthIoproxy
 			}
 			if (iNdEx + skippy) > l {
@@ -838,10 +832,7 @@ func (m *AttachRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthIoproxy
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthIoproxy
 			}
 			if (iNdEx + skippy) > l {

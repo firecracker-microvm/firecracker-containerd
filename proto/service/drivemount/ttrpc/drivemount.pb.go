@@ -8,7 +8,7 @@ import (
 	fmt "fmt"
 	github_com_containerd_ttrpc "github.com/containerd/ttrpc"
 	proto "github.com/gogo/protobuf/proto"
-	empty "github.com/golang/protobuf/ptypes/empty"
+	types "github.com/gogo/protobuf/types"
 	io "io"
 	math "math"
 	math_bits "math/bits"
@@ -325,8 +325,8 @@ func valueToStringDrivemount(v interface{}) string {
 }
 
 type DriveMounterService interface {
-	MountDrive(ctx context.Context, req *MountDriveRequest) (*empty.Empty, error)
-	UnmountDrive(ctx context.Context, req *UnmountDriveRequest) (*empty.Empty, error)
+	MountDrive(ctx context.Context, req *MountDriveRequest) (*types.Empty, error)
+	UnmountDrive(ctx context.Context, req *UnmountDriveRequest) (*types.Empty, error)
 }
 
 func RegisterDriveMounterService(srv *github_com_containerd_ttrpc.Server, svc DriveMounterService) {
@@ -358,16 +358,16 @@ func NewDriveMounterClient(client *github_com_containerd_ttrpc.Client) DriveMoun
 	}
 }
 
-func (c *driveMounterClient) MountDrive(ctx context.Context, req *MountDriveRequest) (*empty.Empty, error) {
-	var resp empty.Empty
+func (c *driveMounterClient) MountDrive(ctx context.Context, req *MountDriveRequest) (*types.Empty, error) {
+	var resp types.Empty
 	if err := c.client.Call(ctx, "DriveMounter", "MountDrive", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
 }
 
-func (c *driveMounterClient) UnmountDrive(ctx context.Context, req *UnmountDriveRequest) (*empty.Empty, error) {
-	var resp empty.Empty
+func (c *driveMounterClient) UnmountDrive(ctx context.Context, req *UnmountDriveRequest) (*types.Empty, error) {
+	var resp types.Empty
 	if err := c.client.Call(ctx, "DriveMounter", "UnmountDrive", req, &resp); err != nil {
 		return nil, err
 	}
@@ -536,10 +536,7 @@ func (m *MountDriveRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthDrivemount
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDrivemount
 			}
 			if (iNdEx + skippy) > l {
@@ -622,10 +619,7 @@ func (m *UnmountDriveRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthDrivemount
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDrivemount
 			}
 			if (iNdEx + skippy) > l {

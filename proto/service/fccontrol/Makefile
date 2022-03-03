@@ -17,7 +17,7 @@ PROTO_GEN_SRC_TTRPC := $(addprefix ttrpc/,$(PROTO_GEN_SRC))
 
 $(PROTO_GEN_SRC_TTRPC): $(PROTO_SRC)
 	protoc -I. -I$(PROTOPATH)\
-		--gogottrpc_out=plugins=ttrpc,Mfirecracker.proto=github.com/firecracker-microvm/firecracker-containerd/proto:ttrpc \
+		--gogottrpc_out=plugins=ttrpc,Mfirecracker.proto=github.com/firecracker-microvm/firecracker-containerd/proto,Mgoogle/protobuf/empty.proto=github.com/gogo/protobuf/types:ttrpc \
 		$^
 
 

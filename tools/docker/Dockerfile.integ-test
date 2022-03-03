@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:experimental
 # Test image that starts up containerd and the devmapper snapshotter. The default CMD will drop to a bash shell. Overrides
 # to CMD will be provided appended to /bin/bash -c
-FROM golang:1.15-stretch
+FROM golang:1.16-stretch
 ENV PATH="/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin:/usr/local/sbin:/usr/local/go/bin"
 ENV INSTALLROOT="/usr/local"
 ENV DEBIAN_FRONTEND="noninteractive"
@@ -36,7 +36,7 @@ COPY tools/docker/config.toml /etc/containerd/config.toml
 COPY tools/docker/do_not_edit_for_firecracker-control.config.json /etc/containerd/firecracker-runtime.json
 COPY tools/demo/fcnet.conflist /etc/cni/net.d/10-fcnet.conflist
 
-RUN --mount=type=bind,source=firecracker-control/cmd/containerd,target=/src \
+RUN --mount=type=bind,target=/src \
   make -C /src install && \
   ln -sv /usr/local/bin/firecracker-containerd /usr/local/bin/containerd && \
   ln -sv /usr/local/bin/firecracker-ctr /usr/local/bin/ctr

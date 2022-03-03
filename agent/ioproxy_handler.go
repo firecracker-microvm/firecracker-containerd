@@ -20,7 +20,7 @@ import (
 	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
 	ioproxy "github.com/firecracker-microvm/firecracker-containerd/proto/service/ioproxy/ttrpc"
-	"github.com/golang/protobuf/ptypes/empty"
+	"github.com/gogo/protobuf/types"
 )
 
 // ioProxyHandler implements IOProxyService that exposes the state of
@@ -42,7 +42,7 @@ func (ps *ioProxyHandler) State(_ context.Context, req *ioproxy.StateRequest) (*
 }
 
 // Attach a new IOProxy to the given exec.
-func (ps *ioProxyHandler) Attach(ctx context.Context, req *ioproxy.AttachRequest) (*empty.Empty, error) {
+func (ps *ioProxyHandler) Attach(ctx context.Context, req *ioproxy.AttachRequest) (*types.Empty, error) {
 	state, err := ps.runcService.State(ctx, &task.StateRequest{ID: req.ID, ExecID: req.ExecID})
 	if err != nil {
 		return nil, err
@@ -66,5 +66,5 @@ func (ps *ioProxyHandler) Attach(ctx context.Context, req *ioproxy.AttachRequest
 		return nil, err
 	}
 
-	return &empty.Empty{}, nil
+	return &types.Empty{}, nil
 }

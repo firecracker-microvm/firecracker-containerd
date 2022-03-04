@@ -25,7 +25,7 @@ definitions.
 
 * Containerd - OCI compatible container runtime. Receives container lifecycle/management requests and performs them
   using configured plugins/options.
-* Runtime - An implementation of the runtime v2 [spec](https://github.com/containerd/containerd/tree/master/runtime/v2)
+* Runtime - An implementation of the runtime v2 [spec](https://github.com/containerd/containerd/tree/main/runtime/v2)
   for containerd. Unlike the default implementation which runs runc directly, our runtime will be responsible for
   managing Firecracker instances as well as communicating container requests to the inside-the-vm-agent.
 * Agent - A process inside of the running VM. Manages containers, handles communication with the Runtime and utilizes
@@ -42,8 +42,8 @@ definitions.
 ![design-overview](img/design-overview.png)
 
 1. Orchestrator accepts task definition request from control-plane and breaks it into sub-requests suitable for sending to
-   containerd (using `CreateTaskRequest` [struct](https://github.com/containerd/containerd/blob/master/api/services/tasks/v1/tasks.pb.go#L79),
-   additional parameters can be passed to runtime though `Options` [field](https://github.com/containerd/containerd/blob/master/api/services/tasks/v1/tasks.pb.go#L93))
+   containerd (using `CreateTaskRequest` [struct](https://github.com/containerd/containerd/blob/main/api/services/tasks/v1/tasks.pb.go#L79),
+   additional parameters can be passed to runtime though `Options` [field](https://github.com/containerd/containerd/blob/main/api/services/tasks/v1/tasks.pb.go#L93))
 2. containerd uses firecracker-containerd runtime and block device snapshotter. Requests are passed to runtime. Runtime
    is responsible for communicating with Agent, attaching/managing block devices and controlling container execution
    lifecycle.
@@ -94,9 +94,9 @@ any communication protocol can be chosen (ttrpc, grpc, http, ...) for exchanging
 The orchestrator knows about task definitions (e.g. aware about high level picture), makes decisions based on given
 information, and submits requests to containerd.
 
-The orchestrator talks to all subsystems using containerd's [APIs](https://github.com/containerd/containerd/tree/master/api).
-In order to manage containers lifecycle it can use [task](https://github.com/containerd/containerd/tree/master/services/tasks)
-service, extra configuration can be specified thought option [fields](https://github.com/containerd/containerd/blob/master/api/services/tasks/v1/tasks.proto#L74).
+The orchestrator talks to all subsystems using containerd's [APIs](https://github.com/containerd/containerd/tree/main/api).
+In order to manage containers lifecycle it can use [task](https://github.com/containerd/containerd/tree/main/services/tasks)
+service, extra configuration can be specified thought option [fields](https://github.com/containerd/containerd/blob/main/api/services/tasks/v1/tasks.proto#L74).
 Missing functionality (like firecracker control service) can be added as an extension to `containerd`.
 Containerd supports GRPC plugins, so FC control can reuse existing GRPC [server](https://github.com/containerd/containerd/blob/a15b6e2097c48b632dbdc63254bad4c62b69e709/services/server/server.go#L78)
 and live in same process as `containerd`. Orchestrator's client uses same GRPC connection (`containerd` has
@@ -165,7 +165,7 @@ Firecracker team is exploring options around Firecracker handling some aspects o
 
 Because there is no way to attach block devices upon request, the suggested approach is to use fake block devices (`/dev/null` or
 sparse files) to reserve drive ids before running Firecracker instance. When container needs to be run, fake device is
-replaced (via [PatchGuestDriveByID](https://github.com/firecracker-microvm/firecracker-go-sdk/blob/master/firecracker.go#L238))
+replaced (via [PatchGuestDriveByID](https://github.com/firecracker-microvm/firecracker-go-sdk/blob/main/firecracker.go#L238))
 with real container image received as [mount](https://github.com/firecracker-microvm/firecracker-containerd/blob/0e39b738ab466358b1059bb283b19726476310a1/runtime/service.go#L651)
 from snapshotter. Fake device can be represented by `/dev/null`, however Firecracker doesn't allow to attach same block
 device more than once (even with different drive ids). So alias should be used. Another approach is to use sparse files

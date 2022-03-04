@@ -48,9 +48,9 @@ The purpose of this doc is to determine which model best fits our use case in te
     * A unique identifier associated with each firecracker microVM that's used to reference which VM a given container is intended to run in.
         * In practice, there will likely be a 1-to-1 mapping between each ECS task or each EKS Pod to a `vm_id`.
 * (containerd) **Container**
-    * In containerd, a “[Container](https://github.com/containerd/containerd/blob/master/api/services/containers/v1/containers.proto#L38)” refers not to a running container but the metadata configuring a container.
+    * In containerd, a “[Container](https://github.com/containerd/containerd/blob/main/api/services/containers/v1/containers.proto#L38)” refers not to a running container but the metadata configuring a container.
 * (containerd) **Task**
-    * In containerd, a “[Task](https://github.com/containerd/containerd/blob/master/api/services/tasks/v1/tasks.proto#L56)” (not to be confused with an ECS Task), essentially refers to a running container; it is a running process using the configuration as specified in a previously defined Container object
+    * In containerd, a “[Task](https://github.com/containerd/containerd/blob/main/api/services/tasks/v1/tasks.proto#L56)” (not to be confused with an ECS Task), essentially refers to a running container; it is a running process using the configuration as specified in a previously defined Container object
 * **“shim start” routine**
     * In the runtime v2 model, when containerd starts a new Task, it will always invoke the runtime binary specified in the Container object and run its “shim start” routine. This is the point where the runtime shim will decide whether it should keep running or if containerd should instead use a different, pre-existing shim process.
     * [Our current shim start routine is here.](https://github.com/firecracker-microvm/firecracker-containerd/blob/3f204844eed9b70f25e062f3a947dda582809757/runtime/service.go#L106)
@@ -61,14 +61,14 @@ The purpose of this doc is to determine which model best fits our use case in te
 
 ## Containerd Runtime v2 Essentials
 
-There's a few details of containerd's runtime v2 model that are essential to understand before diving into how it can fit into our use case. [The runtime v2 docs](https://github.com/containerd/containerd/blob/master/runtime/v2/README.md) and their [getting started guide](https://github.com/containerd/containerd/blob/master/docs/getting-started.md) have more details, but the important parts of the typical flow in creating a container within the runtime v2 model are summarized below:
+There's a few details of containerd's runtime v2 model that are essential to understand before diving into how it can fit into our use case. [The runtime v2 docs](https://github.com/containerd/containerd/blob/main/runtime/v2/README.md) and their [getting started guide](https://github.com/containerd/containerd/blob/main/docs/getting-started.md) have more details, but the important parts of the typical flow in creating a container within the runtime v2 model are summarized below:
 
 ![containerd runtime v2 model](img/runtimev2-flow.png)
 
-1. The client makes a [CreateContainerRequest](https://github.com/containerd/containerd/blob/master/api/services/containers/v1/containers.proto#L38), which includes metadata for the intended container configuration (i.e. OCI runtime spec), which runtime the container should be spawned with (i.e. `aws.firecracker`) and a unique `container_id`
+1. The client makes a [CreateContainerRequest](https://github.com/containerd/containerd/blob/main/api/services/containers/v1/containers.proto#L38), which includes metadata for the intended container configuration (i.e. OCI runtime spec), which runtime the container should be spawned with (i.e. `aws.firecracker`) and a unique `container_id`
     1. This stores the metadata for the container definition within containerd, **but it does not actually spawn the container yet**
-2. The client now wants to actually create a running task for the container it just defined, which it does by issuing a [CreateTaskRequest](https://github.com/containerd/containerd/blob/master/api/services/tasks/v1/tasks.proto#L56) that includes the `container_id` provided in the previous `CreateContainerRequest`
-3. Containerd will now always `fork/exec` to the runtime's shim binary and invoke the “start” routine. **The shim is expected to [“either start a new shim or return an address to an existing shim based on the shim's logic.”](https://github.com/containerd/containerd/blob/master/runtime/v2/README.md#start)**
+2. The client now wants to actually create a running task for the container it just defined, which it does by issuing a [CreateTaskRequest](https://github.com/containerd/containerd/blob/main/api/services/tasks/v1/tasks.proto#L56) that includes the `container_id` provided in the previous `CreateContainerRequest`
+3. Containerd will now always `fork/exec` to the runtime's shim binary and invoke the “start” routine. **The shim is expected to [“either start a new shim or return an address to an existing shim based on the shim's logic.”](https://github.com/containerd/containerd/blob/main/runtime/v2/README.md#start)**
     1. (code) [containerd starting the shim binary](https://github.com/containerd/containerd/blob/9b882c44f8834613e53fc11045c10397a7d94e61/runtime/v2/manager.go#L126)
 4. At this point, the shim can optionally retrieve some more metadata if needed to make a decision on how to proceed. It has a few IDs/paths available to it that can be used to retrieve that metadata:
     1. The `container_id` for the container that is going to be spawned into a running task. The `container_id` is the “id” field in [our shim's NewService func](https://github.com/firecracker-microvm/firecracker-containerd/blob/3f204844eed9b70f25e062f3a947dda582809757/runtime/service.go#L79). It can be used to make a [GetContainerRequest](https://github.com/containerd/containerd/blob/68c44f8cc8a3a4990928c96f8207688ecf6df2f9/api/services/containers/v1/containers.proto#L30) to containerd, which will return all available container metadata.
@@ -85,7 +85,7 @@ There's a few details of containerd's runtime v2 model that are essential to und
 
 The requirements for our use case are:
 
-1. [Containerd's requirements for runtime v2 shims](https://github.com/containerd/containerd/tree/master/runtime/v2)
+1. [Containerd's requirements for runtime v2 shims](https://github.com/containerd/containerd/tree/main/runtime/v2)
 2. Ability to group containers into a single microVM via an identifier for the microVM (`vm_id`). Containers must be able to be created within the microVM after the VM has already started.
 
 # Decisions to be Made
@@ -102,7 +102,7 @@ The high-level issues this docs will address (each gets its own section):
 
 1. Fine grain details of how microVMs will be configured other than that running VMs can be specified with a `vm_id`.
 2. Details on exactly which field we will use to specify which `vm_id` a given container is using. There are multiple possibilities, all of which work with the options being presented here:
-    1. [OCI Config Annotation](https://github.com/opencontainers/runtime-spec/blob/master/config.md#annotations)
+    1. [OCI Config Annotation](https://github.com/opencontainers/runtime-spec/blob/main/config.md#annotations)
     2. [CreateContainerRequest.Container.Extensions](https://github.com/containerd/containerd/blob/68c44f8cc8a3a4990928c96f8207688ecf6df2f9/api/services/containers/v1/containers.proto#L100)
     3. [CreateTaskRequest.Options](https://github.com/containerd/containerd/blob/68c44f8cc8a3a4990928c96f8207688ecf6df2f9/api/services/tasks/v1/tasks.proto#L74)
 3. Details on how vsock communication will work. This doc will not make assumptions on which of the host or guest shim will be the listener/connector.

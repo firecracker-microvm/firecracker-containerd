@@ -3,7 +3,7 @@
 This is the runtime component enabling containerd to control the Firecracker
 VMM.  This component runs on the host, outside your microVM. In general, it
 strives for
-[OCI runtime](https://github.com/opencontainers/runtime-spec/blob/master/spec.md)
+[OCI runtime](https://github.com/opencontainers/runtime-spec/blob/main/spec.md)
 compliance within the bounds of Firecracker's feature set.
 
 ## Building
@@ -20,7 +20,7 @@ installed and configured.
 
 Copy `containerd-shim-aws-firecracker` to /bin (or something else on the PATH)
 following the naming guidelines for a containerd
-[runtime v2](https://github.com/containerd/containerd/blob/master/runtime/v2/README.md)
+[runtime v2](https://github.com/containerd/containerd/blob/main/runtime/v2/README.md)
 shim:
 
 	* If the runtime is invoked as aws.firecracker

@@ -13,18 +13,16 @@ linters:
     - ineffassign
     - deadcode
     - typecheck
-    - golint
     - gosec
     - unconvert
     - goconst
     - goimports
     - misspell
     - prealloc
-    - scopelint
     - gocritic
-    - interfacer # Suggests narrower interface types
-    - scopelint # Checks for unpinned variables
     - gofmt
+    - revive
+    - exportloopref
 
 issues:
   exclude-use-default: false
@@ -33,3 +31,5 @@ issues:
     - G103 # Use of unsafe calls should be audited
     - G204 # Subprocess launched with variable
     - G304 # Potential file inclusion via variable
+    - G306 # WriteFile permissions 0600 or less to be audited
+    - G307 # Deferring unsafe method "Close" on type "*os.File" to be audited

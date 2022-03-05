@@ -81,8 +81,6 @@ const (
 	defaultShutdownTimeout     = 5 * time.Second
 	defaultVSockConnectTimeout = 5 * time.Second
 
-	jailerStopTimeout = 3 * time.Second
-
 	// StartEventName is the topic published to when a VM starts
 	StartEventName = "/firecracker-vm/start"
 
@@ -899,7 +897,7 @@ func (s *service) GetBalloonStats(requestCtx context.Context, req *proto.GetBall
 	return resp, nil
 }
 
-//UpdateBalloonStats will update an existing balloon device statistics interval, before or after machine startup.
+// UpdateBalloonStats will update an existing balloon device statistics interval, before or after machine startup.
 func (s *service) UpdateBalloonStats(requestCtx context.Context, req *proto.UpdateBalloonStatsRequest) (*types.Empty, error) {
 	defer logPanicAndDie(s.logger)
 
@@ -1175,11 +1173,11 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 	}
 	rootfsMnt := request.Rootfs[0]
 
-	isVmLocalRootfs := vm.IsLocalMount(rootfsMnt)
+	isVMLocalRootfs := vm.IsLocalMount(rootfsMnt)
 
 	// Only mount the container's rootfs as a block device if the mount doesn't
 	// signal that it is only accessible from inside the VM.
-	if !isVmLocalRootfs {
+	if !isVMLocalRootfs {
 		err = s.containerStubHandler.Reserve(requestCtx, request.ID,
 			rootfsMnt.Source, vmBundleDir.RootfsPath(), "ext4", nil, s.driveMountClient, s.machine)
 		if err != nil {
@@ -1216,7 +1214,7 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 	// override the request with the bundle dir that should be used inside the VM
 	request.Bundle = vmBundleDir.RootPath()
 
-	if !isVmLocalRootfs {
+	if !isVMLocalRootfs {
 		// If the rootfs is not inside the VM, it is mounted via a MountDrive call,
 		// so unset Rootfs in the request.
 		// We unfortunately can't rely on just having the runc shim inside the VM do

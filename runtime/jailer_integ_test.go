@@ -87,7 +87,7 @@ func TestAttachBlockDevice_Isolated(t *testing.T) {
 }
 
 func fsSafeTestName(tb testing.TB) string {
-	return strings.Replace(tb.Name(), "/", "-", -1)
+	return strings.ReplaceAll(tb.Name(), "/", "-")
 }
 
 func testJailer(t *testing.T, jailerConfig *proto.JailerConfig) {

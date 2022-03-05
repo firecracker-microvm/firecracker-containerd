@@ -28,14 +28,14 @@ files into `/usr/local/bin`.
 
 cd ~
 
-# Install git, Go 1.13, make, curl
+# Install git, Go 1.16, make, curl
 sudo mkdir -p /etc/apt/sources.list.d
 echo "deb http://ftp.debian.org/debian buster-backports main" | \
   sudo tee /etc/apt/sources.list.d/buster-backports.list
 sudo DEBIAN_FRONTEND=noninteractive apt-get update
 sudo DEBIAN_FRONTEND=noninteractive apt-get \
   install --yes \
-  golang-1.13 \
+  golang-1.16 \
   make \
   git \
   curl \
@@ -44,8 +44,8 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get \
   bc \
   gnupg
 
-# Debian's Go 1.13 package installs "go" command under /usr/lib/go-1.13/bin
-export PATH=/usr/lib/go-1.13/bin:$PATH
+# Debian's Go 1.16 package installs "go" command under /usr/lib/go-1.16/bin
+export PATH=/usr/lib/go-1.16/bin:$PATH
 
 cd ~
 
@@ -75,10 +75,9 @@ A similar script to install dependencies for rpm based linux distro e.g. Amazon 
 
 cd ~
 
-# Install git, Go 1.13, make, curl
+# Install git, make, curl
 sudo yum -y update
 sudo yum -y install \
-  golang \
   make \
   git \
   curl \
@@ -88,7 +87,14 @@ sudo yum -y install \
   gnupg
 
 
-# Amazon Linux 2 installs go binary is installed in /usr/bin. So no PATH changes required.
+# Amazon Linux 2 packages can sometimes be dated, so let's install using
+# the Go installer. The installer will handle any path changes and just
+# need to source environment variables afterwards for the existing shell session.
+curl -LO https://get.golang.org/$(uname)/go_installer && \
+  chmod +x go_installer && \
+  ./go_installer -version 1.16 && \
+  rm go_installer && \
+  source .bash_profile
 
 cd ~
 

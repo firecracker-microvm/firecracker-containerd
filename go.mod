@@ -1,5 +1,7 @@
 module github.com/firecracker-microvm/firecracker-containerd
 
+go 1.16
+
 require (
 	github.com/StackExchange/wmi v0.0.0-20181212234831-e0a55b97c705 // indirect
 	github.com/awslabs/tc-redirect-tap v0.0.0-20211025175357-e30dfca224c2
@@ -39,5 +41,3 @@ replace (
 	google.golang.org/genproto => google.golang.org/genproto v0.0.0-20200224152610-e50cd9704f63
 	google.golang.org/grpc => google.golang.org/grpc v1.38.1
 )
-
-go 1.11

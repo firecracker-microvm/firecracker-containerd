@@ -39,7 +39,7 @@ You need to have the following things in order to use firecracker-containerd:
   </details>
 * git
 * A recent installation of [Docker CE](https://docker.com).
-* Go 1.13 or later, which you can download from [here](https://golang.org/dl/).
+* Go 1.16 or later, which you can download from [here](https://golang.org/dl/).
 
 ## Setup
 

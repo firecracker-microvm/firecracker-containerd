@@ -35,10 +35,8 @@ import (
 
 func TestBuildJailedRootHandler_Isolated(t *testing.T) {
 	internal.RequiresIsolation(t)
-	dir, err := ioutil.TempDir("", "TestBuildJailedRootHandler")
-	require.NoError(t, err, "failed to create temporary directory")
+	dir := t.TempDir()
 
-	defer os.RemoveAll(dir)
 	kernelImagePath := filepath.Join(dir, "kernel-image")
 	kernelImageFd, err := os.OpenFile(kernelImagePath, os.O_CREATE, 0600)
 	require.NoError(t, err, "failed to create kernel image")
@@ -107,12 +105,11 @@ func TestMkdirAllWithPermissions_Isolated(t *testing.T) {
 	// requires isolation so we can change uid/gid of files
 	internal.RequiresIsolation(t)
 
-	tmpdir, err := ioutil.TempDir("", "TestMkdirAllWithPermissions")
-	require.NoError(t, err, "failed to create temporary directory")
+	tmpdir := t.TempDir()
 
 	existingPath := filepath.Join(tmpdir, "exists")
 	existingMode := os.FileMode(0700)
-	err = os.Mkdir(existingPath, existingMode)
+	err := os.Mkdir(existingPath, existingMode)
 	require.NoError(t, err, "failed to create existing part of test directory")
 
 	nonExistingPath := filepath.Join(existingPath, "nonexistent")
@@ -139,9 +136,7 @@ func TestBindMountToJail_Isolated(t *testing.T) {
 	// The user must be root to call chown.
 	internal.RequiresIsolation(t)
 
-	dir, err := ioutil.TempDir("", t.Name())
-	require.NoError(t, err)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 
 	f, err := os.Create(filepath.Join(dir, "src1"))
 	require.NoError(t, err)
@@ -196,13 +191,12 @@ func TestFifoHandler_Isolated(t *testing.T) {
 	for _, tc := range testcases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			dir, err := ioutil.TempDir("", testNameToVMID(t.Name()))
-			require.NoError(t, err)
+			dir := t.TempDir()
 
 			logPath := filepath.Join(dir, tc.logPath)
 			metricsPath := filepath.Join(dir, tc.metricsPath)
 
-			err = os.MkdirAll(filepath.Dir(logPath), 0750)
+			err := os.MkdirAll(filepath.Dir(logPath), 0750)
 			require.NoError(t, err)
 			err = ioutil.WriteFile(logPath, []byte("log"), 0644)
 			require.NoError(t, err)

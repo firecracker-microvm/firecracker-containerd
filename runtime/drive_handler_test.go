@@ -15,12 +15,11 @@ package main
 
 import (
 	"context"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
 	"testing"
-
-	"io/ioutil"
 
 	"github.com/containerd/containerd/log"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
@@ -54,12 +53,10 @@ func TestContainerStubs(t *testing.T) {
 	ctx := context.Background()
 	logger := log.G(ctx)
 
-	tmpDir, err := ioutil.TempDir("", "TestCreateContainerStubs")
-	require.NoError(t, err, "failed to create temporary directory")
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	stubDir := filepath.Join(tmpDir, "stubs")
-	err = os.MkdirAll(stubDir, 0700)
+	err := os.MkdirAll(stubDir, 0700)
 	require.NoError(t, err, "failed to create stub dir")
 
 	patchedSrcDir := filepath.Join(tmpDir, "patchedSrcs")
@@ -127,12 +124,10 @@ func TestDriveMountStubs(t *testing.T) {
 	ctx := context.Background()
 	logger := log.G(ctx)
 
-	tmpDir, err := ioutil.TempDir("", "Test-CreateContainerStubs")
-	require.NoError(t, err, "failed to create temporary directory")
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	stubDir := filepath.Join(tmpDir, "stubs")
-	err = os.MkdirAll(stubDir, 0700)
+	err := os.MkdirAll(stubDir, 0700)
 	require.NoError(t, err, "failed to create stub dir")
 
 	patchedSrcDir := filepath.Join(tmpDir, "patchedSrcs")

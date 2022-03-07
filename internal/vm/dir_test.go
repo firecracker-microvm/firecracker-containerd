@@ -14,22 +14,17 @@
 package vm
 
 import (
-	"io/ioutil"
-	"os"
 	"path"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 var invalidContainerIDs = []string{"", "id?", "*", "id/1", "id\\"}
 
 func TestShimDir(t *testing.T) {
-	runDir, err := ioutil.TempDir("", "run")
-	require.NoError(t, err)
-	defer os.RemoveAll(runDir)
+	runDir := t.TempDir()
 
 	tests := []struct {
 		name   string

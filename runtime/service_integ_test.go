@@ -2196,9 +2196,7 @@ func TestCreateVM_Isolated(t *testing.T) {
 		}
 		vmID := testNameToVMID(t.Name())
 
-		tempDir, err := ioutil.TempDir("", vmID)
-		require.NoError(t, err)
-		defer os.RemoveAll(tempDir)
+		tempDir := t.TempDir()
 
 		logFile := filepath.Join(tempDir, "log.fifo")
 		metricsFile := filepath.Join(tempDir, "metrics.fifo")
@@ -2220,7 +2218,7 @@ func TestCreateVM_Isolated(t *testing.T) {
 			// Ensure the response fields are populated correctly
 			assert.Equal(t, request.VMID, resp.VMID)
 
-			_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: request.VMID})
+			_, err := fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: request.VMID})
 			require.Equal(t, status.Code(err), codes.OK)
 		}
 	}
@@ -2318,9 +2316,7 @@ func TestPauseResume_Isolated(t *testing.T) {
 	runTest := func(t *testing.T, request *proto.CreateVMRequest, state func(ctx context.Context, resp *proto.CreateVMResponse)) {
 		vmID := testNameToVMID(t.Name())
 
-		tempDir, err := ioutil.TempDir("", vmID)
-		require.NoError(t, err)
-		defer os.RemoveAll(tempDir)
+		tempDir := t.TempDir()
 
 		logFile := filepath.Join(tempDir, "log.fifo")
 		metricsFile := filepath.Join(tempDir, "metrics.fifo")
@@ -2347,7 +2343,7 @@ func TestPauseResume_Isolated(t *testing.T) {
 		assert.Equal(t, request.VMID, resp.VMID)
 
 		// Resume the VM since state() may pause the VM.
-		_, err = fcClient.ResumeVM(ctx, &proto.ResumeVMRequest{VMID: vmID})
+		_, err := fcClient.ResumeVM(ctx, &proto.ResumeVMRequest{VMID: vmID})
 		require.NoError(t, err)
 
 		_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})

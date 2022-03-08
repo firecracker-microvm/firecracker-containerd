@@ -251,6 +251,12 @@ func createTapDevice(ctx context.Context, tapName string) error {
 func TestMultipleVMs_Isolated(t *testing.T) {
 	prepareIntegTest(t)
 
+	// This test starts multiple VMs and some may hit firecracker-containerd's
+	// default timeout. So overriding the timeout to wait longer.
+	// One hour should be enough to start a VM, regardless of the load of
+	// the underlying host.
+	const createVMTimeout = time.Hour
+
 	netns, err := ns.GetCurrentNS()
 	require.NoError(t, err, "failed to get a namespace")
 
@@ -290,9 +296,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 		},
 	}
 
-	testTimeout := 10 * time.Minute
-	testCtx, cancel := context.WithTimeout(namespaces.WithNamespace(context.Background(), defaultNamespace), testTimeout)
-	defer cancel()
+	testCtx := namespaces.WithNamespace(context.Background(), defaultNamespace)
 
 	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
@@ -346,15 +350,11 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 				},
 				ContainerCount: containerCount,
 				JailerConfig:   jailerConfig,
+				TimeoutSeconds: uint32(createVMTimeout / time.Second),
 				// In tests, our in-VM agent has Go's race detector,
 				// which makes the agent resource-hoggy than its production build
 				// So the default VM size (128MB) is too small.
 				MachineCfg: &proto.FirecrackerMachineConfiguration{MemSizeMib: 1024},
-				// CreateVM's default timeout is 20 seconds and it cannot be
-				// disabled.
-				// However because this test starts multiple VMs in parallel,
-				// some of them may not start within the default timeout.
-				TimeoutSeconds: 300,
 			}
 
 			resp, createVMErr := fcClient.CreateVM(ctx, req)

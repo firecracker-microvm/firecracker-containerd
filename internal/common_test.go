@@ -70,7 +70,8 @@ func TestGenerateStubContent(t *testing.T) {
 	stubContent, err := GenerateStubContent(driveID)
 	assert.NoError(t, err)
 
-	expected := append(MagicStubBytes, byte(len(driveID)))
+	expected := append([]byte{}, MagicStubBytes...)
+	expected = append(expected, byte(len(driveID)))
 	expected = append(expected, []byte(driveID)...)
 	assert.Equal(t, string(expected), stubContent)
 }
@@ -83,7 +84,8 @@ func TestGenerateStubContent_LongID(t *testing.T) {
 
 func TestParseStubContent(t *testing.T) {
 	expectedDriveID := "foo"
-	contents := append(MagicStubBytes, byte(len(expectedDriveID)))
+	contents := append([]byte{}, MagicStubBytes...)
+	contents = append(contents, byte(len(expectedDriveID)))
 	contents = append(contents, []byte(expectedDriveID)...)
 	contents = append(contents, []byte("junkcontent")...)
 

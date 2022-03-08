@@ -47,11 +47,11 @@ var (
 	}
 )
 
-// WithVmLocalImageConfig configures a spec with the content of the image's config.
+// WithVMLocalImageConfig configures a spec with the content of the image's config.
 // It is similar to containerd's oci.WithImageConfig except that it does not access
 // the image's rootfs on the host. Instead, it configures what it can on the host and
 // passes information to the agent running in the VM to inspect the image's rootfs.
-func WithVmLocalImageConfig(image containerd.Image) oci.SpecOpts {
+func WithVMLocalImageConfig(image containerd.Image) oci.SpecOpts {
 	return func(ctx context.Context, client oci.Client, container *containers.Container, spec *oci.Spec) error {
 		ic, err := image.Config(ctx)
 		if err != nil {
@@ -85,7 +85,8 @@ func WithVmLocalImageConfig(image containerd.Image) oci.SpecOpts {
 		}
 		spec.Process.Env = replaceOrAppendEnvValues(defaults, spec.Process.Env)
 		cmd := config.Cmd
-		spec.Process.Args = append(config.Entrypoint, cmd...)
+		spec.Process.Args = append([]string{}, config.Entrypoint...)
+		spec.Process.Args = append(spec.Process.Args, cmd...)
 
 		cwd := config.WorkingDir
 		if cwd == "" {
@@ -93,17 +94,17 @@ func WithVmLocalImageConfig(image containerd.Image) oci.SpecOpts {
 		}
 		spec.Process.Cwd = cwd
 		if config.User != "" {
-			WithVmLocalUser(config.User)(ctx, client, container, spec)
+			WithVMLocalUser(config.User)(ctx, client, container, spec)
 		}
 		return nil
 	}
 }
 
-// WithVmLocalUser configures the user of the spec.
+// WithVMLocalUser configures the user of the spec.
 // It is similar to oci.WithUser except that it doesn't map
 // username -> uid or group name -> gid. It passes the user to the
 // agent running inside the VM to do that mapping.
-func WithVmLocalUser(user string) oci.SpecOpts {
+func WithVMLocalUser(user string) oci.SpecOpts {
 	return func(ctx context.Context, client oci.Client, container *containers.Container, spec *oci.Spec) error {
 		// This is technically an LCOW specific field, but we piggy back
 		// to get the string user into the VM where will will do the uid/gid mapping

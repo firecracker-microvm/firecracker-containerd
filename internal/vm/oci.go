@@ -42,7 +42,7 @@ import (
 )
 
 // UpdateUserInSpec modifies a serialized json spec object with user information from inside the container.
-// If the client used firecrackeroci.WithVmLocalImageConfig or firecrakceroci.WithVmLocalUser, this
+// If the client used firecrackeroci.WithVMLocalImageConfig or firecrackeroci.WithVMLocalUser, this
 // method will do the mapping between username -> uid, group name -> gid, and lookup additional groups for the user.
 // This is used to split where the user configures a spec via containerd's oci methods in the client
 // from where the data is actually present (from the agent inside the VM)

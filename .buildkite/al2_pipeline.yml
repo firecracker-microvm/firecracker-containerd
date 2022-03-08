@@ -35,6 +35,7 @@ steps:
       hostname: "${BUILDKITE_AGENT_META_DATA_HOSTNAME}"
     env:
       NUMBER_OF_VMS: "100"
+      EXTRAGOARGS: "-v -count=1 -timeout=1h"
     artifact_paths:
       - "runtime/logs/*"
     command:

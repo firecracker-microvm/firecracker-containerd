@@ -100,7 +100,7 @@ steps:
       hostname: "${BUILDKITE_AGENT_META_DATA_HOSTNAME}"
     env:
       DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
-      EXTRAGOARGS: "-v -count=1"
+      EXTRAGOARGS: "-v -count=1 -timeout=1h"
       FICD_DM_VOLUME_GROUP: fcci-vg
     artifact_paths:
       - "examples/logs/*"

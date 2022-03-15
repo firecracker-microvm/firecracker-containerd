@@ -23,6 +23,7 @@ require (
 	github.com/opencontainers/image-spec v1.0.2-0.20211117181255-693428a734f5
 	github.com/opencontainers/runc v1.1.0
 	github.com/opencontainers/runtime-spec v1.0.3-0.20210910115017-0d6cc581aeea
+	github.com/pelletier/go-toml v1.9.3
 	github.com/pkg/errors v0.9.1
 	github.com/shirou/gopsutil v2.18.12+incompatible
 	github.com/shirou/w32 v0.0.0-20160930032740-bb4de0191aa4 // indirect

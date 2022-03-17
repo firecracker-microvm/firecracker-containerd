@@ -409,6 +409,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 				return err
 			}
 			if vmInfoResp.SocketPath != filepath.Join(cfg.ShimBaseDir, nspVMid, "firecracker.sock") ||
+				vmInfoResp.VSockPath != filepath.Join(cfg.ShimBaseDir, nspVMid, "firecracker.vsock") ||
 				vmInfoResp.LogFifoPath != filepath.Join(cfg.ShimBaseDir, nspVMid, "fc-logs.fifo") ||
 				vmInfoResp.MetricsFifoPath != filepath.Join(cfg.ShimBaseDir, nspVMid, "fc-metrics.fifo") ||
 				resp.CgroupPath != vmInfoResp.CgroupPath {

@@ -711,6 +711,7 @@ func (s *service) GetVMInfo(requestCtx context.Context, request *proto.GetVMInfo
 		LogFifoPath:     s.machineConfig.LogPath,
 		MetricsFifoPath: s.machineConfig.MetricsPath,
 		CgroupPath:      cgroupPath,
+		VSockPath:       s.shimDir.FirecrackerVSockPath(),
 	}, nil
 }
 

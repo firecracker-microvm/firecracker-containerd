@@ -24,7 +24,7 @@ all: demux-snapshotter
 demux-snapshotter: $(SOURCES) $(GOMOD) $(GOSUM)
 	go build $(EXTRAGOARGS) -ldflags "-X main.revision=$(REVISION)" -o $@
 
-http-resolver: $(SOURCES) $(GOMOD) $(GOSUM)
+http-address-resolver: $(SOURCES) $(GOMOD) $(GOSUM)
 	go build $(EXTRAGOARGS) -ldflags "-X main.revision=$(REVISION)" -o $@ internal/http_address_resolver.go
 
 test:

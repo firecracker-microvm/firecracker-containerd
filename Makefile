@@ -33,7 +33,7 @@ export FIRECRACKER_CONTAINERD_TEST_IMAGE?=localhost/firecracker-containerd-test
 export GO_CACHE_VOLUME_NAME?=gocache
 
 # This Makefile uses Firecracker's pre-build Linux kernels for x86_64 and aarch64.
-host_arch=$(shell arch)
+host_arch=$(shell uname -m)
 ifeq ($(host_arch),x86_64)
 	kernel_sha256sum="ea5e7d5cf494a8c4ba043259812fc018b44880d70bcbbfc4d57d2760631b1cd6"
 else ifeq ($(host_arch),aarch64)

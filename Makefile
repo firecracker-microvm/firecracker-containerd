@@ -36,8 +36,10 @@ export GO_CACHE_VOLUME_NAME?=gocache
 host_arch=$(shell uname -m)
 ifeq ($(host_arch),x86_64)
 	kernel_sha256sum="ea5e7d5cf494a8c4ba043259812fc018b44880d70bcbbfc4d57d2760631b1cd6"
+	kernel_config_pattern=x86
 else ifeq ($(host_arch),aarch64)
 	kernel_sha256sum="e2d7c3d6cc123de9e6052d1f434ca7b47635a1f630d63f7fcc1b7164958375e4"
+	kernel_config_pattern=arm64
 else
 $(error "$(host_arch) is not supported by Firecracker")
 endif
@@ -47,6 +49,18 @@ FIRECRACKER_DIR=$(SUBMODULES)/firecracker
 FIRECRACKER_BIN=$(FIRECRACKER_DIR)/build/cargo_target/$(FIRECRACKER_TARGET)/release/firecracker
 FIRECRACKER_BUILDER_NAME?=firecracker-builder
 CARGO_CACHE_VOLUME_NAME?=cargocache
+
+KERNEL_VERSIONS=4.14 5.10
+KERNEL_VERSION?=4.14
+ifeq ($(filter $(KERNEL_VERSION),$(KERNEL_VERSIONS)),)
+$(error "Kernel version $(KERNEL_VERSION) is not supported. Supported versions are $(KERNEL_VERSIONS)")
+endif
+
+KERNEL_CONFIG=tools/kernel-configs/microvm-kernel-$(host_arch)-$(KERNEL_VERSION).config
+# Copied from https://github.com/firecracker-microvm/firecracker/blob/v1.0.0/tools/devtool#L2015
+# This allows us to specify a kernel without the patch version, but still get the correct build path to reference the kernel binary
+KERNEL_FULL_VERSION=$(shell cat "$(KERNEL_CONFIG)" | grep -Po "^\# Linux\/$(kernel_config_pattern) (([0-9]+.){2}[0-9]+)" | cut -d ' ' -f 3)
+KERNEL_BIN=$(FIRECRACKER_DIR)/build/kernel/linux-$(KERNEL_FULL_VERSION)/vmlinux-$(KERNEL_FULL_VERSION)-$(host_arch).bin
 
 RUNC_DIR=$(SUBMODULES)/runc
 RUNC_BIN=$(RUNC_DIR)/runc
@@ -313,6 +327,17 @@ $(FIRECRACKER_BIN): $(FIRECRACKER_DIR)/Cargo.toml
 firecracker-clean:
 	- $(FIRECRACKER_DIR)/tools/devtool distclean
 	- rm $(FIRECRACKER_BIN)
+	- rm $(KERNEL_BIN)
+
+.PHONY: kernel
+kernel: $(KERNEL_BIN)
+
+$(KERNEL_BIN): $(KERNEL_CONFIG)
+	$(FIRECRACKER_DIR)/tools/devtool build_kernel --config $(KERNEL_CONFIG)
+
+.PHONY: install-kernel
+install-kernel: $(KERNEL_BIN)
+	install -D -o root -g root -m400 $(KERNEL_BIN) $(DEFAULT_VMLINUX_INSTALLPATH)
 
 ##########################
 # RunC submodule

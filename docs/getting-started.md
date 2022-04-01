@@ -247,7 +247,7 @@ configuration file has the following fields:
 {
   "firecracker_binary_path": "/usr/local/bin/firecracker",
   "kernel_image_path": "/var/lib/firecracker-containerd/runtime/hello-vmlinux.bin",
-  "kernel_args": "console=ttyS0 noapic reboot=k panic=1 pci=off nomodules ro systemd.journald.forward_to_console systemd.unit=firecracker.target init=/sbin/overlay-init",
+  "kernel_args": "console=ttyS0 noapic reboot=k panic=1 pci=off nomodules ro systemd.unified_cgroup_hierarchy=0 systemd.journald.forward_to_console systemd.unit=firecracker.target init=/sbin/overlay-init",
   "root_drive": "/var/lib/firecracker-containerd/runtime/default-rootfs.img",
   "cpu_template": "T2",
   "log_fifo": "fc-logs.fifo",

@@ -33,4 +33,7 @@ type Cache interface {
 
 	// Releases the cache's internal resources and closes any cached snapshotters.
 	Close() error
+
+	// Lists keys present in the cache.
+	List() []string
 }

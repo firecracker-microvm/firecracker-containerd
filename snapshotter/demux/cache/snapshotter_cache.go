@@ -25,13 +25,13 @@ import (
 // SnapshotterCache implements a read, write protected cache mechanism
 // for keyed snapshotters.
 type SnapshotterCache struct {
-	mutex        *sync.Mutex
+	mutex        *sync.RWMutex
 	snapshotters map[string]snapshots.Snapshotter
 }
 
 // NewSnapshotterCache creates a new instance with an empty cache.
 func NewSnapshotterCache() *SnapshotterCache {
-	return &SnapshotterCache{&sync.Mutex{}, make(map[string]snapshots.Snapshotter)}
+	return &SnapshotterCache{&sync.RWMutex{}, make(map[string]snapshots.Snapshotter)}
 }
 
 // Get fetches and caches the snapshotter for a given key.
@@ -58,7 +58,9 @@ func (cache *SnapshotterCache) Get(ctx context.Context, key string, fetch Snapsh
 
 // Evict removes a cached snapshotter for a given key.
 func (cache *SnapshotterCache) Evict(key string) error {
+	cache.mutex.RLock()
 	snapshotter, ok := cache.snapshotters[key]
+	cache.mutex.RUnlock()
 
 	if !ok {
 		return fmt.Errorf("snapshotter %s not found in cache", key)
@@ -80,4 +82,16 @@ func (cache *SnapshotterCache) Close() error {
 		}
 	}
 	return compiledErr
+}
+
+// List returns keys of a snapshotter cache.
+func (cache *SnapshotterCache) List() []string {
+	cache.mutex.RLock()
+	defer cache.mutex.RUnlock()
+	keys := make([]string, 0, len(cache.snapshotters))
+	for k := range cache.snapshotters {
+		keys = append(keys, k)
+	}
+
+	return keys
 }

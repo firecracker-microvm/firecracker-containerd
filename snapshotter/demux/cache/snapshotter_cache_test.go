@@ -124,6 +124,29 @@ func closeCacheReturnsAllOccurringErrors(uut *SnapshotterCache) error {
 	return nil
 }
 
+func listEmptyCache(uut *SnapshotterCache) error {
+	keys := uut.List()
+	if len(keys) > 0 {
+		return errors.New("List did not return an empty list for an empty snapshotter cache")
+	}
+
+	return nil
+}
+
+func listNonEmptyCache(uut *SnapshotterCache) error {
+	uut.Get(context.Background(), "OkSnapshotterKey", getSnapshotterOkFunction)
+
+	keys := uut.List()
+	if len(keys) != 1 {
+		return errors.New("List should return a non-empty list of keys")
+	}
+	if keys[0] != "OkSnapshotterKey" {
+		return errors.New("List did not return correct list of keys")
+	}
+
+	return nil
+}
+
 func TestGetSnapshotterFromCache(t *testing.T) {
 	t.Parallel()
 
@@ -188,4 +211,26 @@ func TestCloseCache(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestListSnapshotters(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		run  func(*SnapshotterCache) error
+	}{
+		{"ListEmptyCache", listEmptyCache},
+		{"ListNonEmptyCache", listNonEmptyCache},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			uut := NewSnapshotterCache()
+			if err := test.run(uut); err != nil {
+				t.Fatal(test.name + ": " + err.Error())
+			}
+		})
+	}
+
 }

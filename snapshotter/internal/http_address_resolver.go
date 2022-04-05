@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"os/signal"
@@ -27,24 +26,20 @@ import (
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/firecracker-microvm/firecracker-containerd/firecracker-control/client"
+	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	proxyaddress "github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux/proxy/address"
 )
 
 var (
-	port     int
-	filepath string
-	logger   *logrus.Logger
-	store    map[string]networkAddress
+	port               int
+	containerdSockPath string
+	logger             *logrus.Logger
 )
 
-type networkAddress struct {
-	Network string `json:"network"`
-	Address string `json:"address"`
-}
-
 func init() {
-	flag.IntVar(&port, "port", 10001, "port to be used in the network address")
-	flag.StringVar(&filepath, "map", "map.json", "filepath to map configuration")
+	flag.IntVar(&port, "port", 10001, "service port for address resolver")
+	flag.StringVar(&containerdSockPath, "containerdSocket", "/run/firecracker-containerd/containerd.sock", "filepath to the containerd socket")
 	logger = logrus.New()
 }
 
@@ -56,8 +51,8 @@ func init() {
 //
 // Response:
 // {
-//     "network": "tcp",
-//     "address": "192.168.0.1:80"
+//     "network": "unix",
+//     "address": "/var/lib/firecracker-containerd/shim-base/default#cbfad871-0862-4dd6-ae7a-52e9b1c16ede/firecracker.vsock"
 // }
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -74,17 +69,12 @@ func main() {
 		flag.Parse()
 	}
 
-	if err := loadStoreFromFile(filepath); err != nil {
-		logger.WithError(err).Error()
-		os.Exit(1)
-	}
-
 	http.HandleFunc("/address", queryAddress)
 	httpServer := &http.Server{
 		Addr: fmt.Sprintf(":%d", port),
 	}
 
-	logger.Info(fmt.Sprintf("http server serving at port %d", port))
+	logger.Info(fmt.Sprintf("http resolver serving at port %d", port))
 	g, gCtx := errgroup.WithContext(ctx)
 	g.Go(func() error {
 		return httpServer.ListenAndServe()
@@ -100,20 +90,6 @@ func main() {
 	}
 
 	logger.Info("http: server closed")
-}
-
-func loadStoreFromFile(filepath string) error {
-	store = make(map[string]networkAddress)
-	contextLogger := logger.WithField("filepath", filepath)
-	contextLogger.Info("opening file for read...")
-
-	fileStream, err := ioutil.ReadFile(filepath)
-	if err != nil {
-		return err
-	}
-
-	contextLogger.Info("reading JSON from file...")
-	return json.Unmarshal(fileStream, &store)
 }
 
 func queryAddress(writ http.ResponseWriter, req *http.Request) {
@@ -132,17 +108,27 @@ func queryAddress(writ http.ResponseWriter, req *http.Request) {
 	}
 
 	namespace := keys[0]
-	networkAddress, ok := store[namespace]
-	if !ok {
-		http.Error(writ, "Socket path not found", http.StatusNotFound)
+
+	fcClient, err := client.New(containerdSockPath + ".ttrpc")
+	if err != nil {
+		logger.WithError(err).Error("could not create firecracker client")
+		http.Error(writ, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	defer fcClient.Close()
+
+	vmInfo, err := fcClient.GetVMInfo(req.Context(), &proto.GetVMInfoRequest{VMID: namespace})
+	if err != nil {
+		logger.WithField("VMID", namespace).WithError(err).Error("unable to retrieve VM Info")
+		http.Error(writ, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	writ.WriteHeader(http.StatusOK)
 
 	response, err := json.Marshal(proxyaddress.Response{
-		Network: networkAddress.Network,
-		Address: networkAddress.Address,
+		Network: "unix",
+		Address: vmInfo.VSockPath,
 	})
 	if err != nil {
 		http.Error(writ, "Internal server error", http.StatusInternalServerError)

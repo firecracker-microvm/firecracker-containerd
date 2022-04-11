@@ -6,5 +6,8 @@
   type = "http"
   address = "127.0.0.1:10001"
 
+[snapshotter.metrics]
+  enable = true
+
 [debug]
   logLevel = "info"

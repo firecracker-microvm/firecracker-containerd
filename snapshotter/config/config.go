@@ -33,6 +33,7 @@ type Config struct {
 type snapshotter struct {
 	Listener listener `toml:"listener"`
 	Proxy    proxy    `toml:"proxy"`
+	Metrics  metrics  `toml:"metrics"`
 }
 
 type listener struct {
@@ -55,6 +56,10 @@ type resolver struct {
 
 type debug struct {
 	LogLevel string `toml:"logLevel" default:"info"`
+}
+
+type metrics struct {
+	Enable bool `toml:"enable" default:"false"`
 }
 
 // Load parses application configuration from a specified file path.

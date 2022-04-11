@@ -62,6 +62,9 @@ func defaultConfig() error {
 				Network: "unix",
 				Address: "/var/lib/demux-snapshotter/snapshotter.sock",
 			},
+			Metrics: metrics{
+				Enable: false,
+			},
 		},
 		Debug: debug{
 			LogLevel: "info",
@@ -79,6 +82,8 @@ func parseExampleConfig() error {
 	  [snapshotter.proxy.address.resolver]
 	    type = "http"
 	    address = "localhost:10001"
+	  [snapshotter.metrics]
+        enable = true
 
 	[debug]
 	  logLevel = "debug"
@@ -96,6 +101,9 @@ func parseExampleConfig() error {
 						Address: "localhost:10001",
 					},
 				},
+			},
+			Metrics: metrics{
+				Enable: true,
 			},
 		},
 		Debug: debug{
@@ -116,7 +124,7 @@ func parseConfig(input []byte, expected Config) error {
 		return errors.New("expected no error on parse")
 	}
 	if actual != expected {
-		return fmt.Errorf("expected %s actual %s", expected, actual)
+		return fmt.Errorf("expected %v actual %v", expected, actual)
 	}
 	return nil
 }

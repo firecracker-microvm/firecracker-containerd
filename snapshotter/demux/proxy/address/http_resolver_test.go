@@ -58,7 +58,7 @@ func returnErrorOnJSONParserError() error {
 }
 
 func happyPath() error {
-	reader := mockReader{response: []byte(`{"network": "unix", "address": "/path/to/snapshotter.vsock"}`), err: io.EOF}
+	reader := mockReader{response: []byte(`{"network": "unix", "address": "/path/to/snapshotter.vsock", "snapshotter_port": "10000", "metrics_port": "10001"}`), err: io.EOF}
 	client := mockClient{getError: nil, getResponse: http.Response{Body: &reader}}
 	uut := HTTPResolver{url: "localhost:10001", client: &client}
 
@@ -72,6 +72,12 @@ func happyPath() error {
 	}
 	if actual.Address != "/path/to/snapshotter.vsock" {
 		return fmt.Errorf("Expected address '/path/to/snapshotter.vsock' but actual %s", actual.Address)
+	}
+	if actual.SnapshotterPort != "10000" {
+		return fmt.Errorf("Expected metrics port '10000' but actual %s", actual.MetricsPort)
+	}
+	if actual.MetricsPort != "10001" {
+		return fmt.Errorf("Expected metrics port '10001' but actual %s", actual.MetricsPort)
 	}
 	return nil
 }

@@ -21,10 +21,13 @@ type Response struct {
 	Network string `json:"network"`
 
 	// Network address used in net.Dial.
-	// Assumes the host port forms documented in net.SplitHostPort.
-	//
-	// Reference: https://pkg.go.dev/net#SplitHostPort
 	Address string `json:"address"`
+
+	// SnapshotterPort is the port used in vsock.DialContext for sending snapshotter API requests to the remote snapshotter.
+	SnapshotterPort string `json:"snapshotter_port"`
+
+	// MetricsPort is the port used in vsock.DialContext for sending metrics requests to the remote snapshotter.
+	MetricsPort string `json:"metrics_port"`
 }
 
 // Resolver for the proxy network address.

@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -134,17 +135,33 @@ func initSnapshotter(ctx context.Context, config config.Config) (snapshots.Snaps
 		if err != nil {
 			return nil, err
 		}
-		host, portstr, err := net.SplitHostPort(response.Address)
+		u, err := url.Parse(response.Address)
 		if err != nil {
 			return nil, err
 		}
-		port, err := strconv.ParseUint(portstr, base10, bits32)
+		host := u.Hostname()
+		port, err := strconv.ParseUint(response.SnapshotterPort, base10, bits32)
 		if err != nil {
 			return nil, err
 		}
 		snapshotterDialer := func(ctx context.Context, namespace string) (net.Conn, error) {
 			return vsock.DialContext(ctx, host, uint32(port), vsock.WithLogger(log.G(ctx)))
 		}
+
+		if config.Snapshotter.Metrics.Enable {
+			metricsPort, err := strconv.ParseUint(response.MetricsPort, base10, bits32)
+			if err != nil {
+				return nil, err
+			}
+
+			// TODO (ginglis13) metricsDialer func to be defined here using metricsPort. It will dial
+			// the same host but connect via its own port. The metrics proxy will be configured in NewProxySnapshotter
+			// task 2 of https://github.com/firecracker-microvm/firecracker-containerd/issues/602
+			_ = func(ctx context.Context, _ string) (net.Conn, error) {
+				return vsock.DialContext(ctx, host, uint32(metricsPort), vsock.WithLogger(log.G(ctx)))
+			}
+		}
+
 		return proxy.NewProxySnapshotter(ctx, host, snapshotterDialer)
 	}
 

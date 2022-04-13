@@ -16,17 +16,17 @@ package cache
 import (
 	"context"
 
-	"github.com/containerd/containerd/snapshots"
+	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux/proxy"
 )
 
 // SnapshotterProvider defines a snapshotter fetch function.
-type SnapshotterProvider = func(context.Context, string) (snapshots.Snapshotter, error)
+type SnapshotterProvider = func(context.Context, string) (*proxy.RemoteSnapshotter, error)
 
 // Cache defines the interface for a snapshotter caching mechanism.
 type Cache interface {
 	// Retrieves the snapshotter from the underlying cache using the provided
 	// fetch function if the snapshotter is not currently cached.
-	Get(ctx context.Context, key string, fetch SnapshotterProvider) (snapshots.Snapshotter, error)
+	Get(ctx context.Context, key string, fetch SnapshotterProvider) (*proxy.RemoteSnapshotter, error)
 
 	// Closes the snapshotter and removes it from the cache.
 	Evict(key string) error

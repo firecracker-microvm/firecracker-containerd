@@ -84,7 +84,9 @@ func parseExampleConfig() error {
 	    address = "localhost:10001"
 	  [snapshotter.metrics]
         enable = true
-
+		port_range = "9000-9999"
+		host = "0.0.0.0"
+		service_discovery_port = 8080
 	[debug]
 	  logLevel = "debug"
 	`)
@@ -103,7 +105,10 @@ func parseExampleConfig() error {
 				},
 			},
 			Metrics: metrics{
-				Enable: true,
+				Enable:               true,
+				PortRange:            "9000-9999",
+				Host:                 "0.0.0.0",
+				ServiceDiscoveryPort: 8080,
 			},
 		},
 		Debug: debug{

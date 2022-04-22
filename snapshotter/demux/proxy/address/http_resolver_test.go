@@ -58,12 +58,23 @@ func returnErrorOnJSONParserError() error {
 }
 
 func happyPath() error {
-	reader := mockReader{response: []byte(`{"network": "unix", "address": "/path/to/snapshotter.vsock", "snapshotter_port": "10000", "metrics_port": "10001"}`), err: io.EOF}
+	reader := mockReader{response: []byte(
+		`{
+			"network": "unix", 
+			"address": "/path/to/snapshotter.vsock", 
+			"snapshotter_port": "10000", 
+			"metrics_port": "10001",
+			"labels": {
+				"test1": "label1",
+				"test2": "label2"
+				}
+			}`), err: io.EOF}
 	client := mockClient{getError: nil, getResponse: http.Response{Body: &reader}}
 	uut := HTTPResolver{url: "localhost:10001", client: &client}
 
 	actual, err := uut.Get("namespace")
 	if err != nil {
+		fmt.Println(err)
 		return errors.New("expected no error from HTTP resolver")
 	}
 
@@ -78,6 +89,12 @@ func happyPath() error {
 	}
 	if actual.MetricsPort != "10001" {
 		return fmt.Errorf("Expected metrics port '10001' but actual %s", actual.MetricsPort)
+	}
+	if actual.Labels["test1"] != "label1" {
+		return fmt.Errorf("Expected metrics label key='test1' value='label1' but actual %s", actual.Labels["test1"])
+	}
+	if actual.Labels["test2"] != "label2" {
+		return fmt.Errorf("Expected metrics label key='test2' value='label2' but actual %s", actual.Labels["test1"])
 	}
 	return nil
 }

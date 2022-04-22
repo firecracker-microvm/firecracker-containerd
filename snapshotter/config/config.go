@@ -59,7 +59,10 @@ type debug struct {
 }
 
 type metrics struct {
-	Enable bool `toml:"enable" default:"false"`
+	Enable               bool   `toml:"enable" default:"false"`
+	Host                 string `toml:"host"`
+	PortRange            string `toml:"port_range"`
+	ServiceDiscoveryPort int    `toml:"service_discovery_port"`
 }
 
 // Load parses application configuration from a specified file path.

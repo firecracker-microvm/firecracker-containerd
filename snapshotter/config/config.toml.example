@@ -8,6 +8,10 @@
 
 [snapshotter.metrics]
   enable = true
+  port_range = "9000-9999"
+  [snapshotter.metrics.service_discovery]
+    enable = true
+    port = 8080
 
 [debug]
   logLevel = "info"

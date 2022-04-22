@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/containerd/containerd/snapshots"
+	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux/proxy"
 	"github.com/hashicorp/go-multierror"
 )
 
@@ -26,16 +26,16 @@ import (
 // for keyed snapshotters.
 type SnapshotterCache struct {
 	mutex        *sync.RWMutex
-	snapshotters map[string]snapshots.Snapshotter
+	snapshotters map[string]*proxy.RemoteSnapshotter
 }
 
 // NewSnapshotterCache creates a new instance with an empty cache.
 func NewSnapshotterCache() *SnapshotterCache {
-	return &SnapshotterCache{&sync.RWMutex{}, make(map[string]snapshots.Snapshotter)}
+	return &SnapshotterCache{&sync.RWMutex{}, make(map[string]*proxy.RemoteSnapshotter)}
 }
 
 // Get fetches and caches the snapshotter for a given key.
-func (cache *SnapshotterCache) Get(ctx context.Context, key string, fetch SnapshotterProvider) (snapshots.Snapshotter, error) {
+func (cache *SnapshotterCache) Get(ctx context.Context, key string, fetch SnapshotterProvider) (*proxy.RemoteSnapshotter, error) {
 	snapshotter, ok := cache.snapshotters[key]
 
 	if !ok {
@@ -59,7 +59,7 @@ func (cache *SnapshotterCache) Get(ctx context.Context, key string, fetch Snapsh
 // Evict removes a cached snapshotter for a given key.
 func (cache *SnapshotterCache) Evict(key string) error {
 	cache.mutex.RLock()
-	snapshotter, ok := cache.snapshotters[key]
+	remoteSnapshotter, ok := cache.snapshotters[key]
 	cache.mutex.RUnlock()
 
 	if !ok {
@@ -68,7 +68,7 @@ func (cache *SnapshotterCache) Evict(key string) error {
 	cache.mutex.Lock()
 	defer cache.mutex.Unlock()
 
-	err := snapshotter.Close()
+	err := remoteSnapshotter.Close()
 	delete(cache.snapshotters, key)
 	return err
 }
@@ -76,8 +76,8 @@ func (cache *SnapshotterCache) Evict(key string) error {
 // Close calls Close on all cached remote snapshotters.
 func (cache *SnapshotterCache) Close() error {
 	var compiledErr error
-	for _, snapshotter := range cache.snapshotters {
-		if err := snapshotter.Close(); err != nil {
+	for _, remoteSnapshotter := range cache.snapshotters {
+		if err := remoteSnapshotter.Close(); err != nil {
 			compiledErr = multierror.Append(compiledErr, err)
 		}
 	}

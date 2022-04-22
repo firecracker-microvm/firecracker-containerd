@@ -28,6 +28,9 @@ type Response struct {
 
 	// MetricsPort is the port used in vsock.DialContext for sending metrics requests to the remote snapshotter.
 	MetricsPort string `json:"metrics_port"`
+
+	// Labels is a map used for applying labels to metrics.
+	Labels map[string]string `json:"labels"`
 }
 
 // Resolver for the proxy network address.

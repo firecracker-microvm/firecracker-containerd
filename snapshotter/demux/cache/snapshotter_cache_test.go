@@ -17,23 +17,23 @@ import (
 	"context"
 	"testing"
 
-	"github.com/containerd/containerd/snapshots"
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux/internal"
+	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux/proxy"
 )
 
-func getSnapshotterOkFunction(ctx context.Context, key string) (snapshots.Snapshotter, error) {
-	return &internal.SuccessfulSnapshotter{}, nil
+func getSnapshotterOkFunction(ctx context.Context, key string) (*proxy.RemoteSnapshotter, error) {
+	return &proxy.RemoteSnapshotter{Snapshotter: &internal.SuccessfulSnapshotter{}}, nil
 }
 
-func getSnapshotterErrorFunction(ctx context.Context, key string) (snapshots.Snapshotter, error) {
-	return &internal.SuccessfulSnapshotter{}, errors.New("MOCK ERROR")
+func getSnapshotterErrorFunction(ctx context.Context, key string) (*proxy.RemoteSnapshotter, error) {
+	return &proxy.RemoteSnapshotter{Snapshotter: &internal.SuccessfulSnapshotter{}}, errors.New("MOCK ERROR")
 }
 
-func getFailingSnapshotterOkFunction(ctx context.Context, key string) (snapshots.Snapshotter, error) {
-	return &internal.FailingSnapshotter{}, nil
+func getFailingSnapshotterOkFunction(ctx context.Context, key string) (*proxy.RemoteSnapshotter, error) {
+	return &proxy.RemoteSnapshotter{Snapshotter: &internal.FailingSnapshotter{}}, nil
 }
 
 func getSnapshotterFromEmptyCache(uut *SnapshotterCache) error {

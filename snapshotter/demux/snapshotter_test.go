@@ -24,14 +24,15 @@ import (
 
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux/cache"
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux/internal"
+	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux/proxy"
 )
 
-func fetchOkSnapshotter(ctx context.Context, key string) (snapshots.Snapshotter, error) {
+func fetchOkSnapshotter(ctx context.Context, key string) (*proxy.RemoteSnapshotter, error) {
 	var snapshotter internal.SuccessfulSnapshotter = internal.SuccessfulSnapshotter{}
-	return &snapshotter, nil
+	return &proxy.RemoteSnapshotter{Snapshotter: &snapshotter}, nil
 }
 
-func fetchSnapshotterNotFound(ctx context.Context, key string) (snapshots.Snapshotter, error) {
+func fetchSnapshotterNotFound(ctx context.Context, key string) (*proxy.RemoteSnapshotter, error) {
 	return nil, errors.New("mock snapshotter not found")
 }
 
@@ -41,9 +42,9 @@ func createSnapshotterCacheWithSuccessfulSnapshotter(namespace string) cache.Cac
 	return cache
 }
 
-func fetchFailingSnapshotter(ctx context.Context, key string) (snapshots.Snapshotter, error) {
+func fetchFailingSnapshotter(ctx context.Context, key string) (*proxy.RemoteSnapshotter, error) {
 	var snapshotter internal.FailingSnapshotter = internal.FailingSnapshotter{}
-	return &snapshotter, nil
+	return &proxy.RemoteSnapshotter{Snapshotter: &snapshotter}, nil
 }
 
 func createSnapshotterCacheWithFailingSnapshotter(namespace string) cache.Cache {

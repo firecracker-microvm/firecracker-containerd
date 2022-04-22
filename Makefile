@@ -294,12 +294,12 @@ install-test-cni-bins: test-cni-bins $(CNI_BIN_ROOT)
 	install -D -o root -g root -m755 -t $(CNI_BIN_ROOT) $(TEST_BRIDGED_TAP_BIN)
 
 FCNET_CONFIG?=/etc/cni/conf.d/fcnet.conflist
-$(FCNET_CONFIG):
+$(FCNET_CONFIG): tools/demo/fcnet.conflist
 	mkdir -p $(dir $(FCNET_CONFIG))
 	install -o root -g root -m644 tools/demo/fcnet.conflist $(FCNET_CONFIG)
 
 FCNET_BRIDGE_CONFIG?=/etc/network/interfaces.d/fc-br0
-$(FCNET_BRIDGE_CONFIG):
+$(FCNET_BRIDGE_CONFIG): tools/demo/fc-br0.interface
 	mkdir -p $(dir $(FCNET_BRIDGE_CONFIG))
 	install -o root -g root -m644 tools/demo/fc-br0.interface $(FCNET_BRIDGE_CONFIG)
 

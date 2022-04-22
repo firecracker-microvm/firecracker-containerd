@@ -18,7 +18,6 @@ require (
 	github.com/gofrs/uuid v3.3.0+incompatible
 	github.com/gogo/protobuf v1.3.2
 	github.com/hashicorp/go-multierror v1.1.1
-	github.com/klauspost/compress v1.13.6 // indirect
 	github.com/miekg/dns v1.1.25
 	github.com/opencontainers/image-spec v1.0.2-0.20211117181255-693428a734f5
 	github.com/opencontainers/runc v1.1.0
@@ -35,9 +34,7 @@ require (
 	google.golang.org/grpc v1.43.0
 )
 
-// Upgrade mongo-driver before go-openapi packages update the package.
 replace (
-	go.mongodb.org/mongo-driver => go.mongodb.org/mongo-driver v1.5.1
 	google.golang.org/genproto => google.golang.org/genproto v0.0.0-20200224152610-e50cd9704f63
 	google.golang.org/grpc => google.golang.org/grpc v1.38.1
 )

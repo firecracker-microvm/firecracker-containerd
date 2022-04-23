@@ -43,7 +43,10 @@ jobs:
       - run: make deps
       - run: make
       - run: make lint
-      - run: make test
+      - name: make test
+        run: DISABLE_ROOT_TESTS=1 make test
+      - name: make test as root
+        run: EXTRAGOARGS='-exec sudo' make test
       - run: |
           make tidy
           git diff --exit-code

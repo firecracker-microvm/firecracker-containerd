@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -153,11 +152,7 @@ func initSnapshotter(ctx context.Context, config config.Config, cache cache.Cach
 		if err != nil {
 			return nil, err
 		}
-		u, err := url.Parse(response.Address)
-		if err != nil {
-			return nil, err
-		}
-		host := u.Hostname()
+		host := response.Address
 		port, err := strconv.ParseUint(response.SnapshotterPort, base10, bits32)
 		if err != nil {
 			return nil, err

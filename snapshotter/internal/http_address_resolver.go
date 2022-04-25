@@ -21,8 +21,10 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 
+	"github.com/containerd/containerd/namespaces"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 
@@ -33,6 +35,7 @@ import (
 
 var (
 	port               int
+	remotePort         int
 	containerdSockPath string
 	logger             *logrus.Logger
 )
@@ -40,6 +43,7 @@ var (
 func init() {
 	flag.IntVar(&port, "port", 10001, "service port for address resolver")
 	flag.StringVar(&containerdSockPath, "containerdSocket", "/run/firecracker-containerd/containerd.sock", "filepath to the containerd socket")
+	flag.IntVar(&remotePort, "remotePort", 10000, "the remote port on which the remote snapshotter is listening")
 	logger = logrus.New()
 }
 
@@ -71,7 +75,7 @@ func main() {
 
 	http.HandleFunc("/address", queryAddress)
 	httpServer := &http.Server{
-		Addr: fmt.Sprintf(":%d", port),
+		Addr: fmt.Sprintf("127.0.0.1:%d", port),
 	}
 
 	logger.Info(fmt.Sprintf("http resolver serving at port %d", port))
@@ -117,7 +121,8 @@ func queryAddress(writ http.ResponseWriter, req *http.Request) {
 	}
 	defer fcClient.Close()
 
-	vmInfo, err := fcClient.GetVMInfo(req.Context(), &proto.GetVMInfoRequest{VMID: namespace})
+	ctx := namespaces.WithNamespace(req.Context(), namespace)
+	vmInfo, err := fcClient.GetVMInfo(ctx, &proto.GetVMInfoRequest{VMID: namespace})
 	if err != nil {
 		logger.WithField("VMID", namespace).WithError(err).Error("unable to retrieve VM Info")
 		http.Error(writ, "Internal server error", http.StatusInternalServerError)
@@ -127,8 +132,9 @@ func queryAddress(writ http.ResponseWriter, req *http.Request) {
 	writ.WriteHeader(http.StatusOK)
 
 	response, err := json.Marshal(proxyaddress.Response{
-		Network: "unix",
-		Address: vmInfo.VSockPath,
+		Network:         "unix",
+		Address:         vmInfo.VSockPath,
+		SnapshotterPort: strconv.Itoa(remotePort),
 	})
 	if err != nil {
 		http.Error(writ, "Internal server error", http.StatusInternalServerError)

@@ -4,3 +4,6 @@
 [submodule "firecracker"]
 	path = _submodules/firecracker
 	url = https://github.com/firecracker-microvm/firecracker.git
+[submodule "stargz-snapshotter"]
+	path = _submodules/stargz-snapshotter
+	url = https://github.com/containerd/stargz-snapshotter

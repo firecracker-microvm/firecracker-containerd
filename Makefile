@@ -11,7 +11,7 @@
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
-SUBDIRS:=agent runtime examples firecracker-control/cmd/containerd snapshotter
+SUBDIRS:=agent runtime examples firecracker-control/cmd/containerd snapshotter docker-credential-mmds
 TEST_SUBDIRS:=$(addprefix test-,$(SUBDIRS))
 INTEG_TEST_SUBDIRS:=$(addprefix integ-test-,$(SUBDIRS))
 
@@ -66,6 +66,10 @@ RUNC_DIR=$(SUBMODULES)/runc
 RUNC_BIN=$(RUNC_DIR)/runc
 RUNC_BUILDER_NAME?=runc-builder
 
+STARGZ_DIR=$(SUBMODULES)/stargz-snapshotter
+STARGZ_BIN=$(STARGZ_DIR)/out/containerd-stargz-grpc
+STARGZ_BUILDER_NAME?=stargz-builder
+
 PROTO_BUILDER_NAME?=proto-builder
 
 # Set this to pass additional commandline flags to the go compiler, e.g. "make test EXTRAGOARGS=-v"
@@ -112,6 +116,7 @@ distclean: clean
 	$(MAKE) -C tools/image-builder distclean
 	$(call rmi-if-exists,localhost/$(RUNC_BUILDER_NAME):$(DOCKER_IMAGE_TAG))
 	$(call rmi-if-exists,localhost/$(FIRECRACKER_BUILDER_NAME):$(DOCKER_IMAGE_TAG))
+	$(call rmi-if-exists,localhost/$(STARGZ_BUILDER_NAME):$(DOCKER_IMAGE_TAG))
 	docker volume rm -f $(CARGO_CACHE_VOLUME_NAME)
 	docker volume rm -f $(GO_CACHE_VOLUME_NAME)
 	$(call rmi-if-exists,$(FIRECRACKER_CONTAINERD_TEST_IMAGE):$(DOCKER_IMAGE_TAG))
@@ -134,14 +139,24 @@ deps:
 install:
 	for d in $(SUBDIRS); do $(MAKE) -C $$d install; done
 
-image: $(RUNC_BIN) agent-in-docker
+files_ephemeral: $(RUNC_BIN) agent-in-docker
 	mkdir -p tools/image-builder/files_ephemeral/usr/local/bin
 	mkdir -p tools/image-builder/files_ephemeral/var/firecracker-containerd-test/scripts
 	for f in tools/docker/scripts/*; do test -f $$f && install -m 755 $$f tools/image-builder/files_ephemeral/var/firecracker-containerd-test/scripts; done
 	cp $(RUNC_BIN) tools/image-builder/files_ephemeral/usr/local/bin
 	cp agent/agent tools/image-builder/files_ephemeral/usr/local/bin
 	touch tools/image-builder/files_ephemeral
+
+files_ephemeral_stargz: $(STARGZ_BIN) docker-credential-mmds-in-docker
+	mkdir -p tools/image-builder/files_ephemeral_stargz/usr/local/bin
+	cp docker-credential-mmds/docker-credential-mmds tools/image-builder/files_ephemeral_stargz/usr/local/bin
+	cp $(STARGZ_BIN) tools/image-builder/files_ephemeral_stargz/usr/local/bin
+
+image: files_ephemeral
 	$(MAKE) -C tools/image-builder all-in-docker
+
+image-stargz: files_ephemeral files_ephemeral_stargz
+	$(MAKE) -C tools/image-builder stargz-in-docker
 
 test: $(TEST_SUBDIRS)
 	go test ./... $(EXTRAGOARGS)
@@ -223,6 +238,10 @@ ROOTFS_NO_AGENT_INSTALLPATH=$(FIRECRACKER_CONTAINERD_RUNTIME_DIR)/rootfs-no-agen
 $(ROOTFS_NO_AGENT_INSTALLPATH): tools/image-builder/rootfs-no-agent.img $(FIRECRACKER_CONTAINERD_RUNTIME_DIR)
 	install -D -o root -g root -m400 $< $@
 
+ROOTFS_STARGZ_INSTALLPATH=$(FIRECRACKER_CONTAINERD_RUNTIME_DIR)/rootfs-stargz.img
+$(ROOTFS_STARGZ_INSTALLPATH): tools/image-builder/rootfs-stargz.img $(FIRECRACKER_CONTAINERD_RUNTIME_DIR)
+	install -D -o root -g root -m400 $< $@
+
 .PHONY: default-vmlinux
 default-vmlinux: $(DEFAULT_VMLINUX_NAME)
 
@@ -237,6 +256,9 @@ install-default-runc-jailer-config: $(DEFAULT_RUNC_JAILER_CONFIG_INSTALLPATH)
 
 .PHONY: install-test-rootfs
 install-test-rootfs: $(ROOTFS_SLOW_BOOT_INSTALLPATH) $(ROOTFS_SLOW_REBOOT_INSTALLPATH) $(ROOTFS_NO_AGENT_INSTALLPATH)
+
+.PHONY: install-stargz-rootfs
+install-stargz-rootfs: $(ROOTFS_STARGZ_INSTALLPATH)
 
 ##########################
 # CNI Network
@@ -368,3 +390,31 @@ $(RUNC_BIN): $(RUNC_DIR)/VERSION tools/runc-builder-stamp
 .PHONY: install-runc
 install-runc: $(RUNC_BIN)
 	install -D -o root -g root -m755 -t $(INSTALLROOT)/bin $(RUNC_BIN)
+
+##########################
+# Stargz submodule
+##########################
+.PHONY: stargz-snapshotter
+stargz-snapshotter: $(STARGZ_BIN)
+
+$(STARGZ_DIR)/go.mod:
+	git submodule update --init --recursive $(STARGZ_DIR)
+
+tools/stargz-builder-stamp: tools/docker/Dockerfile.stargz-builder
+	docker build \
+		-t localhost/$(STARGZ_BUILDER_NAME):$(DOCKER_IMAGE_TAG) \
+		-f tools/docker/Dockerfile.stargz-builder \
+		tools/
+	touch $@
+
+$(STARGZ_BIN): $(STARGZ_DIR)/go.mod tools/stargz-builder-stamp
+	docker run --rm -it \
+	--user $(UID):$(GID) \
+	--volume $(GO_CACHE_VOLUME_NAME):/go \
+	--volume $(CURDIR):/src \
+	-e HOME=/tmp \
+	-e GOPATH=/go \
+	-e GOPROXY=$(shell go env GOPROXY) \
+	--workdir /src/$(STARGZ_DIR) \
+	localhost/$(STARGZ_BUILDER_NAME):$(DOCKER_IMAGE_TAG) \
+	make

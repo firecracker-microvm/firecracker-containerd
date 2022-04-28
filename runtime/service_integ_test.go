@@ -1065,6 +1065,7 @@ func TestDriveMount_Isolated(t *testing.T) {
 		FSImgFile      internal.FSImgFile
 		IsWritable     bool
 		RateLimiter    *proto.FirecrackerRateLimiter
+		CacheType      string
 	}{
 		{
 			// /systemmount meant to make sure logic doesn't ban this just because it begins with /sys
@@ -1089,6 +1090,7 @@ func TestDriveMount_Isolated(t *testing.T) {
 				},
 			},
 			IsWritable: true,
+			CacheType:  "Writeback",
 		},
 		{
 			VMPath:         "/mnt",
@@ -1118,6 +1120,7 @@ func TestDriveMount_Isolated(t *testing.T) {
 			Options:        vmMount.VMMountOptions,
 			IsWritable:     vmMount.IsWritable,
 			RateLimiter:    vmMount.RateLimiter,
+			CacheType:      vmMount.CacheType,
 		})
 
 		ctrBindMounts = append(ctrBindMounts, specs.Mount{
@@ -1255,6 +1258,13 @@ func TestDriveMountFails_Isolated(t *testing.T) {
 			FilesystemType: "ext4",
 			// invalid due to "rw" option used with IsWritable=false
 			Options: []string{"rw"},
+		},
+		{
+			HostPath:       testImgHostPath,
+			VMPath:         "/valid",
+			FilesystemType: "ext4",
+			// invalid since cacheType expects either "Unsafe" or "Writeback"
+			CacheType: "invalid-cache-type",
 		},
 	} {
 		_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{

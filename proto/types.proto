@@ -124,6 +124,10 @@ message FirecrackerRootDrive {
   // (Optional) RateLimiter configuration that will be applied to the
   // backing-drive for the VM's rootfs
   FirecrackerRateLimiter RateLimiter = 4;
+
+  // (Optional) CacheType specifies the caching strategy for the block device.
+  // The supported caching strategies are: "Unsafe"(default) and "Writeback".
+  string CacheType = 5;
 }
 
 message FirecrackerDriveMount {
@@ -153,6 +157,10 @@ message FirecrackerDriveMount {
   // writes to the image from within the guest. Defaults to false, in which case
   // the block device in the VM will be read-only.
   bool IsWritable = 6;
+
+  // (Optional) CacheType specifies the caching strategy for the block device.
+  // The supported caching strategies are: "Unsafe"(default) and "Writeback".
+  string CacheType = 7;
 }
 
 // Message to specify an IO rate limiter with bytes/s and ops/s limits

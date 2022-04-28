@@ -196,6 +196,24 @@ func TestDriveMountStubs(t *testing.T) {
 			},
 			IsWritable: true,
 		},
+		{
+			HostPath:       "/foo/5",
+			VMPath:         "/bar/5",
+			FilesystemType: "blah5",
+			Options:        []string{"blerg5"},
+			RateLimiter:    nil,
+			IsWritable:     true,
+			CacheType:      "",
+		},
+		{
+			HostPath:       "/foo/6",
+			VMPath:         "/bar/6",
+			FilesystemType: "blah6",
+			Options:        []string{"blerg6"},
+			RateLimiter:    nil,
+			IsWritable:     true,
+			CacheType:      "Unsafe",
+		},
 	}
 
 	mountableStubDrives, err := CreateDriveMountStubs(machineCfg, noopJailer, inputDriveMounts, logger)
@@ -212,6 +230,7 @@ func TestDriveMountStubs(t *testing.T) {
 		fsType := inputDriveMount.FilesystemType
 		rateLimiter := inputDriveMount.RateLimiter
 		isWritable := inputDriveMount.IsWritable
+		cacheType := inputDriveMount.CacheType
 
 		fsOptions := inputDriveMount.Options
 		if isWritable {
@@ -231,6 +250,7 @@ func TestDriveMountStubs(t *testing.T) {
 		assert.Equal(t, fsOptions, stub.driveMount.Options)
 		assert.Equal(t, rateLimiter, stub.driveMount.RateLimiter)
 		assert.Equal(t, isWritable, stub.driveMount.IsWritable)
+		assert.Equal(t, cacheType, stub.driveMount.CacheType)
 
 		mockMachine, err := firecracker.NewMachine(ctx, firecracker.Config{}, firecracker.WithClient(
 			firecracker.NewClient("/path/to/socket", nil, false, firecracker.WithOpsClient(&fctesting.MockClient{

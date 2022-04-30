@@ -305,9 +305,6 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 	image, err := alpineImage(testCtx, client, defaultSnapshotterName)
 	require.NoError(t, err, "failed to get alpine image")
 
-	fcClient, err := newFCControlClient(containerdSockPath)
-	require.NoError(t, err, "failed to create fccontrol client")
-
 	cfg, err := config.LoadConfig("")
 	require.NoError(t, err, "failed to load config")
 
@@ -355,6 +352,11 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 				// which makes the agent resource-hoggy than its production build
 				// So the default VM size (128MB) is too small.
 				MachineCfg: &proto.FirecrackerMachineConfiguration{MemSizeMib: 1024},
+			}
+
+			fcClient, err := newFCControlClient(containerdSockPath)
+			if err != nil {
+				return err
 			}
 
 			resp, createVMErr := fcClient.CreateVM(ctx, req)

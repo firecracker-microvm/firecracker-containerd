@@ -185,6 +185,7 @@ func CreateDriveMountStubs(
 	for i, driveMount := range driveMounts {
 		isWritable := driveMount.IsWritable
 		rateLimiter := driveMount.RateLimiter
+		cacheType := driveMount.CacheType
 		stubFileName := fmt.Sprintf("drivemntstub%d", i)
 		options, err := setReadWriteOptions(driveMount.Options, isWritable)
 		if err != nil {
@@ -198,12 +199,15 @@ func CreateDriveMountStubs(
 			return nil, errors.Wrap(err, "failed to create drive mount stub drive")
 		}
 
+		stubDrive.setCacheType(cacheType)
+
 		machineCfg.Drives = append(machineCfg.Drives, models.Drive{
 			DriveID:      firecracker.String(stubDrive.driveID),
 			PathOnHost:   firecracker.String(stubDrive.stubPath),
 			IsReadOnly:   firecracker.Bool(!isWritable),
 			RateLimiter:  rateLimiterFromProto(rateLimiter),
 			IsRootDevice: firecracker.Bool(false),
+			CacheType:    cacheTypeFromProto(cacheType),
 		})
 		containerStubs[i] = stubDrive.withMountConfig(
 			driveMount.HostPath,
@@ -347,6 +351,7 @@ func (sd stubDrive) withMountConfig(
 		Options:        options,
 		IsWritable:     sd.driveMount.IsWritable,
 		RateLimiter:    sd.driveMount.RateLimiter,
+		CacheType:      sd.driveMount.CacheType,
 	}
 	return sd
 }
@@ -377,4 +382,11 @@ func (sd stubDrive) PatchAndMount(
 	}
 
 	return nil
+}
+
+// CacheType sets the stub drive's cacheType value from the provided DriveMount configs.
+func (sd *stubDrive) setCacheType(cacheType string) {
+	if cacheType != "" {
+		sd.driveMount.CacheType = cacheType
+	}
 }

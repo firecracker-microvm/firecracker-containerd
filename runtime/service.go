@@ -1051,7 +1051,8 @@ func (s *service) buildRootDrive(req *proto.CreateVMRequest) []models.Drive {
 		builder = builder.WithRootDrive(input.HostPath,
 			firecracker.WithReadOnly(!input.IsWritable),
 			firecracker.WithPartuuid(input.Partuuid),
-			withRateLimiterFromProto(input.RateLimiter))
+			withRateLimiterFromProto(input.RateLimiter),
+			withCacheTypeFromProto(input.CacheType))
 	} else {
 		builder = builder.WithRootDrive(s.config.RootDrive, firecracker.WithReadOnly(true))
 	}

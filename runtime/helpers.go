@@ -165,3 +165,23 @@ func tokenBucketFromProto(bucket *proto.FirecrackerTokenBucket) *models.TokenBuc
 	res := builder.Build()
 	return &res
 }
+
+func cacheTypeFromProto(cacheType string) *string {
+	// protobuf 'string' type default to empty string if the encoded message
+	// does not contain a value for that field.
+	if cacheType == "" {
+		return nil
+	}
+	return firecracker.String(cacheType)
+}
+
+func withCacheTypeFromProto(cacheType string) firecracker.DriveOpt {
+	// protobuf 'string' type default to empty string if the encoded message
+	// does not contain a value for that field.
+	if cacheType == "" {
+		return func(d *models.Drive) {
+			// no-op
+		}
+	}
+	return firecracker.WithCacheType(cacheType)
+}

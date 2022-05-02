@@ -5,22 +5,22 @@ go 1.16
 require (
 	github.com/StackExchange/wmi v0.0.0-20181212234831-e0a55b97c705 // indirect
 	github.com/awslabs/tc-redirect-tap v0.0.0-20211025175357-e30dfca224c2
-	github.com/containerd/containerd v1.6.1
+	github.com/containerd/containerd v1.6.3
 	github.com/containerd/continuity v0.2.2
 	github.com/containerd/fifo v1.0.0
 	github.com/containerd/go-runc v1.0.0
 	github.com/containerd/ttrpc v1.1.0
 	github.com/containerd/typeurl v1.0.2
 	github.com/containernetworking/cni v1.0.1
-	github.com/containernetworking/plugins v1.0.1
+	github.com/containernetworking/plugins v1.1.1
 	github.com/firecracker-microvm/firecracker-go-sdk v0.22.1-0.20220427214706-47505a9cf951
 	github.com/go-ole/go-ole v1.2.4 // indirect
 	github.com/gofrs/uuid v3.3.0+incompatible
 	github.com/gogo/protobuf v1.3.2
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/miekg/dns v1.1.25
-	github.com/opencontainers/image-spec v1.0.2-0.20211117181255-693428a734f5
-	github.com/opencontainers/runc v1.1.0
+	github.com/opencontainers/image-spec v1.0.3-0.20211202183452-c5a74bcca799
+	github.com/opencontainers/runc v1.1.1
 	github.com/opencontainers/runtime-spec v1.0.3-0.20210910115017-0d6cc581aeea
 	github.com/pelletier/go-toml v1.9.3
 	github.com/pkg/errors v0.9.1

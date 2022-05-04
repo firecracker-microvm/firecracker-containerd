@@ -17,6 +17,11 @@ WORKDIRLOC := $(shell readlink -f $(WORKDIR))
 IMAGE_DIRS := /dev /bin /etc /etc/init.d /tmp /var /run /proc /sys /container/rootfs /agent /rom /overlay
 DIRS       := $(foreach dir,$(IMAGE_DIRS),"$(WORKDIR)$(dir)")
 DEBMIRROR  ?= http://deb.debian.org/debian
+PACKAGES   := udev systemd systemd-sysv procps libseccomp2 haveged
+
+COMMA      := ,
+EMPTY      :=
+SPACE      := $(EMPTY) $(EMPTY)
 
 export DOCKER_IMAGE_TAG?=latest
 
@@ -29,21 +34,41 @@ export DOCKER_IMAGE_TAG?=latest
 # contains usr/local/bin/foo, then 'foo' will be installed in
 # /usr/local/bin/ in the root filesystem.
 define install_dir =
-if [ -d $(subst _stamp,,$@) ]; then \
-  cd $(subst _stamp,,$@) && tar cf - . | (cd "$(WORKDIRLOC)" && tar xvf -);\
+if [ -d $(subst $(SUFFIX),,$@) ]; then \
+  cd $(subst $(SUFFIX),,$@) && tar cf - . | (cd "$(WORKDIRLOC)" && tar xvf -);\
 fi
 # Reset the timestamp on $(WORKDIR), which may have been modified by the
 # creation of files in it:
-touch --reference=debootstrap_stamp --no-create "$(WORKDIR)"
+touch --reference=debootstrap$(SUFFIX) --no-create "$(WORKDIR)"
+endef
+
+define run_debootstrap =
+	debootstrap \
+		--variant=minbase \
+		--include=$(subst $(SPACE),$(COMMA),$(PACKAGES))\
+		bookworm \
+		"$(WORKDIR)" $(DEBMIRROR)
+	rm -rf "$(WORKDIR)/var/cache/apt/archives" \
+	       "$(WORKDIR)/usr/share/doc" \
+	       "$(WORKDIR)/var/lib/apt/lists"
+	mkdir -p $(DIRS)
+	touch $@
 endef
 
 all: rootfs.img rootfs-slow-boot.img rootfs-slow-reboot.img rootfs-no-agent.img
+stargz: rootfs-stargz.img
 
 $(WORKDIR):
 	mkdir $(WORKDIR)
 
 image_files=$(shell find files_* -mindepth 1 -type f -print)
+files_%_stamp: SUFFIX := _stamp
 files_%_stamp: debootstrap_stamp $(image_files)
+	$(install_dir)
+	touch $@
+
+files_%_sgzstamp: SUFFIX := _sgzstamp
+files_%_sgzstamp: debootstrap_sgzstamp $(image_files)
 	$(install_dir)
 	touch $@
 
@@ -53,16 +78,13 @@ debootstrap_stamp: $(WORKDIR)
 ifneq ($(UID),0)
 	$(error $(@) needs to run as root, not $(UID))
 endif
-	debootstrap \
-		--variant=minbase \
-		--include=udev,systemd,systemd-sysv,procps,libseccomp2,haveged \
-		bookworm \
-		"$(WORKDIR)" $(DEBMIRROR)
-	rm -rf "$(WORKDIR)/var/cache/apt/archives" \
-	       "$(WORKDIR)/usr/share/doc" \
-	       "$(WORKDIR)/var/lib/apt/lists"
-	mkdir -p $(DIRS)
-	touch $@
+	$(run_debootstrap)
+
+debootstrap_%stamp: $(WORKDIR)
+ifneq ($(UID),0)
+	$(error $(@) needs to run as root, not $(UID))
+endif
+	$(run_debootstrap)
 
 rootfs.img: files_common_stamp files_debootstrap_stamp files_ephemeral_stamp
 	mksquashfs "$(WORKDIR)" rootfs.img -noappend
@@ -88,6 +110,13 @@ rootfs-no-agent.img: files_common_stamp files_debootstrap_stamp files_ephemeral_
 	rm tmp/$@/usr/local/bin/agent
 	mksquashfs tmp/$@ $@ -noappend
 
+rootfs-stargz.img: WORKDIR    := $(addsuffix -stargz, $(WORKDIR))
+rootfs-stargz.img: WORKDIRLOC := $(shell readlink -f $(WORKDIR))
+rootfs-stargz.img: DIRS       := $(foreach dir,$(IMAGE_DIRS),"$(WORKDIR)$(dir)")
+rootfs-stargz.img: PACKAGES   += fuse ca-certificates socat
+rootfs-stargz.img: files_common_sgzstamp files_debootstrap_sgzstamp files_ephemeral_sgzstamp files_stargz_sgzstamp files_ephemeral_stargz_sgzstamp
+	mksquashfs "$(WORKDIR)" $@ -noappend
+
 builder: builder_stamp
 
 builder_stamp:
@@ -112,7 +141,7 @@ builder_stamp:
 clean:
 	-rm -f *stamp
 	if [ $(UID) -eq 0 ]; then \
-	  rm -f rootfs.img rootfs-slow-boot.img rootfs-slow-reboot.img ;\
+	  rm -f rootfs.img rootfs-slow-boot.img rootfs-slow-reboot.img rootfs-stargz.img;\
 	else \
 	  $(MAKE) clean-in-docker ;\
 	fi

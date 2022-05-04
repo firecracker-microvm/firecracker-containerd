@@ -22,10 +22,13 @@ FIRECRACKER_CONTAINERD_TEST_IMAGE?=localhost/firecracker-containerd-test
 
 all: examples
 
-examples: taskworkflow
+examples: taskworkflow remote-snapshotter
 
 taskworkflow: taskworkflow.go $(GOMOD) $(GOSUM)
 	go build -o taskworkflow taskworkflow.go
+
+remote-snapshotter:
+	make -C cmd/remote-snapshotter $@
 
 test:
 	go test ./... $(EXTRAGOARGS)
@@ -63,10 +66,11 @@ testtap:
 
 clean:
 	- rm -f taskworkflow
+	- make -C cmd/remote-snapshotter $@
 
 distclean: clean
 	- rm -rf logs
 
 install:
 
-.PHONY: all examples clean distclean install test integ-test testtap
+.PHONY: all examples clean distclean install test integ-test testtap remote-snapshotter

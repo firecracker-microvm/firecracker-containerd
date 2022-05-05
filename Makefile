@@ -226,16 +226,8 @@ DEFAULT_RUNC_JAILER_CONFIG_INSTALLPATH?=/etc/containerd/firecracker-runc-config.
 $(DEFAULT_RUNC_JAILER_CONFIG_INSTALLPATH): $(ETC_CONTAINERD) runtime/firecracker-runc-config.json.example
 	install -D -o root -g root -m400 runtime/firecracker-runc-config.json.example $@
 
-ROOTFS_SLOW_BOOT_INSTALLPATH=$(FIRECRACKER_CONTAINERD_RUNTIME_DIR)/rootfs-slow-boot.img
-$(ROOTFS_SLOW_BOOT_INSTALLPATH): tools/image-builder/rootfs-slow-boot.img $(FIRECRACKER_CONTAINERD_RUNTIME_DIR)
-	install -D -o root -g root -m400 $< $@
-
-ROOTFS_SLOW_REBOOT_INSTALLPATH=$(FIRECRACKER_CONTAINERD_RUNTIME_DIR)/rootfs-slow-reboot.img
-$(ROOTFS_SLOW_REBOOT_INSTALLPATH): tools/image-builder/rootfs-slow-reboot.img $(FIRECRACKER_CONTAINERD_RUNTIME_DIR)
-	install -D -o root -g root -m400 $< $@
-
-ROOTFS_NO_AGENT_INSTALLPATH=$(FIRECRACKER_CONTAINERD_RUNTIME_DIR)/rootfs-no-agent.img
-$(ROOTFS_NO_AGENT_INSTALLPATH): tools/image-builder/rootfs-no-agent.img $(FIRECRACKER_CONTAINERD_RUNTIME_DIR)
+ROOTFS_DEBUG_INSTALLPATH=$(FIRECRACKER_CONTAINERD_RUNTIME_DIR)/rootfs-debug.img
+$(ROOTFS_DEBUG_INSTALLPATH): tools/image-builder/rootfs-debug.img $(FIRECRACKER_CONTAINERD_RUNTIME_DIR)
 	install -D -o root -g root -m400 $< $@
 
 ROOTFS_STARGZ_INSTALLPATH=$(FIRECRACKER_CONTAINERD_RUNTIME_DIR)/rootfs-stargz.img
@@ -255,7 +247,7 @@ install-default-rootfs: $(DEFAULT_ROOTFS_INSTALLPATH)
 install-default-runc-jailer-config: $(DEFAULT_RUNC_JAILER_CONFIG_INSTALLPATH)
 
 .PHONY: install-test-rootfs
-install-test-rootfs: $(ROOTFS_SLOW_BOOT_INSTALLPATH) $(ROOTFS_SLOW_REBOOT_INSTALLPATH) $(ROOTFS_NO_AGENT_INSTALLPATH)
+install-test-rootfs: $(ROOTFS_DEBUG_INSTALLPATH)
 
 .PHONY: install-stargz-rootfs
 install-stargz-rootfs: $(ROOTFS_STARGZ_INSTALLPATH)

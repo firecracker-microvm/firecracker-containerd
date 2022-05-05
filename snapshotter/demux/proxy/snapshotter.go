@@ -51,8 +51,8 @@ func (rs *RemoteSnapshotter) Close() error {
 	return compiledErr
 }
 
-// NewProxySnapshotter creates a proxy snapshotter using gRPC over vsock connection.
-func NewProxySnapshotter(ctx context.Context, address string,
+// NewRemoteSnapshotter creates a proxy snapshotter using gRPC over vsock connection.
+func NewRemoteSnapshotter(ctx context.Context, address string,
 	dialer func(context.Context, string) (net.Conn, error), metricsProxy *metrics.Proxy) (*RemoteSnapshotter, error) {
 
 	opts := []grpc.DialOption{
@@ -65,9 +65,7 @@ func NewProxySnapshotter(ctx context.Context, address string,
 		return nil, err
 	}
 
-	// TODO (ginglis13)
-	// we should be monitoring this goroutine's status.
-	// https://github.com/firecracker-microvm/firecracker-containerd/issues/607
+	// Treat metrics proxy errors as operational errors, logged by the server itself.
 	if metricsProxy != nil {
 		go metricsProxy.Serve(ctx)
 	}

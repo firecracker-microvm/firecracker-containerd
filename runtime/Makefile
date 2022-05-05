@@ -51,12 +51,13 @@ test:
 integ-test:
 	$(MAKE) $(addprefix integ-test-,$(INTEG_TESTNAMES))
 
+# TODO: we need to have network=host and network=none
 integ-test-%: logs
 	$(CURDIR)/../tools/thinpool.sh reset "$(FICD_DM_POOL)"
 	docker run --rm -it \
 		--privileged \
 		--ipc=host \
-		--network=none \
+		--network=host \
 		--volume /dev:/dev \
 		--volume /run/udev/control:/run/udev/control \
 		--volume $(CURDIR)/logs:/var/log/firecracker-containerd-test \

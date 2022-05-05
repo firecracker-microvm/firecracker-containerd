@@ -19,7 +19,7 @@ GOSUM := $(GOMOD:.mod=.sum)
 
 REVISION := $(shell git rev-parse HEAD)
 
-all: demux-snapshotter
+all: demux-snapshotter http-address-resolver
 
 demux-snapshotter: $(SOURCES) $(GOMOD) $(GOSUM)
 	go build $(EXTRAGOARGS) -ldflags "-X main.revision=$(REVISION)" -o $@
@@ -36,7 +36,7 @@ clean:
 
 distclean: clean
 
-# Install is a noop here, for now.
-install:
+install: demux-snapshotter http-address-resolver
+	install -D -o root -g root -m755 -t $(INSTALLROOT)/bin $^
 
 .PHONY: all install test clean distclean

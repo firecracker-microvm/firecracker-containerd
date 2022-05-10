@@ -1,0 +1,2 @@
+metrics_address = "localhost:8234"
+no_prometheus = false

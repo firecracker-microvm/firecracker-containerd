@@ -51,6 +51,7 @@ import (
 	"github.com/firecracker-microvm/firecracker-containerd/config"
 	_ "github.com/firecracker-microvm/firecracker-containerd/firecracker-control"
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
+	"github.com/firecracker-microvm/firecracker-containerd/internal/integtest"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	fccontrol "github.com/firecracker-microvm/firecracker-containerd/proto/service/fccontrol/ttrpc"
@@ -118,7 +119,7 @@ func iperf3Image(ctx context.Context, client *containerd.Client, snapshotterName
 }
 
 func TestShimExitsUponContainerDelete_Isolated(t *testing.T) {
-	prepareIntegTest(t)
+	integtest.Prepare(t)
 
 	ctx := namespaces.WithNamespace(context.Background(), defaultNamespace)
 
@@ -249,7 +250,7 @@ func createTapDevice(ctx context.Context, tapName string) error {
 }
 
 func TestMultipleVMs_Isolated(t *testing.T) {
-	prepareIntegTest(t)
+	integtest.Prepare(t)
 
 	// This test starts multiple VMs and some may hit firecracker-containerd's
 	// default timeout. So overriding the timeout to wait longer.
@@ -538,7 +539,7 @@ func testMultipleExecs(
 	close(execStdouts)
 
 	if jailerConfig != nil {
-		dir, err := vm.ShimDir(shimBaseDir(), "default", vmIDStr)
+		dir, err := vm.ShimDir(integtest.ShimBaseDir(), "default", vmIDStr)
 		if err != nil {
 			return err
 		}
@@ -661,7 +662,7 @@ func getMountNamespace(ctx context.Context, client *containerd.Client, container
 }
 
 func TestLongUnixSocketPath_Isolated(t *testing.T) {
-	prepareIntegTest(t)
+	integtest.Prepare(t)
 
 	cfg, err := config.LoadConfig("")
 	require.NoError(t, err, "failed to load config")
@@ -764,7 +765,7 @@ func allowDeviceAccess(_ context.Context, _ oci.Client, _ *containers.Container,
 }
 
 func TestStubBlockDevices_Isolated(t *testing.T) {
-	prepareIntegTest(t)
+	integtest.Prepare(t)
 
 	const vmID = 0
 
@@ -981,7 +982,7 @@ func testCreateContainerWithSameName(t *testing.T, vmID string) {
 }
 
 func TestCreateContainerWithSameName_Isolated(t *testing.T) {
-	prepareIntegTest(t)
+	integtest.Prepare(t)
 
 	testCreateContainerWithSameName(t, "")
 
@@ -990,7 +991,7 @@ func TestCreateContainerWithSameName_Isolated(t *testing.T) {
 }
 
 func TestStubDriveReserveAndReleaseByContainers_Isolated(t *testing.T) {
-	prepareIntegTest(t)
+	integtest.Prepare(t)
 
 	assert := assert.New(t)
 
@@ -1038,7 +1039,7 @@ func TestStubDriveReserveAndReleaseByContainers_Isolated(t *testing.T) {
 }
 
 func TestDriveMount_Isolated(t *testing.T) {
-	prepareIntegTest(t, func(cfg *config.Config) {
+	integtest.Prepare(t, func(cfg *config.Config) {
 		cfg.JailerConfig.RuncBinaryPath = "/usr/local/bin/runc"
 	})
 
@@ -1214,7 +1215,7 @@ func TestDriveMount_Isolated(t *testing.T) {
 }
 
 func TestDriveMountFails_Isolated(t *testing.T) {
-	prepareIntegTest(t)
+	integtest.Prepare(t)
 
 	testTimeout := 120 * time.Second
 	ctx, cancel := context.WithTimeout(namespaces.WithNamespace(context.Background(), defaultNamespace), testTimeout)
@@ -1279,7 +1280,7 @@ func TestDriveMountFails_Isolated(t *testing.T) {
 }
 
 func TestUpdateVMMetadata_Isolated(t *testing.T) {
-	prepareIntegTest(t)
+	integtest.Prepare(t)
 
 	testTimeout := 60 * time.Second
 	ctx, cancel := context.WithTimeout(namespaces.WithNamespace(context.Background(), defaultNamespace), testTimeout)
@@ -1381,7 +1382,7 @@ func TestUpdateVMMetadata_Isolated(t *testing.T) {
 }
 
 func TestMemoryBalloon_Isolated(t *testing.T) {
-	prepareIntegTest(t)
+	integtest.Prepare(t)
 	ctx := namespaces.WithNamespace(context.Background(), defaultNamespace)
 
 	numberOfVms := defaultNumberOfVms
@@ -1479,7 +1480,7 @@ func exitCode(err *exec.ExitError) int {
 // timeout of 60 seconds). It also validates that the quality of the randomness passes the rngtest
 // utility's suite.
 func TestRandomness_Isolated(t *testing.T) {
-	prepareIntegTest(t)
+	integtest.Prepare(t)
 
 	ctx, cancel := context.WithTimeout(namespaces.WithNamespace(context.Background(), defaultNamespace), 60*time.Second)
 	defer cancel()
@@ -1617,7 +1618,7 @@ func pidExists(pid int) bool {
 }
 
 func TestStopVM_Isolated(t *testing.T) {
-	prepareIntegTest(t)
+	integtest.Prepare(t)
 	require := require.New(t)
 	assert := assert.New(t)
 
@@ -1837,7 +1838,7 @@ func TestStopVM_Isolated(t *testing.T) {
 }
 
 func TestExec_Isolated(t *testing.T) {
-	prepareIntegTest(t)
+	integtest.Prepare(t)
 
 	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
@@ -1950,7 +1951,7 @@ func TestExec_Isolated(t *testing.T) {
 }
 
 func TestEvents_Isolated(t *testing.T) {
-	prepareIntegTest(t)
+	integtest.Prepare(t)
 	require := require.New(t)
 
 	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
@@ -2034,7 +2035,7 @@ func findProcWithName(name string) func(context.Context, *process.Process) (bool
 }
 
 func TestOOM_Isolated(t *testing.T) {
-	prepareIntegTest(t)
+	integtest.Prepare(t)
 
 	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
@@ -2126,7 +2127,7 @@ func requireNonEmptyFifo(t testing.TB, path string) {
 }
 
 func TestCreateVM_Isolated(t *testing.T) {
-	prepareIntegTest(t)
+	integtest.Prepare(t)
 	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
 	defer client.Close()
@@ -2255,7 +2256,7 @@ func TestCreateVM_Isolated(t *testing.T) {
 }
 
 func TestPauseResume_Isolated(t *testing.T) {
-	prepareIntegTest(t)
+	integtest.Prepare(t)
 
 	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
@@ -2377,7 +2378,7 @@ func TestPauseResume_Isolated(t *testing.T) {
 	}
 }
 func TestAttach_Isolated(t *testing.T) {
-	prepareIntegTest(t)
+	integtest.Prepare(t)
 
 	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
@@ -2480,7 +2481,7 @@ func (errorBuffer) Write(b []byte) (int, error) {
 }
 
 func TestBrokenPipe_Isolated(t *testing.T) {
-	prepareIntegTest(t)
+	integtest.Prepare(t)
 
 	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)

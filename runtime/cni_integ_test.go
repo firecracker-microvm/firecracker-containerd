@@ -34,12 +34,13 @@ import (
 
 	"github.com/firecracker-microvm/firecracker-containerd/config"
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
+	"github.com/firecracker-microvm/firecracker-containerd/internal/integtest"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	"github.com/firecracker-microvm/firecracker-containerd/runtime/firecrackeroci"
 )
 
 func TestCNISupport_Isolated(t *testing.T) {
-	prepareIntegTest(t)
+	integtest.Prepare(t)
 	testTimeout := 120 * time.Second
 	ctx, cancel := context.WithTimeout(namespaces.WithNamespace(context.Background(), defaultNamespace), testTimeout)
 	defer cancel()
@@ -147,7 +148,7 @@ func TestCNISupport_Isolated(t *testing.T) {
 }
 
 func TestAutomaticCNISupport_Isolated(t *testing.T) {
-	prepareIntegTest(t, withDefaultNetwork())
+	integtest.Prepare(t, withDefaultNetwork())
 
 	testTimeout := 120 * time.Second
 	ctx, cancel := context.WithTimeout(namespaces.WithNamespace(context.Background(), defaultNamespace), testTimeout)
@@ -213,7 +214,7 @@ func TestAutomaticCNISupport_Isolated(t *testing.T) {
 }
 
 func TestCNIPlugin_Performance(t *testing.T) {
-	prepareIntegTest(t)
+	integtest.Prepare(t)
 
 	numVMs := perfTestVMCount(t)
 	runtimeDuration := perfTestRuntime(t)

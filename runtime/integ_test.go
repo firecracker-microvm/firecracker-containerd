@@ -15,36 +15,16 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/json"
-	"os"
 	"strings"
-	"testing"
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/cio"
 	"github.com/pkg/errors"
 
-	"github.com/firecracker-microvm/firecracker-containerd/config"
 	"github.com/firecracker-microvm/firecracker-containerd/firecracker-control/client"
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
+	"github.com/firecracker-microvm/firecracker-containerd/internal/integtest"
 )
-
-const runtimeConfigPath = "/etc/containerd/firecracker-runtime.json"
-const shimBaseDirEnvVar = "SHIM_BASE_DIR"
-const defaultShimBaseDir = "/srv/firecracker_containerd_tests"
-
-var defaultRuntimeConfig = config.Config{
-	FirecrackerBinaryPath: "/usr/local/bin/firecracker",
-	KernelImagePath:       "/var/lib/firecracker-containerd/runtime/default-vmlinux.bin",
-	KernelArgs:            "ro console=ttyS0 noapic reboot=k panic=1 pci=off nomodules systemd.unified_cgroup_hierarchy=0 systemd.journald.forward_to_console systemd.log_color=false systemd.unit=firecracker.target init=/sbin/overlay-init",
-	RootDrive:             "/var/lib/firecracker-containerd/runtime/default-rootfs.img",
-	LogLevels:             []string{"debug"},
-	ShimBaseDir:           shimBaseDir(),
-	JailerConfig: config.JailerConfig{
-		RuncBinaryPath: "/usr/local/bin/runc",
-		RuncConfigPath: "/etc/containerd/firecracker-runc-config.json",
-	},
-}
 
 func init() {
 	flag, err := internal.SupportCPUTemplate()
@@ -53,56 +33,12 @@ func init() {
 	}
 
 	if flag {
-		defaultRuntimeConfig.CPUTemplate = "T2"
+		integtest.DefaultRuntimeConfig.CPUTemplate = "T2"
 	}
-}
-
-func shimBaseDir() string {
-	if v := os.Getenv(shimBaseDirEnvVar); v != "" {
-		return v
-	}
-
-	return defaultShimBaseDir
 }
 
 // devmapper is the only snapshotter we can use with Firecracker
 const defaultSnapshotterName = "devmapper"
-
-func prepareIntegTest(t testing.TB, options ...func(*config.Config)) {
-	t.Helper()
-
-	internal.RequiresIsolation(t)
-
-	err := writeRuntimeConfig(options...)
-	if err != nil {
-		t.Error(err)
-	}
-}
-
-func writeRuntimeConfig(options ...func(*config.Config)) error {
-	config := defaultRuntimeConfig
-	for _, option := range options {
-		option(&config)
-	}
-
-	file, err := os.OpenFile(runtimeConfigPath, os.O_CREATE|os.O_WRONLY, 0600)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	bytes, err := json.Marshal(config)
-	if err != nil {
-		return err
-	}
-
-	_, err = file.Write(bytes)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
 
 var testNameToVMIDReplacer = strings.NewReplacer("/", "-", "_", "-")
 

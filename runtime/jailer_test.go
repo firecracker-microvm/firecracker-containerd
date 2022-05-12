@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/firecracker-microvm/firecracker-containerd/config"
+	"github.com/firecracker-microvm/firecracker-containerd/internal/integtest"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 )
@@ -99,7 +100,7 @@ func TestJailer_invalidUIDGID(t *testing.T) {
 }
 
 func TestNewJailer_Isolated(t *testing.T) {
-	prepareIntegTest(t)
+	integtest.Prepare(t)
 
 	ociBundlePath := t.TempDir()
 	b, err := exec.Command(

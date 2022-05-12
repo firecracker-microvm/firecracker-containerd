@@ -30,6 +30,7 @@ import (
 
 	_ "github.com/firecracker-microvm/firecracker-containerd/firecracker-control"
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
+	"github.com/firecracker-microvm/firecracker-containerd/internal/integtest"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	"github.com/firecracker-microvm/firecracker-containerd/runtime/cpuset"
 	"github.com/firecracker-microvm/firecracker-containerd/runtime/firecrackeroci"
@@ -41,7 +42,7 @@ const (
 )
 
 func TestJailer_Isolated(t *testing.T) {
-	prepareIntegTest(t)
+	integtest.Prepare(t)
 	t.Run("Without Jailer", func(t *testing.T) {
 		t.Parallel()
 		testJailer(t, nil)
@@ -64,7 +65,7 @@ func TestJailer_Isolated(t *testing.T) {
 }
 
 func TestAttachBlockDevice_Isolated(t *testing.T) {
-	prepareIntegTest(t)
+	integtest.Prepare(t)
 	t.Run("Without Jailer", func(t *testing.T) {
 		t.Parallel()
 		testAttachBlockDevice(t, nil)
@@ -126,7 +127,7 @@ func testJailer(t *testing.T, jailerConfig *proto.JailerConfig) {
 		dst := f.Name()
 
 		// Copy the root drive before chown, since the file is used by other tests.
-		err = copyFile(defaultRuntimeConfig.RootDrive, dst, 0400)
+		err = copyFile(integtest.DefaultRuntimeConfig.RootDrive, dst, 0400)
 		require.NoErrorf(err, "failed to copy a rootfs as %q", dst)
 
 		err = os.Chown(dst, int(jailerConfig.UID), int(jailerConfig.GID))
@@ -166,7 +167,7 @@ func testJailer(t *testing.T, jailerConfig *proto.JailerConfig) {
 	stdout := startAndWaitTask(ctx, t, c)
 	require.Equal("hello\nadditional drive\n", stdout)
 
-	stat, err := os.Stat(filepath.Join(shimBaseDir(), "default#"+vmID))
+	stat, err := os.Stat(filepath.Join(integtest.ShimBaseDir(), "default#"+vmID))
 	require.NoError(err)
 	assert.True(t, stat.IsDir())
 
@@ -176,17 +177,17 @@ func testJailer(t *testing.T, jailerConfig *proto.JailerConfig) {
 	_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
 	require.NoError(err)
 
-	_, err = os.Stat(filepath.Join(shimBaseDir(), "default#"+vmID))
+	_, err = os.Stat(filepath.Join(integtest.ShimBaseDir(), "default#"+vmID))
 	assert.Error(t, err)
 	assert.True(t, os.IsNotExist(err))
 
-	shimContents, err := ioutil.ReadDir(shimBaseDir())
+	shimContents, err := ioutil.ReadDir(integtest.ShimBaseDir())
 	require.NoError(err)
 	assert.Len(t, shimContents, 0)
 }
 
 func TestJailerCPUSet_Isolated(t *testing.T) {
-	prepareIntegTest(t)
+	integtest.Prepare(t)
 
 	b := cpuset.Builder{}
 	cset := b.AddCPU(0).AddMem(0).Build()
@@ -240,7 +241,7 @@ func testAttachBlockDevice(t *testing.T, jailerConfig *proto.JailerConfig) {
 		dst := f.Name()
 
 		// Copy the root drive before chown, since the file is used by other tests.
-		err = copyFile(defaultRuntimeConfig.RootDrive, dst, 0400)
+		err = copyFile(integtest.DefaultRuntimeConfig.RootDrive, dst, 0400)
 		require.NoErrorf(err, "failed to copy a rootfs as %q", dst)
 
 		err = os.Chown(dst, int(jailerConfig.UID), int(jailerConfig.GID))
@@ -277,7 +278,7 @@ func testAttachBlockDevice(t *testing.T, jailerConfig *proto.JailerConfig) {
 	stdout := startAndWaitTask(ctx, t, c)
 	require.Equal("heyhey\n", stdout)
 
-	stat, err := os.Stat(filepath.Join(shimBaseDir(), "default#"+vmID))
+	stat, err := os.Stat(filepath.Join(integtest.ShimBaseDir(), "default#"+vmID))
 	require.NoError(err)
 	assert.True(t, stat.IsDir())
 
@@ -287,11 +288,11 @@ func testAttachBlockDevice(t *testing.T, jailerConfig *proto.JailerConfig) {
 	_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
 	require.NoError(err)
 
-	_, err = os.Stat(filepath.Join(shimBaseDir(), "default#"+vmID))
+	_, err = os.Stat(filepath.Join(integtest.ShimBaseDir(), "default#"+vmID))
 	assert.Error(t, err)
 	assert.True(t, os.IsNotExist(err))
 
-	shimContents, err := ioutil.ReadDir(shimBaseDir())
+	shimContents, err := ioutil.ReadDir(integtest.ShimBaseDir())
 	require.NoError(err)
 	assert.Len(t, shimContents, 0)
 }

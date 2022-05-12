@@ -55,7 +55,29 @@ func Run(config config.Config) error {
 	group, ctx := errgroup.WithContext(ctx)
 
 	cache := cache.NewSnapshotterCache()
-	snapshotter, err := initSnapshotter(ctx, config, cache)
+
+	var (
+		monitor          *metrics.Monitor
+		serviceDiscovery *discovery.ServiceDiscovery
+	)
+	if config.Snapshotter.Metrics.Enable {
+		sdHost := config.Snapshotter.Metrics.Host
+		sdPort := config.Snapshotter.Metrics.ServiceDiscoveryPort
+		serviceDiscovery := discovery.NewServiceDiscovery(sdHost, sdPort, cache)
+		monitor, err := initMetricsProxyMonitor(config.Snapshotter.Metrics.PortRange)
+		if err != nil {
+			log.G(ctx).WithError(err).Fatal("failed creating metrics proxy monitor")
+			return err
+		}
+		group.Go(func() error {
+			return serviceDiscovery.Serve()
+		})
+		group.Go(func() error {
+			return monitor.Start()
+		})
+	}
+
+	snapshotter, err := initSnapshotter(ctx, config, cache, monitor)
 	if err != nil {
 		log.G(ctx).WithFields(
 			logrus.Fields{"resolver": config.Snapshotter.Proxy.Address.Resolver.Type},
@@ -79,15 +101,6 @@ func Run(config config.Config) error {
 		return err
 	}
 
-	var serviceDiscovery *discovery.ServiceDiscovery
-	if config.Snapshotter.Metrics.Enable {
-		sdPort := config.Snapshotter.Metrics.ServiceDiscoveryPort
-		serviceDiscovery = discovery.NewServiceDiscovery(config.Snapshotter.Metrics.Host, sdPort, cache)
-		group.Go(func() error {
-			return serviceDiscovery.Serve()
-		})
-	}
-
 	group.Go(func() error {
 		return grpcServer.Serve(listener)
 	})
@@ -100,10 +113,13 @@ func Run(config config.Config) error {
 			if err := snapshotter.Close(); err != nil {
 				log.G(ctx).WithError(err).Error("failed to close snapshotter")
 			}
-			if serviceDiscovery != nil {
+			if config.Snapshotter.Metrics.Enable {
 				if err := serviceDiscovery.Shutdown(ctx); err != nil {
 					log.G(ctx).WithError(err).Error("failed to shutdown service discovery server")
 				}
+				// Senders to this channel would panic if it is closed. However snapshotter.Close() will
+				// shutdown all metrics proxies and ensure there are no more senders over the channel.
+				monitor.Stop()
 			}
 		}()
 
@@ -140,13 +156,13 @@ func initResolver(config config.Config) (proxyaddress.Resolver, error) {
 const base10 = 10
 const bits32 = 32
 
-func initSnapshotter(ctx context.Context, config config.Config, cache cache.Cache) (snapshots.Snapshotter, error) {
+func initSnapshotter(ctx context.Context, config config.Config, cache cache.Cache, monitor *metrics.Monitor) (snapshots.Snapshotter, error) {
 	resolver, err := initResolver(config)
 	if err != nil {
 		return nil, err
 	}
 
-	newProxySnapshotterFunc := func(ctx context.Context, namespace string) (*proxy.RemoteSnapshotter, error) {
+	newRemoteSnapshotterFunc := func(ctx context.Context, namespace string) (*proxy.RemoteSnapshotter, error) {
 		r := resolver
 		response, err := r.Get(namespace)
 		if err != nil {
@@ -162,57 +178,48 @@ func initSnapshotter(ctx context.Context, config config.Config, cache cache.Cach
 		}
 
 		var metricsProxy *metrics.Proxy
-		// TODO (ginglis13): port management and lifecycle ties in to overall metrics proxy
-		// server lifecycle. tracked here: https://github.com/firecracker-microvm/firecracker-containerd/issues/607
-		portMap := make(map[int]bool)
 		if config.Snapshotter.Metrics.Enable {
-			metricsPort, err := strconv.ParseUint(response.MetricsPort, base10, bits32)
+			metricsProxy, err = initMetricsProxy(config, monitor, host, response.MetricsPort, response.Labels)
 			if err != nil {
 				return nil, err
 			}
-
-			metricsDialer := func(ctx context.Context, _, _ string) (net.Conn, error) {
-				return vsock.DialContext(ctx, host, uint32(metricsPort), vsock.WithLogger(log.G(ctx)))
-			}
-
-			portRange := config.Snapshotter.Metrics.PortRange
-			metricsHost := config.Snapshotter.Metrics.Host
-
-			// Assign a port for metrics proxy server.
-			ports := strings.Split(portRange, "-")
-			portRangeError := fmt.Errorf("invalid port range %s", portRange)
-			if len(ports) < 2 {
-				return nil, portRangeError
-			}
-			lower, err := strconv.Atoi(ports[0])
-			if err != nil {
-				return nil, portRangeError
-			}
-			upper, err := strconv.Atoi(ports[1])
-			if err != nil {
-				return nil, portRangeError
-			}
-			port := -1
-			for p := lower; p <= upper; p++ {
-				if _, ok := portMap[p]; !ok {
-					port = p
-					portMap[p] = true
-					break
-				}
-			}
-			if port < 0 {
-				return nil, fmt.Errorf("invalid port: %d", port)
-			}
-
-			metricsProxy, err = metrics.NewProxy(metricsHost, port, response.Labels, metricsDialer)
-			if err != nil {
-				return nil, err
-			}
-
 		}
 
-		return proxy.NewProxySnapshotter(ctx, host, snapshotterDialer, metricsProxy)
+		return proxy.NewRemoteSnapshotter(ctx, host, snapshotterDialer, metricsProxy)
 	}
 
-	return demux.NewSnapshotter(cache, newProxySnapshotterFunc), nil
+	return demux.NewSnapshotter(cache, newRemoteSnapshotterFunc), nil
+}
+
+func initMetricsProxyMonitor(portRange string) (*metrics.Monitor, error) {
+	ports := strings.Split(portRange, "-")
+	portRangeError := fmt.Errorf("invalid port range %s", portRange)
+	if len(ports) < 2 {
+		return nil, portRangeError
+	}
+	lower, err := strconv.Atoi(ports[0])
+	if err != nil {
+		return nil, portRangeError
+	}
+	upper, err := strconv.Atoi(ports[1])
+	if err != nil {
+		return nil, portRangeError
+	}
+
+	return metrics.NewMonitor(lower, upper)
+}
+
+func initMetricsProxy(config config.Config, monitor *metrics.Monitor, host, port string, labels map[string]string) (*metrics.Proxy, error) {
+	metricsPort, err := strconv.ParseUint(port, base10, bits32)
+	if err != nil {
+		return nil, err
+	}
+
+	metricsDialer := func(ctx context.Context, _, _ string) (net.Conn, error) {
+		return vsock.DialContext(ctx, host, uint32(metricsPort), vsock.WithLogger(log.G(ctx)))
+	}
+
+	metricsHost := config.Snapshotter.Metrics.Host
+
+	return metrics.NewProxy(metricsHost, monitor, labels, metricsDialer)
 }

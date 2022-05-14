@@ -26,6 +26,7 @@ import (
 	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/oci"
+	"github.com/firecracker-microvm/firecracker-containerd/internal/integtest"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	"github.com/firecracker-microvm/firecracker-containerd/runtime/firecrackeroci"
 	"github.com/firecracker-microvm/firecracker-containerd/volume"
@@ -36,7 +37,7 @@ import (
 const mib = 1024 * 1024
 
 func TestVolumes_Isolated(t *testing.T) {
-	prepareIntegTest(t)
+	integtest.Prepare(t)
 
 	const vmID = 0
 

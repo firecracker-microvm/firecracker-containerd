@@ -20,6 +20,7 @@ import (
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/namespaces"
+	"github.com/firecracker-microvm/firecracker-containerd/internal/integtest"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	fccontrol "github.com/firecracker-microvm/firecracker-containerd/proto/service/fccontrol/ttrpc"
 	"github.com/gofrs/uuid"
@@ -94,13 +95,13 @@ func benchmarkCreateAndStopVM(t *testing.T, vcpuCount uint32, kernelArgs string)
 }
 
 func TestPerf_CreateVM(t *testing.T) {
-	prepareIntegTest(t)
+	integtest.Prepare(t)
 
 	t.Run("vcpu=1", func(subtest *testing.T) {
-		benchmarkCreateAndStopVM(subtest, 1, defaultRuntimeConfig.KernelArgs)
+		benchmarkCreateAndStopVM(subtest, 1, integtest.DefaultRuntimeConfig.KernelArgs)
 	})
 	t.Run("vcpu=5", func(subtest *testing.T) {
-		benchmarkCreateAndStopVM(subtest, 1, defaultRuntimeConfig.KernelArgs)
+		benchmarkCreateAndStopVM(subtest, 1, integtest.DefaultRuntimeConfig.KernelArgs)
 	})
 	t.Run("firecracker-demo", func(subtest *testing.T) {
 		benchmarkCreateAndStopVM(

@@ -19,12 +19,13 @@ import (
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/oci"
+	"github.com/firecracker-microvm/firecracker-containerd/internal/integtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestDiskLimit_Isolated(t *testing.T) {
-	prepareIntegTest(t)
+	integtest.Prepare(t)
 
 	assert := assert.New(t)
 	require := require.New(t)

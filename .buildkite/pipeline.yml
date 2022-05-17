@@ -27,19 +27,14 @@ steps:
       - sudo install -d -o root -g buildkite-agent -m 775 "/local/artifacts/$BUILDKITE_BUILD_NUMBER"
       - cp tools/image-builder/rootfs.img "/local/artifacts/$BUILDKITE_BUILD_NUMBER/"
 
-  - wait
-
-    # Global concurrency has been set to one in the website configuration.
-    # With that we can now clean up loop devices before starting jobs to ensure
-    # we don't hit the loop device limit
+  # Just in case, list loopback devices to make sure there are no leaks.
+  # We probably should move that to metrics later.
   - label: ":lint-roller: loop device cleanup"
     agents:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
       distro: "${BUILDKITE_AGENT_META_DATA_DISTRO}"
       hostname: "${BUILDKITE_AGENT_META_DATA_HOSTNAME}"
-    command: 'sudo losetup -D'
-    concurrency: 1
-    concurrency_group: 'loop-device test'
+    command: 'sudo losetup -l'
 
   - wait
 

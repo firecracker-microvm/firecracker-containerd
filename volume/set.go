@@ -36,18 +36,20 @@ const (
 
 // Set is a set of volumes.
 type Set struct {
-	volumes map[string]*Volume
-	tempDir string
+	volumes   map[string]*Volume
+	tempDir   string
+	runtime   string
+	volumeDir string
 }
 
 // NewSet returns a new volume set.
-func NewSet() *Set {
-	return NewSetWithTempDir(os.TempDir())
+func NewSet(runtime string) *Set {
+	return NewSetWithTempDir(runtime, os.TempDir())
 }
 
 // NewSetWithTempDir returns a new volume set and creates all temporary files under the tempDir.
-func NewSetWithTempDir(tempDir string) *Set {
-	return &Set{volumes: make(map[string]*Volume), tempDir: tempDir}
+func NewSetWithTempDir(runtime, tempDir string) *Set {
+	return &Set{runtime: runtime, volumes: make(map[string]*Volume), tempDir: tempDir}
 }
 
 // Add a volume to the set.
@@ -94,6 +96,38 @@ func (vs *Set) createDiskImage(ctx context.Context, size int64) (path string, re
 
 func mountDiskImage(source, target string) error {
 	return mount.All([]mount.Mount{{Type: fsType, Source: source, Options: []string{"loop"}}}, target)
+}
+
+// PrepareDirectory creates a directory that have volumes.
+func (vs *Set) PrepareDirectory(ctx context.Context) (retErr error) {
+	dir, err := os.MkdirTemp(vs.tempDir, "Prepare")
+	if err != nil {
+		retErr = err
+		return
+	}
+	defer func() {
+		if retErr != nil {
+			err := os.Remove(dir)
+			if err != nil {
+				retErr = multierror.Append(retErr, err)
+			}
+		}
+	}()
+
+	for _, v := range vs.volumes {
+		path := filepath.Join(dir, v.name)
+		if v.hostPath == "" {
+			continue
+		}
+		err := fs.CopyDir(path, v.hostPath)
+		if err != nil {
+			retErr = fmt.Errorf("failed to copy volume %q: %w", v.name, err)
+			return
+		}
+	}
+
+	vs.volumeDir = dir
+	return
 }
 
 // PrepareDriveMount returns a FirecrackerDriveMount that could be used with CreateVM.
@@ -155,6 +189,7 @@ func (vs *Set) PrepareDriveMount(ctx context.Context, size int64) (dm *proto.Fir
 		FilesystemType: fsType,
 		IsWritable:     true,
 	}
+	vs.volumeDir = vmVolumePath
 	return
 }
 
@@ -186,7 +221,7 @@ func (vs *Set) WithMounts(mountpoints []Mount) (oci.SpecOpts, error) {
 		mounts = append(mounts, specs.Mount{
 			// TODO: for volumes that are provided by the guest (e.g. in-VM snapshotters)
 			// We may be able to have bind-mounts from in-VM snapshotters' mount points.
-			Source:      filepath.Join(vmVolumePath, v.name),
+			Source:      filepath.Join(vs.volumeDir, v.name),
 			Destination: mp.Destination,
 			Type:        "bind",
 			Options:     options,

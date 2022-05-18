@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/containerd/containerd"
@@ -39,11 +40,22 @@ const mib = 1024 * 1024
 func TestVolumes_Isolated(t *testing.T) {
 	integtest.Prepare(t)
 
+	runtimes := []string{firecrackerRuntime, "io.containerd.runc.v2"}
+
+	for _, rt := range runtimes {
+		t.Run(rt, func(t *testing.T) {
+			testVolumes(t, rt)
+		})
+	}
+}
+
+func testVolumes(t *testing.T, runtime string) {
 	const vmID = 0
+	testName := strings.ReplaceAll(t.Name(), "/", "_")
 
 	ctx := namespaces.WithNamespace(context.Background(), "default")
 
-	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(runtime))
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
 	defer client.Close()
 
@@ -54,7 +66,7 @@ func TestVolumes_Isolated(t *testing.T) {
 	require.NoError(t, err, "failed to create fccontrol client")
 
 	// Make volumes.
-	path, err := os.MkdirTemp("", t.Name())
+	path, err := os.MkdirTemp("", testName)
 	require.NoError(t, err)
 
 	f, err := os.Create(filepath.Join(path, "hello.txt"))
@@ -64,22 +76,27 @@ func TestVolumes_Isolated(t *testing.T) {
 	require.NoError(t, err)
 
 	const volName = "volume1"
-	vs := volume.NewSet()
+	vs := volume.NewSet(runtime)
 	vs.Add(volume.FromHost(volName, path))
-
-	// Since CreateVM doesn't take functional options, we need to explicitly create
-	// a FirecrackerDriveMount
-	mount, err := vs.PrepareDriveMount(ctx, 10*mib)
-	require.NoError(t, err)
 
 	containers := []string{"c1", "c2"}
 
-	_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
-		VMID:           strconv.Itoa(vmID),
-		ContainerCount: int32(len(containers)),
-		DriveMounts:    []*proto.FirecrackerDriveMount{mount},
-	})
-	require.NoError(t, err, "failed to create VM")
+	if runtime == firecrackerRuntime {
+		// Since CreateVM doesn't take functional options, we need to explicitly create
+		// a FirecrackerDriveMount
+		mount, err := vs.PrepareDriveMount(ctx, 10*mib)
+		require.NoError(t, err)
+
+		_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
+			VMID:           strconv.Itoa(vmID),
+			ContainerCount: int32(len(containers)),
+			DriveMounts:    []*proto.FirecrackerDriveMount{mount},
+		})
+		require.NoError(t, err, "failed to create VM")
+	} else {
+		err := vs.PrepareDirectory(ctx)
+		require.NoError(t, err)
+	}
 
 	// Make containers with the volume.
 	dir := "/path/in/container"
@@ -102,6 +119,8 @@ func TestVolumes_Isolated(t *testing.T) {
 			),
 		)
 		require.NoError(t, err, "failed to create container %s", name)
+
+		defer container.Delete(ctx, containerd.WithSnapshotCleanup)
 
 		var stdout, stderr bytes.Buffer
 
@@ -135,6 +154,7 @@ func TestVolumes_Isolated(t *testing.T) {
 		),
 	)
 	require.NoError(t, err, "failed to create container %s", name)
+	defer container.Delete(ctx, containerd.WithSnapshotCleanup)
 
 	var stdout, stderr bytes.Buffer
 	task, err := container.NewTask(ctx, cio.NewCreator(cio.WithStreams(nil, &stdout, &stderr)))

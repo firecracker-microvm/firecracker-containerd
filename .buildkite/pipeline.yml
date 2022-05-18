@@ -73,6 +73,20 @@ steps:
       - make test-in-docker
     timeout_in_minutes: 10
 
+  - label: ":running: snapshotter isolated tests"
+    agents:
+      queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
+      distro: "${BUILDKITE_AGENT_META_DATA_DISTRO}"
+      hostname: "${BUILDKITE_AGENT_META_DATA_HOSTNAME}"
+    env:
+      DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
+      NUMBER_OF_VMS: 10
+      EXTRAGOARGS: "-v -count=1 -race"
+    artifact_paths:
+      - "snapshotter/logs/*"
+    command:
+      - make -C snapshotter integ-test
+
   - label: ":running: runtime isolated tests"
     agents:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"

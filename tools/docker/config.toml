@@ -1,3 +1,8 @@
 imports = ["/etc/containerd/snapshotter/*.toml", "/etc/containerd/cri/*.toml"]
 [grpc]
   address = "/run/firecracker-containerd/containerd.sock"
+
+[proxy_plugins]
+  [proxy_plugins.demux]
+    type = "snapshot"
+    address = "/var/lib/demux-snapshotter/snapshotter.sock"

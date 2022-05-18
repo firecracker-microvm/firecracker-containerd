@@ -11,22 +11,23 @@ ENV FICD_LOG_DIR="/var/log/firecracker-containerd-test"
 ENV FICD_CONTAINERD_OUTFILE="${FICD_LOG_DIR}/containerd.out"
 
 RUN apt-get update && apt-get install --yes --no-install-recommends \
-		build-essential \
-		ca-certificates \
-		curl \
-		git \
-		iptables \
-		iperf3 \
-		libdevmapper-dev \
-		libseccomp-dev \
-		rng-tools # used for rngtest
+  build-essential \
+  ca-certificates \
+  curl \
+  git \
+  iptables \
+  iperf3 \
+  libdevmapper-dev \
+  libseccomp-dev \
+  tcpdump \
+  rng-tools # used for rngtest
 
 RUN mkdir -p \
-    /var/run/firecracker-containerd \
-    /src \
-    /srv/firecracker_containerd_tests \
-    ${FICD_LOG_DIR} \
-    /etc/cni/net.d
+  /var/run/firecracker-containerd \
+  /src \
+  /srv/firecracker_containerd_tests \
+  ${FICD_LOG_DIR} \
+  /etc/cni/net.d
 
 RUN wget https://github.com/containerd/containerd/releases/download/v1.6.4/containerd-1.6.4-linux-amd64.tar.gz && \
   tar zxvf containerd-1.6.4-linux-amd64.tar.gz -C /tmp/ && \
@@ -68,7 +69,10 @@ RUN --mount=type=bind,target=/src make -C /src \
   install-default-runc-jailer-config \
   install-test-cni-bins \
   install-test-rootfs \
+  install-stargz-rootfs \
   demo-network
+
+RUN --mount=type=bind,target=/src make -C /src/snapshotter install
 
 COPY tools/docker/entrypoint.sh /entrypoint
 ENTRYPOINT ["/entrypoint"]

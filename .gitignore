@@ -1,5 +1,6 @@
 .idea/
 bin/
+tmp/
 runtime/logs
 *stamp
 default-vmlinux.bin

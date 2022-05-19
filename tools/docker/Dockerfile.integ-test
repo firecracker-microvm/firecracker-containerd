@@ -46,7 +46,8 @@ RUN --mount=type=bind,target=/src \
   ln -sv /usr/local/bin/firecracker-ctr /usr/local/bin/ctr
 RUN containerd 2>/dev/null & \
   ctr --address /run/firecracker-containerd/containerd.sock content fetch docker.io/library/alpine:3.10.1 >/dev/null && \
-  ctr --address /run/firecracker-containerd/containerd.sock content fetch docker.io/mlabbe/iperf3:3.6-r0 >/dev/null
+  ctr --address /run/firecracker-containerd/containerd.sock content fetch docker.io/mlabbe/iperf3:3.6-r0 >/dev/null && \
+  ctr --address /run/firecracker-containerd/containerd.sock content fetch docker.io/library/postgres:14.3 >/dev/null
 
 # Install critest
 ENV VERSION="v1.23.0"

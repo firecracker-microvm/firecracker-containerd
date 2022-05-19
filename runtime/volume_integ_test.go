@@ -174,3 +174,111 @@ func testVolumes(t *testing.T, runtime string) {
 	assert.Equal(t, "hello from host\nhello from c1\nhello from c2\n", stdout.String())
 	assert.Equal(t, "", stderr.String())
 }
+
+func TestVolumeFrom_Isolated(t *testing.T) {
+	integtest.Prepare(t)
+
+	runtimes := []string{firecrackerRuntime, "io.containerd.runc.v2"}
+
+	for _, rt := range runtimes {
+		t.Run(rt, func(t *testing.T) {
+			testVolumeFrom(t, rt)
+		})
+	}
+}
+
+func testVolumeFrom(t *testing.T, runtime string) {
+	const vmID = 0
+
+	ctx := namespaces.WithNamespace(context.Background(), "default")
+
+	client, err := containerd.New(integtest.ContainerdSockPath, containerd.WithDefaultRuntime(runtime))
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
+	defer client.Close()
+
+	image, err := alpineImage(ctx, client, defaultSnapshotterName)
+	require.NoError(t, err, "failed to get alpine image")
+
+	fcClient, err := integtest.NewFCControlClient(integtest.ContainerdSockPath)
+	require.NoError(t, err, "failed to create fccontrol client")
+
+	// TODO: Create and host own images with non-empty volumes.
+	ref := "docker.io/library/postgres:14.3"
+	vs := volume.NewSet(runtime)
+	provider := volume.FromImage(client, ref, "vfc-snapshot", volume.WithSnapshotter(defaultSnapshotterName))
+	defer func() {
+		err := provider.Delete(ctx)
+		require.NoError(t, err)
+	}()
+	err = vs.AddFrom(ctx, provider)
+	require.NoError(t, err)
+
+	containers := []string{"c1", "c2"}
+
+	if runtime == firecrackerRuntime {
+		mount, err := vs.PrepareDriveMount(ctx, 10*mib)
+		require.NoError(t, err)
+
+		_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
+			VMID:           strconv.Itoa(vmID),
+			ContainerCount: int32(len(containers)),
+			DriveMounts:    []*proto.FirecrackerDriveMount{mount},
+		})
+		require.NoError(t, err, "failed to create VM")
+	} else {
+		err := vs.PrepareDirectory(ctx)
+		require.NoError(t, err)
+	}
+
+	// Make volmes from a container.
+	volumesFromContainerImage, err := vs.WithMountsFromProvider(ref)
+	require.NoError(t, err)
+
+	dir := "/var/lib/postgresql/data"
+
+	for _, name := range containers {
+		snapshotName := fmt.Sprintf("%s-snapshot", name)
+
+		sh := fmt.Sprintf("echo hello from %s >> %s/hello.txt", name, dir)
+		container, err := client.NewContainer(ctx,
+			name,
+			containerd.WithSnapshotter(defaultSnapshotterName),
+			containerd.WithNewSnapshot(snapshotName, image),
+			containerd.WithNewSpec(
+				firecrackeroci.WithVMID(strconv.Itoa(vmID)),
+				oci.WithProcessArgs("sh", "-c", sh),
+				oci.WithDefaultPathEnv,
+				volumesFromContainerImage,
+			),
+		)
+		require.NoError(t, err, "failed to create container %s", name)
+		defer container.Delete(ctx, containerd.WithSnapshotCleanup)
+
+		result, err := integtest.RunTask(ctx, container)
+		require.NoError(t, err)
+		assert.Equalf(t, uint32(0), result.ExitCode, "stdout=%q stderr=%q", result.Stdout, result.Stderr)
+	}
+
+	name := "cat"
+	snapshotName := fmt.Sprintf("%s-snapshot", name)
+	container, err := client.NewContainer(ctx,
+		name,
+		containerd.WithSnapshotter(defaultSnapshotterName),
+		containerd.WithNewSnapshot(snapshotName, image),
+		containerd.WithNewSpec(
+			firecrackeroci.WithVMID(strconv.Itoa(vmID)),
+			oci.WithProcessArgs("cat", fmt.Sprintf("%s/hello.txt", dir)),
+			oci.WithDefaultPathEnv,
+			volumesFromContainerImage,
+		),
+	)
+	require.NoError(t, err, "failed to create container %s", name)
+	defer container.Delete(ctx, containerd.WithSnapshotCleanup)
+
+	result, err := integtest.RunTask(ctx, container)
+	require.NoError(t, err)
+
+	assert.Equal(t, uint32(0), result.ExitCode)
+	assert.Equal(t, "hello from c1\nhello from c2\n", result.Stdout)
+	assert.Equal(t, "", result.Stderr)
+}

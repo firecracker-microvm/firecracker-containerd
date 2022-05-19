@@ -19,8 +19,9 @@ package volume
 
 // Volume is a special directory that could be shared between containers.
 type Volume struct {
-	name     string
-	hostPath string
+	name          string
+	hostPath      string
+	containerPath string
 }
 
 // New returns an empty volume.

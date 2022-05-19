@@ -28,7 +28,7 @@ taskworkflow: taskworkflow.go $(GOMOD) $(GOSUM)
 	go build -o taskworkflow taskworkflow.go
 
 remote-snapshotter:
-	make -C cmd/remote-snapshotter $@
+	$(MAKE) -C cmd/remote-snapshotter $@
 
 test:
 	go test ./... $(EXTRAGOARGS)
@@ -66,7 +66,7 @@ testtap:
 
 clean:
 	- rm -f taskworkflow
-	- make -C cmd/remote-snapshotter $@
+	- $(MAKE) -C cmd/remote-snapshotter $@
 
 distclean: clean
 	- rm -rf logs

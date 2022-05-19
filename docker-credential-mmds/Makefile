@@ -33,7 +33,9 @@ integ-test:
 install:
 
 clean:
-	rm docker-credential-mmds
+	- rm -f docker-credential-mmds
 
-.PHONY: all credential-helper clean test integ-test install
+distclean: clean
+
+.PHONY: all credential-helper clean distclean test integ-test install
 

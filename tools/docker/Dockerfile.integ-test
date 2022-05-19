@@ -28,6 +28,10 @@ RUN mkdir -p \
     ${FICD_LOG_DIR} \
     /etc/cni/net.d
 
+RUN wget https://github.com/containerd/containerd/releases/download/v1.6.4/containerd-1.6.4-linux-amd64.tar.gz && \
+  tar zxvf containerd-1.6.4-linux-amd64.tar.gz -C /tmp/ && \
+  install -D -o root -g root -m755 -t /usr/local/bin /tmp/bin/containerd-shim-runc-v2 && \
+  rm -rf containerd-1.6.4-linux-amd64.tar.gz /tmp/bin
 
 # Pull the images the tests need into the content store so we don't need internet
 # access during the tests themselves. This runs as a seperate step before the other

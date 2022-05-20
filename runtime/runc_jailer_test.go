@@ -33,9 +33,10 @@ import (
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 )
 
-func TestBuildJailedRootHandler_Isolated(t *testing.T) {
-	internal.RequiresIsolation(t)
+func TestBuildJailedRootHandler(t *testing.T) {
+	internal.RequiresRoot(t)
 	dir := t.TempDir()
+	ctx := context.Background()
 
 	kernelImagePath := filepath.Join(dir, "kernel-image")
 	kernelImageFd, err := os.OpenFile(kernelImagePath, os.O_CREATE, 0600)
@@ -61,7 +62,7 @@ func TestBuildJailedRootHandler_Isolated(t *testing.T) {
 		GID:            456,
 	}
 	vmID := "foo"
-	jailer, err := newRuncJailer(context.Background(), l, vmID, runcConfig, []*proto.FirecrackerDriveMount{})
+	jailer, err := newRuncJailer(ctx, l, vmID, runcConfig, []*proto.FirecrackerDriveMount{})
 	require.NoError(t, err, "failed to create runc jailer")
 
 	cfg := config.Config{
@@ -85,7 +86,7 @@ func TestBuildJailedRootHandler_Isolated(t *testing.T) {
 	machine := firecracker.Machine{
 		Cfg: machineConfig,
 	}
-	err = handler.Fn(context.Background(), &machine)
+	err = handler.Fn(ctx, &machine)
 	assert.NoError(t, err, "jailed handler failed to run")
 
 	_, err = os.Stat(filepath.Join(dir, "config.json"))
@@ -101,9 +102,9 @@ func TestBuildJailedRootHandler_Isolated(t *testing.T) {
 	assert.NoError(t, err, "failed to create root drive")
 }
 
-func TestMkdirAllWithPermissions_Isolated(t *testing.T) {
+func TestMkdirAllWithPermissions(t *testing.T) {
 	// requires isolation so we can change uid/gid of files
-	internal.RequiresIsolation(t)
+	internal.RequiresRoot(t)
 
 	tmpdir := t.TempDir()
 
@@ -132,9 +133,9 @@ func TestMkdirAllWithPermissions_Isolated(t *testing.T) {
 	assert.Equal(t, newgid, newlyCreatedPathStat.Sys().(*syscall.Stat_t).Gid)
 }
 
-func TestBindMountToJail_Isolated(t *testing.T) {
+func TestBindMountToJail(t *testing.T) {
 	// The user must be root to call chown.
-	internal.RequiresIsolation(t)
+	internal.RequiresRoot(t)
 
 	dir := t.TempDir()
 
@@ -167,9 +168,10 @@ func TestBindMountToJail_Isolated(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestFifoHandler_Isolated(t *testing.T) {
+func TestFifoHandler(t *testing.T) {
 	// Because of chown(2).
-	internal.RequiresIsolation(t)
+	internal.RequiresRoot(t)
+	ctx := context.Background()
 
 	testcases := []struct {
 		name        string
@@ -215,15 +217,8 @@ func TestFifoHandler_Isolated(t *testing.T) {
 			require.NoError(t, err)
 
 			handler := j.BuildLinkFifoHandler()
-			err = handler.Fn(
-				context.Background(),
-				&firecracker.Machine{
-					Cfg: firecracker.Config{
-						LogPath:     logPath,
-						MetricsPath: metricsPath,
-					},
-				},
-			)
+			machine := firecracker.Machine{Cfg: firecracker.Config{LogPath: logPath, MetricsPath: metricsPath}}
+			err = handler.Fn(ctx, &machine)
 			require.NoError(t, err)
 		})
 	}

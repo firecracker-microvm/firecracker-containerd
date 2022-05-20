@@ -67,6 +67,7 @@ steps:
       hostname: "${BUILDKITE_AGENT_META_DATA_HOSTNAME}"
     env:
       EXTRAGOARGS: "-v -count=1 -race"
+      DISABLE_ROOT_TESTS: 1
     command:
       - cp "/local/artifacts/$BUILDKITE_BUILD_NUMBER/rootfs.img" tools/image-builder/rootfs.img
       - make test-in-docker

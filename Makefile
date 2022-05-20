@@ -128,7 +128,7 @@ lint:
 	$(BINPATH)/golangci-lint run
 
 tidy:
-	go mod tidy
+	./tools/tidy.sh
 
 deps:
 	curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b $(BINPATH) v1.44.2

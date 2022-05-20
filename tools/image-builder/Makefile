@@ -55,7 +55,7 @@ define run_debootstrap =
 	touch $@
 endef
 
-all: rootfs.img rootfs-slow-boot.img rootfs-slow-reboot.img rootfs-no-agent.img
+all: rootfs.img rootfs-debug.img
 stargz: rootfs-stargz.img
 
 $(WORKDIR):
@@ -89,25 +89,12 @@ endif
 rootfs.img: files_common_stamp files_debootstrap_stamp files_ephemeral_stamp
 	mksquashfs "$(WORKDIR)" rootfs.img -noappend
 
-# Intentionally break the rootfs to simulate the case where CreateVM is taking longer than the minimal timeout
-rootfs-slow-boot.img: files_common_stamp files_debootstrap_stamp files_ephemeral_stamp
+rootfs-debug.img: files_common_stamp files_debootstrap_stamp files_ephemeral_stamp
 	rm -fr tmp/$@
 	cp -a "$(WORKDIR)" tmp/$@
-	echo 'ExecStartPre=/bin/sleep 30' >> tmp/$@/etc/systemd/system/firecracker-agent.service
-	mksquashfs tmp/$@ $@ -noappend
-
-# Intentionally break the rootfs to simulate the case where StopVM is taking longer than the minimal timeout
-rootfs-slow-reboot.img: files_common_stamp files_debootstrap_stamp files_ephemeral_stamp
-	rm -fr tmp/$@
-	cp -a "$(WORKDIR)" tmp/$@
-	echo 'ExecStop=/bin/sleep 60' >> tmp/$@/etc/systemd/system/firecracker-agent.service
-	mksquashfs tmp/$@ $@ -noappend
-
-rootfs-no-agent.img: files_common_stamp files_debootstrap_stamp files_ephemeral_stamp
-	rm -fr tmp/$@
-	cp -a "$(WORKDIR)" tmp/$@
-	rm tmp/$@/etc/systemd/system/firecracker-agent.service
-	rm tmp/$@/usr/local/bin/agent
+	mv tmp/$@/usr/local/bin/agent tmp/$@/usr/local/bin/agent.real
+	cp agent.sh tmp/$@/usr/local/bin/agent
+	ls -l tmp/$@/usr/local/bin
 	mksquashfs tmp/$@ $@ -noappend
 
 rootfs-stargz.img: WORKDIR    := $(addsuffix -stargz, $(WORKDIR))
@@ -141,7 +128,7 @@ builder_stamp:
 clean:
 	-rm -f *stamp
 	if [ $(UID) -eq 0 ]; then \
-	  rm -f rootfs.img rootfs-slow-boot.img rootfs-slow-reboot.img rootfs-stargz.img;\
+	  rm -f rootfs.img rootfs-debug.img rootfs-stargz.img;\
 	else \
 	  $(MAKE) clean-in-docker ;\
 	fi

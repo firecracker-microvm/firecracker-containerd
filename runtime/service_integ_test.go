@@ -1631,6 +1631,8 @@ func TestStopVM_Isolated(t *testing.T) {
 	image, err := alpineImage(ctx, client, defaultSnapshotterName)
 	require.NoError(err, "failed to get alpine image")
 
+	kernelArgs := integtest.DefaultRuntimeConfig.KernelArgs
+
 	tests := []struct {
 		name            string
 		createVMRequest proto.CreateVMRequest
@@ -1656,8 +1658,9 @@ func TestStopVM_Isolated(t *testing.T) {
 			withStopVM: true,
 
 			createVMRequest: proto.CreateVMRequest{
+				KernelArgs: kernelArgs + " failure=slow-reboot",
 				RootDrive: &proto.FirecrackerRootDrive{
-					HostPath: "/var/lib/firecracker-containerd/runtime/rootfs-slow-reboot.img",
+					HostPath: "/var/lib/firecracker-containerd/runtime/rootfs-debug.img",
 				},
 			},
 			stopFunc: func(ctx context.Context, fcClient fccontrol.FirecrackerService, req proto.CreateVMRequest) {
@@ -1692,8 +1695,9 @@ func TestStopVM_Isolated(t *testing.T) {
 			withStopVM: true,
 
 			createVMRequest: proto.CreateVMRequest{
+				KernelArgs: kernelArgs + " failure=slow-reboot",
 				RootDrive: &proto.FirecrackerRootDrive{
-					HostPath: "/var/lib/firecracker-containerd/runtime/rootfs-slow-reboot.img",
+					HostPath: "/var/lib/firecracker-containerd/runtime/rootfs-debug.img",
 				},
 			},
 			stopFunc: func(ctx context.Context, fcClient fccontrol.FirecrackerService, req proto.CreateVMRequest) {
@@ -2137,6 +2141,8 @@ func TestCreateVM_Isolated(t *testing.T) {
 	fcClient, err := newFCControlClient(containerdSockPath)
 	require.NoError(t, err, "failed to create ttrpc client")
 
+	kernelArgs := integtest.DefaultRuntimeConfig.KernelArgs
+
 	type subtest struct {
 		name                    string
 		request                 proto.CreateVMRequest
@@ -2155,11 +2161,12 @@ func TestCreateVM_Isolated(t *testing.T) {
 			stopVM: true,
 		},
 		{
-			name: "Error Case",
+			name: "No Agent",
 			request: proto.CreateVMRequest{
 				TimeoutSeconds: 5,
+				KernelArgs:     kernelArgs + " failure=no-agent",
 				RootDrive: &proto.FirecrackerRootDrive{
-					HostPath: "/var/lib/firecracker-containerd/runtime/rootfs-no-agent.img",
+					HostPath: "/var/lib/firecracker-containerd/runtime/rootfs-debug.img",
 				},
 			},
 			validate: func(t *testing.T, err error) {
@@ -2175,8 +2182,9 @@ func TestCreateVM_Isolated(t *testing.T) {
 		{
 			name: "Slow Root FS",
 			request: proto.CreateVMRequest{
+				KernelArgs: kernelArgs + " failure=slow-boot",
 				RootDrive: &proto.FirecrackerRootDrive{
-					HostPath: "/var/lib/firecracker-containerd/runtime/rootfs-slow-boot.img",
+					HostPath: "/var/lib/firecracker-containerd/runtime/rootfs-debug.img",
 				},
 			},
 			validate: func(t *testing.T, err error) {
@@ -2189,8 +2197,9 @@ func TestCreateVM_Isolated(t *testing.T) {
 		{
 			name: "Slow Root FS and Longer Timeout",
 			request: proto.CreateVMRequest{
+				KernelArgs: kernelArgs + " failure=slow-boot",
 				RootDrive: &proto.FirecrackerRootDrive{
-					HostPath: "/var/lib/firecracker-containerd/runtime/rootfs-slow-boot.img",
+					HostPath: "/var/lib/firecracker-containerd/runtime/rootfs-debug.img",
 				},
 				TimeoutSeconds: 60,
 			},

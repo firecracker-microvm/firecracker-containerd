@@ -171,6 +171,7 @@ test-in-docker:
 		--env HOME=/tmp \
 		--env GOPATH=/go \
 		--env EXTRAGOARGS="$(EXTRAGOARGS)" \
+		--env DISABLE_ROOT_TESTS=$(DISABLE_ROOT_TESTS) \
 		--entrypoint=/bin/bash \
 		--workdir /src \
 		$(FIRECRACKER_CONTAINERD_BUILDER_IMAGE) \

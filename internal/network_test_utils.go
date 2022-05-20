@@ -20,6 +20,7 @@ import (
 	"net"
 	"net/http"
 	"os/exec"
+	"testing"
 
 	"github.com/miekg/dns"
 	"github.com/pkg/errors"
@@ -55,7 +56,7 @@ type LocalNetworkServices interface {
 // "domain" to that ip. The HTTP server will serve a pages at
 // paths defined in the keys of "webpages", with the content set
 // in the values of that map.
-func NewLocalNetworkServices(webpages map[string]string) (LocalNetworkServices, error) {
+func NewLocalNetworkServices(t *testing.T, webpages map[string]string) (LocalNetworkServices, error) {
 	testDevName := "testdev0"
 	ipAddr := "10.0.0.1"
 	ipCidr := fmt.Sprintf("%s/32", ipAddr)
@@ -64,16 +65,28 @@ func NewLocalNetworkServices(webpages map[string]string) (LocalNetworkServices, 
 	if err != nil {
 		return nil, errors.Wrapf(err, `failed to add tun dev, "ip" command output: %s`, string(output))
 	}
+	cleanupTap := func() {
+		exec.Command("ip", "tuntap", "del", testDevName, "mode", "tun").Run()
+	}
+	t.Cleanup(cleanupTap)
 
 	output, err = exec.Command("ip", "addr", "add", ipCidr, "dev", testDevName).CombinedOutput()
 	if err != nil {
 		return nil, errors.Wrapf(err, `failed to assign ip to tun dev, "ip" command output: %s`, string(output))
 	}
+	cleanupAddress := func() {
+		exec.Command("ip", "addr", "del", ipCidr, "dev", testDevName).Run()
+	}
+	t.Cleanup(cleanupAddress)
 
 	output, err = exec.Command("ip", "link", "set", "dev", testDevName, "up").CombinedOutput()
 	if err != nil {
 		return nil, errors.Wrapf(err, `failed to set tun dev up, "ip" command output: %s`, string(output))
 	}
+	cleanupLink := func() {
+		exec.Command("ip", "link", "del", "dev", testDevName).Run()
+	}
+	t.Cleanup(cleanupLink)
 
 	return &localNetworkServices{
 		domain:   domainName,

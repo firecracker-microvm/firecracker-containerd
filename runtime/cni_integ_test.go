@@ -64,7 +64,7 @@ func TestCNISupport_Isolated(t *testing.T) {
 		webpages[vmID] = fmt.Sprintf("Hello, my virtual machine %s\n", vmID)
 	}
 
-	localServices, err := internal.NewLocalNetworkServices(webpages)
+	localServices, err := internal.NewLocalNetworkServices(t, webpages)
 	require.NoError(t, err, "failed to create local network test services")
 
 	cniNetworkName := "fcnet-test"
@@ -170,7 +170,7 @@ func TestAutomaticCNISupport_Isolated(t *testing.T) {
 		webpages[taskID] = fmt.Sprintf("Hello, my task %s\n", taskID)
 	}
 
-	localServices, err := internal.NewLocalNetworkServices(webpages)
+	localServices, err := internal.NewLocalNetworkServices(t, webpages)
 	require.NoError(t, err, "failed to create local network test services")
 
 	cniNetworkName := "fcnet"

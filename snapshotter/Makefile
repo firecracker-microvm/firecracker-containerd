@@ -30,6 +30,8 @@ http-address-resolver: $(SOURCES) $(GOMOD) $(GOSUM)
 test:
 	go test ./... $(EXTRAGOARGS)
 
+integ-test:
+
 clean:
 	- rm -f demux-snapshotter
 	- rm -f http-resolver

@@ -143,6 +143,8 @@ type service struct {
 	driveMountStubs          []MountableStubDrive
 	exitAfterAllTasksDeleted bool // exit the VM and shim when all tasks are deleted
 
+	blockDeviceTasks map[string]struct{}
+
 	cleanupErr  error
 	cleanupOnce sync.Once
 
@@ -216,9 +218,10 @@ func NewService(shimCtx context.Context, id string, remotePublisher shim.Publish
 
 		config: cfg,
 
-		vmReady: make(chan struct{}),
-		jailer:  newNoopJailer(shimCtx, logger, shimDir),
-		fifos:   make(map[string]map[string]cio.Config),
+		vmReady:          make(chan struct{}),
+		jailer:           newNoopJailer(shimCtx, logger, shimDir),
+		blockDeviceTasks: make(map[string]struct{}),
+		fifos:            make(map[string]map[string]cio.Config),
 	}
 
 	s.startEventForwarders(remotePublisher)
@@ -1188,6 +1191,7 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 			logger.WithError(err).Error()
 			return nil, err
 		}
+		s.blockDeviceTasks[request.ID] = struct{}{}
 	}
 
 	ociConfigBytes, err := hostBundleDir.OCIConfig().Bytes()
@@ -1278,11 +1282,14 @@ func (s *service) Delete(requestCtx context.Context, req *taskAPI.DeleteRequest)
 	if req.ExecID != "" {
 		return resp, nil
 	}
+
 	var result *multierror.Error
-	// Trying to release stub drive for further reuse
-	err = s.containerStubHandler.Release(requestCtx, req.ID, s.driveMountClient, s.machine)
-	if err != nil {
-		result = multierror.Append(result, errors.Wrapf(err, "failed to release stub drive for container: %s", req.ID))
+
+	if _, contains := s.blockDeviceTasks[req.ID]; contains {
+		// Trying to release stub drive for further reuse
+		if err := s.containerStubHandler.Release(requestCtx, req.ID, s.driveMountClient, s.machine); err != nil {
+			result = multierror.Append(errors.Wrapf(err, "failed to release stub drive for container: %s", req.ID))
+		}
 	}
 
 	// Otherwise, delete the container

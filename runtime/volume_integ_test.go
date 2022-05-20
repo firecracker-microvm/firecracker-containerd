@@ -55,14 +55,14 @@ func testVolumes(t *testing.T, runtime string) {
 
 	ctx := namespaces.WithNamespace(context.Background(), "default")
 
-	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(runtime))
-	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	client, err := containerd.New(integtest.ContainerdSockPath, containerd.WithDefaultRuntime(runtime))
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
 	defer client.Close()
 
 	image, err := alpineImage(ctx, client, defaultSnapshotterName)
 	require.NoError(t, err, "failed to get alpine image")
 
-	fcClient, err := newFCControlClient(containerdSockPath)
+	fcClient, err := integtest.NewFCControlClient(integtest.ContainerdSockPath)
 	require.NoError(t, err, "failed to create fccontrol client")
 
 	// Make volumes.

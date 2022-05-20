@@ -57,13 +57,13 @@ func createAndStopVM(
 }
 
 func benchmarkCreateAndStopVM(t *testing.T, vcpuCount uint32, kernelArgs string) {
-	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
-	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	client, err := containerd.New(integtest.ContainerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
 	defer client.Close()
 
 	ctx := namespaces.WithNamespace(context.Background(), "default")
 
-	fcClient, err := newFCControlClient(containerdSockPath)
+	fcClient, err := integtest.NewFCControlClient(integtest.ContainerdSockPath)
 	require.NoError(t, err, "failed to create fccontrol client")
 
 	request := proto.CreateVMRequest{

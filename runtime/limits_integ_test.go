@@ -32,8 +32,8 @@ func TestDiskLimit_Isolated(t *testing.T) {
 
 	ctx := namespaces.WithNamespace(context.Background(), "default")
 
-	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
-	require.NoError(err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	client, err := containerd.New(integtest.ContainerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
 	defer client.Close()
 
 	image, err := alpineImage(ctx, client, defaultSnapshotterName)
@@ -57,11 +57,11 @@ func TestDiskLimit_Isolated(t *testing.T) {
 		require.NoError(err, "failed to delete a container")
 	}()
 
-	result, err := runTask(ctx, container)
+	result, err := integtest.RunTask(ctx, container)
 	require.NoError(err, "failed to create a container")
 
-	assert.Equal(uint32(1), result.exitCode, "writing 2GB must fail")
+	assert.Equal(uint32(1), result.ExitCode, "writing 2GB must fail")
 	assert.Equal(`952+0 records in
 951+0 records out
-`, result.stderr, "but it must be able to write ~1024MB")
+`, result.Stderr, "but it must be able to write ~1024MB")
 }

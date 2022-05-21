@@ -13,15 +13,8 @@
 package main
 
 import (
-	"bytes"
-	"context"
 	"strings"
 
-	"github.com/containerd/containerd"
-	"github.com/containerd/containerd/cio"
-	"github.com/pkg/errors"
-
-	"github.com/firecracker-microvm/firecracker-containerd/firecracker-control/client"
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/integtest"
 )
@@ -44,54 +37,4 @@ var testNameToVMIDReplacer = strings.NewReplacer("/", "-", "_", "-")
 
 func testNameToVMID(s string) string {
 	return testNameToVMIDReplacer.Replace(s)
-}
-
-type commandResult struct {
-	stdout   string
-	stderr   string
-	exitCode uint32
-}
-
-func runTask(ctx context.Context, c containerd.Container) (*commandResult, error) {
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-
-	task, err := c.NewTask(ctx, cio.NewCreator(cio.WithStreams(nil, &stdout, &stderr)))
-	if err != nil {
-		return nil, err
-	}
-
-	exitCh, err := task.Wait(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	err = task.Start(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	select {
-	case exitStatus := <-exitCh:
-		if err := exitStatus.Error(); err != nil {
-			return nil, err
-		}
-
-		_, err := task.Delete(ctx)
-		if err != nil {
-			return nil, err
-		}
-
-		return &commandResult{
-			stdout:   stdout.String(),
-			stderr:   stderr.String(),
-			exitCode: exitStatus.ExitCode(),
-		}, nil
-	case <-ctx.Done():
-		return nil, errors.New("context cancelled")
-	}
-}
-
-func newFCControlClient(socket string) (*client.Client, error) {
-	return client.New(socket + ".ttrpc")
 }

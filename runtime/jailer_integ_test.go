@@ -94,8 +94,8 @@ func fsSafeTestName(tb testing.TB) string {
 func testJailer(t *testing.T, jailerConfig *proto.JailerConfig) {
 	require := require.New(t)
 
-	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
-	require.NoError(err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	client, err := containerd.New(integtest.ContainerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
 	defer client.Close()
 
 	ctx := namespaces.WithNamespace(context.Background(), "default")
@@ -140,7 +140,7 @@ func testJailer(t *testing.T, jailerConfig *proto.JailerConfig) {
 		require.NoError(err, "failed to chown %q", additionalDrive)
 	}
 
-	fcClient, err := newFCControlClient(containerdSockPath)
+	fcClient, err := integtest.NewFCControlClient(integtest.ContainerdSockPath)
 	require.NoError(err)
 
 	_, err = fcClient.CreateVM(ctx, &request)
@@ -202,8 +202,8 @@ func TestJailerCPUSet_Isolated(t *testing.T) {
 
 func testAttachBlockDevice(t *testing.T, jailerConfig *proto.JailerConfig) {
 	require := require.New(t)
-	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
-	require.NoError(err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	client, err := containerd.New(integtest.ContainerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
 	defer client.Close()
 
 	ctx := namespaces.WithNamespace(context.Background(), "default")
@@ -211,7 +211,7 @@ func testAttachBlockDevice(t *testing.T, jailerConfig *proto.JailerConfig) {
 	image, err := alpineImage(ctx, client, defaultSnapshotterName)
 	require.NoError(err, "failed to get alpine image")
 
-	fcClient, err := newFCControlClient(containerdSockPath)
+	fcClient, err := integtest.NewFCControlClient(integtest.ContainerdSockPath)
 	require.NoError(err)
 
 	vmID := testNameToVMID(t.Name())

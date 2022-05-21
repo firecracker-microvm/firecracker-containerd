@@ -76,22 +76,12 @@ const (
 
 	defaultBalloonMemory         = int64(66)
 	defaultStatsPollingIntervals = int64(1)
-
-	containerdSockPathEnvVar = "CONTAINERD_SOCKET"
 )
 
 var (
 	findShim        = findProcWithName(shimProcessName)
 	findFirecracker = findProcWithName(firecrackerProcessName)
-
-	containerdSockPath = "/run/firecracker-containerd/containerd.sock"
 )
-
-func init() {
-	if v := os.Getenv(containerdSockPathEnvVar); v != "" {
-		containerdSockPath = v
-	}
-}
 
 // Images are presumed by the isolated tests to have already been pulled
 // into the content store. This will just unpack the layers into an
@@ -123,8 +113,8 @@ func TestShimExitsUponContainerDelete_Isolated(t *testing.T) {
 
 	ctx := namespaces.WithNamespace(context.Background(), defaultNamespace)
 
-	client, err := containerd.New(containerdSockPath)
-	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	client, err := containerd.New(integtest.ContainerdSockPath)
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
 	defer client.Close()
 
 	image, err := alpineImage(ctx, client, defaultSnapshotterName)
@@ -299,8 +289,8 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 
 	testCtx := namespaces.WithNamespace(context.Background(), defaultNamespace)
 
-	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
-	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	client, err := containerd.New(integtest.ContainerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
 	defer client.Close()
 
 	image, err := alpineImage(testCtx, client, defaultSnapshotterName)
@@ -355,7 +345,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 				MachineCfg: &proto.FirecrackerMachineConfiguration{MemSizeMib: 1024},
 			}
 
-			fcClient, err := newFCControlClient(containerdSockPath)
+			fcClient, err := integtest.NewFCControlClient(integtest.ContainerdSockPath)
 			if err != nil {
 				return err
 			}
@@ -679,7 +669,7 @@ func TestLongUnixSocketPath_Isolated(t *testing.T) {
 
 	ctx := namespaces.WithNamespace(context.Background(), namespace)
 
-	fcClient, err := newFCControlClient(containerdSockPath)
+	fcClient, err := integtest.NewFCControlClient(integtest.ContainerdSockPath)
 	require.NoError(t, err, "failed to create fccontrol client")
 
 	subtests := []struct {
@@ -771,8 +761,8 @@ func TestStubBlockDevices_Isolated(t *testing.T) {
 
 	ctx := namespaces.WithNamespace(context.Background(), "default")
 
-	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
-	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	client, err := containerd.New(integtest.ContainerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
 	defer client.Close()
 
 	image, err := alpineImage(ctx, client, defaultSnapshotterName)
@@ -785,7 +775,7 @@ func TestStubBlockDevices_Isolated(t *testing.T) {
 	containerName := fmt.Sprintf("%s-%d", t.Name(), time.Now().UnixNano())
 	snapshotName := fmt.Sprintf("%s-snapshot", containerName)
 
-	fcClient, err := newFCControlClient(containerdSockPath)
+	fcClient, err := integtest.NewFCControlClient(integtest.ContainerdSockPath)
 	require.NoError(t, err, "failed to create fccontrol client")
 
 	_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
@@ -909,7 +899,7 @@ func testCreateContainerWithSameName(t *testing.T, vmID string) {
 
 	// Explicitly specify Container Count = 2 to workaround #230
 	if len(vmID) != 0 {
-		fcClient, err := newFCControlClient(containerdSockPath)
+		fcClient, err := integtest.NewFCControlClient(integtest.ContainerdSockPath)
 		require.NoError(t, err, "failed to create fccontrol client")
 
 		_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
@@ -921,8 +911,8 @@ func testCreateContainerWithSameName(t *testing.T, vmID string) {
 
 	withNewSpec := containerd.WithNewSpec(oci.WithProcessArgs("echo", "hello"), firecrackeroci.WithVMID(vmID), oci.WithDefaultPathEnv)
 
-	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
-	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	client, err := containerd.New(integtest.ContainerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
 	defer client.Close()
 
 	image, err := alpineImage(ctx, client, defaultSnapshotterName)
@@ -997,8 +987,8 @@ func TestStubDriveReserveAndReleaseByContainers_Isolated(t *testing.T) {
 
 	ctx := namespaces.WithNamespace(context.Background(), "default")
 
-	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
-	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	client, err := containerd.New(integtest.ContainerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
 	defer client.Close()
 
 	image, err := alpineImage(ctx, client, defaultSnapshotterName)
@@ -1047,10 +1037,10 @@ func TestDriveMount_Isolated(t *testing.T) {
 	ctx, cancel := context.WithTimeout(namespaces.WithNamespace(context.Background(), defaultNamespace), testTimeout)
 	defer cancel()
 
-	ctrdClient, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
-	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	ctrdClient, err := containerd.New(integtest.ContainerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
 
-	fcClient, err := newFCControlClient(containerdSockPath)
+	fcClient, err := integtest.NewFCControlClient(integtest.ContainerdSockPath)
 	require.NoError(t, err, "failed to create fccontrol client")
 
 	image, err := alpineImage(ctx, ctrdClient, defaultSnapshotterName)
@@ -1221,7 +1211,7 @@ func TestDriveMountFails_Isolated(t *testing.T) {
 	ctx, cancel := context.WithTimeout(namespaces.WithNamespace(context.Background(), defaultNamespace), testTimeout)
 	defer cancel()
 
-	fcClient, err := newFCControlClient(containerdSockPath)
+	fcClient, err := integtest.NewFCControlClient(integtest.ContainerdSockPath)
 	require.NoError(t, err, "failed to create fccontrol client")
 
 	testImgHostPath := internal.CreateFSImg(ctx, t, "ext4", internal.FSImgFile{
@@ -1286,11 +1276,11 @@ func TestUpdateVMMetadata_Isolated(t *testing.T) {
 	ctx, cancel := context.WithTimeout(namespaces.WithNamespace(context.Background(), defaultNamespace), testTimeout)
 	defer cancel()
 
-	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
-	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	client, err := containerd.New(integtest.ContainerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
 	defer client.Close()
 
-	fcClient, err := newFCControlClient(containerdSockPath)
+	fcClient, err := integtest.NewFCControlClient(integtest.ContainerdSockPath)
 	require.NoError(t, err, "failed to create fccontrol client")
 
 	cniNetworkName := "fcnet-test"
@@ -1403,7 +1393,7 @@ func TestMemoryBalloon_Isolated(t *testing.T) {
 			defer deleteTapDevice(ctx, tapName)
 			require.NoError(t, err, "failed to create tap device for vm %d", vmID)
 
-			fcClient, err := newFCControlClient(containerdSockPath)
+			fcClient, err := integtest.NewFCControlClient(integtest.ContainerdSockPath)
 			require.NoError(t, err, "failed to create fccontrol client")
 
 			_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
@@ -1485,8 +1475,8 @@ func TestRandomness_Isolated(t *testing.T) {
 	ctx, cancel := context.WithTimeout(namespaces.WithNamespace(context.Background(), defaultNamespace), 60*time.Second)
 	defer cancel()
 
-	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
-	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	client, err := containerd.New(integtest.ContainerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
 	defer client.Close()
 
 	image, err := alpineImage(ctx, client, defaultSnapshotterName)
@@ -1622,8 +1612,8 @@ func TestStopVM_Isolated(t *testing.T) {
 	require := require.New(t)
 	assert := assert.New(t)
 
-	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
-	require.NoError(err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	client, err := containerd.New(integtest.ContainerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
 	defer client.Close()
 
 	ctx := namespaces.WithNamespace(context.Background(), "default")
@@ -1764,7 +1754,7 @@ func TestStopVM_Isolated(t *testing.T) {
 		},
 	}
 
-	fcClient, err := newFCControlClient(containerdSockPath)
+	fcClient, err := integtest.NewFCControlClient(integtest.ContainerdSockPath)
 	require.NoError(err)
 
 	for _, test := range tests {
@@ -1844,8 +1834,8 @@ func TestStopVM_Isolated(t *testing.T) {
 func TestExec_Isolated(t *testing.T) {
 	integtest.Prepare(t)
 
-	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
-	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	client, err := containerd.New(integtest.ContainerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
 	defer client.Close()
 
 	ctx := namespaces.WithNamespace(context.Background(), "default")
@@ -1853,7 +1843,7 @@ func TestExec_Isolated(t *testing.T) {
 	image, err := alpineImage(ctx, client, defaultSnapshotterName)
 	require.NoError(t, err, "failed to get alpine image")
 
-	fcClient, err := newFCControlClient(containerdSockPath)
+	fcClient, err := integtest.NewFCControlClient(integtest.ContainerdSockPath)
 	require.NoError(t, err, "failed to create ttrpc client")
 
 	vmID := testNameToVMID(t.Name())
@@ -1958,8 +1948,8 @@ func TestEvents_Isolated(t *testing.T) {
 	integtest.Prepare(t)
 	require := require.New(t)
 
-	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
-	require.NoError(err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	client, err := containerd.New(integtest.ContainerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
 	defer client.Close()
 
 	ctx := namespaces.WithNamespace(context.Background(), "default")
@@ -1974,7 +1964,7 @@ func TestEvents_Isolated(t *testing.T) {
 
 	vmID := testNameToVMID(t.Name())
 
-	fcClient, err := newFCControlClient(containerdSockPath)
+	fcClient, err := integtest.NewFCControlClient(integtest.ContainerdSockPath)
 	require.NoError(err, "failed to create ttrpc client")
 
 	_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{VMID: vmID})
@@ -2041,8 +2031,8 @@ func findProcWithName(name string) func(context.Context, *process.Process) (bool
 func TestOOM_Isolated(t *testing.T) {
 	integtest.Prepare(t)
 
-	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
-	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	client, err := containerd.New(integtest.ContainerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
 	defer client.Close()
 
 	ctx := namespaces.WithNamespace(context.Background(), "default")
@@ -2057,7 +2047,7 @@ func TestOOM_Isolated(t *testing.T) {
 
 	vmID := testNameToVMID(t.Name())
 
-	fcClient, err := newFCControlClient(containerdSockPath)
+	fcClient, err := integtest.NewFCControlClient(integtest.ContainerdSockPath)
 	require.NoError(t, err, "failed to create ttrpc client")
 
 	_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{VMID: vmID})
@@ -2132,13 +2122,13 @@ func requireNonEmptyFifo(t testing.TB, path string) {
 
 func TestCreateVM_Isolated(t *testing.T) {
 	integtest.Prepare(t)
-	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
-	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	client, err := containerd.New(integtest.ContainerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
 	defer client.Close()
 
 	ctx := namespaces.WithNamespace(context.Background(), "default")
 
-	fcClient, err := newFCControlClient(containerdSockPath)
+	fcClient, err := integtest.NewFCControlClient(integtest.ContainerdSockPath)
 	require.NoError(t, err, "failed to create ttrpc client")
 
 	kernelArgs := integtest.DefaultRuntimeConfig.KernelArgs
@@ -2267,13 +2257,13 @@ func TestCreateVM_Isolated(t *testing.T) {
 func TestPauseResume_Isolated(t *testing.T) {
 	integtest.Prepare(t)
 
-	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
-	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	client, err := containerd.New(integtest.ContainerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
 	defer client.Close()
 
 	ctx := namespaces.WithNamespace(context.Background(), "default")
 
-	fcClient, err := newFCControlClient(containerdSockPath)
+	fcClient, err := integtest.NewFCControlClient(integtest.ContainerdSockPath)
 	require.NoError(t, err, "failed to create ttrpc client")
 
 	subtests := []struct {
@@ -2389,8 +2379,8 @@ func TestPauseResume_Isolated(t *testing.T) {
 func TestAttach_Isolated(t *testing.T) {
 	integtest.Prepare(t)
 
-	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
-	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	client, err := containerd.New(integtest.ContainerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
 	defer client.Close()
 
 	ctx := namespaces.WithNamespace(context.Background(), "default")
@@ -2492,8 +2482,8 @@ func (errorBuffer) Write(b []byte) (int, error) {
 func TestBrokenPipe_Isolated(t *testing.T) {
 	integtest.Prepare(t)
 
-	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
-	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	client, err := containerd.New(integtest.ContainerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
 	defer client.Close()
 
 	ctx := namespaces.WithNamespace(context.Background(), "default")

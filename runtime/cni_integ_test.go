@@ -32,7 +32,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/firecracker-microvm/firecracker-containerd/config"
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/integtest"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
@@ -45,11 +44,11 @@ func TestCNISupport_Isolated(t *testing.T) {
 	ctx, cancel := context.WithTimeout(namespaces.WithNamespace(context.Background(), defaultNamespace), testTimeout)
 	defer cancel()
 
-	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
-	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	client, err := containerd.New(integtest.ContainerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
 	defer client.Close()
 
-	fcClient, err := newFCControlClient(containerdSockPath)
+	fcClient, err := integtest.NewFCControlClient(integtest.ContainerdSockPath)
 	require.NoError(t, err, "failed to create fccontrol client")
 
 	image, err := alpineImage(ctx, client, defaultSnapshotterName)
@@ -148,14 +147,14 @@ func TestCNISupport_Isolated(t *testing.T) {
 }
 
 func TestAutomaticCNISupport_Isolated(t *testing.T) {
-	integtest.Prepare(t, withDefaultNetwork())
+	integtest.Prepare(t, integtest.WithDefaultNetwork())
 
 	testTimeout := 120 * time.Second
 	ctx, cancel := context.WithTimeout(namespaces.WithNamespace(context.Background(), defaultNamespace), testTimeout)
 	defer cancel()
 
-	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
-	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	client, err := containerd.New(integtest.ContainerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
 	defer client.Close()
 
 	image, err := alpineImage(ctx, client, defaultSnapshotterName)
@@ -226,11 +225,11 @@ func TestCNIPlugin_Performance(t *testing.T) {
 	ctx, cancel := context.WithTimeout(namespaces.WithNamespace(context.Background(), defaultNamespace), testTimeout)
 	defer cancel()
 
-	client, err := containerd.New(containerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
-	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", containerdSockPath)
+	client, err := containerd.New(integtest.ContainerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
 	defer client.Close()
 
-	fcClient, err := newFCControlClient(containerdSockPath)
+	fcClient, err := integtest.NewFCControlClient(integtest.ContainerdSockPath)
 	require.NoError(t, err, "failed to create ttrpc client")
 
 	image, err := iperf3Image(ctx, client, defaultSnapshotterName)
@@ -360,19 +359,6 @@ func writeCNIConf(path, chainedPluginName, networkName, nameserver string) error
     }
   ]
 }`, networkName, nameserver, chainedPluginName)), 0644)
-}
-
-func withDefaultNetwork() func(c *config.Config) {
-	return func(c *config.Config) {
-		c.DefaultNetworkInterfaces = []proto.FirecrackerNetworkInterface{
-			{
-				CNIConfig: &proto.CNIConfiguration{
-					NetworkName:   "fcnet",
-					InterfaceName: "veth0",
-				},
-			},
-		}
-	}
 }
 
 func runCommand(ctx context.Context, t *testing.T, name string, args ...string) {

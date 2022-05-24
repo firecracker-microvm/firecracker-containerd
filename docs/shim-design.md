@@ -263,7 +263,7 @@ The proposed solution is to
 13. **If there IS already a shim managing this microVM**, then the new shim process will tell containerd about the pre-existing shim, to which any further requests should be sent
 14. **If there IS already a shim managing this microVM**, then the new shim can exit as the pre-existing one will handle further requests
 15. **If there IS already a shim managing this microVM**, the pre-existing shim will receive the incoming CreateTaskRequest from containerd
-16. **If there IS already a shim managing this microVM**, the pre-exisiting shim will forward the CreateTaskRequest to the Guest Agent, which will create the container and return a response
+16. **If there IS already a shim managing this microVM**, the pre-existing shim will forward the CreateTaskRequest to the Guest Agent, which will create the container and return a response
 17. **If there IS already a shim managing this microVM**, the pre-existing shim will forward the response back to containerd
 18. The final CreateTaskResponse is returned back to the orchestrator
 

@@ -128,7 +128,7 @@ Linux provides different capabilities for preventing mutation to files:
   sealing enforces stronger permissions preventing modification, truncation,
   growth or changes in the permission set.
 
-Firecracker also provides some capabilitie:
+Firecracker also provides some capabilities:
 
 * Attaching the device as read-only - The emulated device visible to the microVM
   is presented as read-only, and the Firecracker VMM should prevent

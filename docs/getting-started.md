@@ -28,7 +28,7 @@ You need to have the following things in order to use firecracker-containerd:
   [ "$(uname) $(uname -m)" = "Linux x86_64" ] \
     || err="ERROR: your system is not Linux x86_64."; \
   [ -r /dev/kvm ] && [ -w /dev/kvm ] \
-    || err="$err\nERROR: /dev/kvm is innaccessible."; \
+    || err="$err\nERROR: /dev/kvm is inaccessible."; \
   (( $(uname -r | cut -d. -f1)*1000 + $(uname -r | cut -d. -f2) >= 4014 )) \
     || err="$err\nERROR: your kernel version ($(uname -r)) is too old."; \
   dmesg | grep -i "hypervisor detected" \
@@ -322,7 +322,7 @@ CNI-configured networks offer the quickest way to get VMs up and running with
 connectivity between MicroVMs and to external networks. Setting one up requires
 a few extra steps in addition to the above Setup steps.
 
-Production deployments should be sure to choose a network configuration suitale
+Production deployments should be sure to choose a network configuration suitable
 to the specifics of the environment and workloads being hosting, with particular
 attention being given to network isolation between tasks.
 

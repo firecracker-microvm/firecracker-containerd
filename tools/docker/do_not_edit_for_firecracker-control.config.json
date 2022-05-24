@@ -1,3 +1,4 @@
 {
-  "shim_base_dir": "/srv/firecracker_containerd_tests"
+  "shim_base_dir": "/srv/firecracker_containerd_tests",
+  "log_levels": ["info"]
 }

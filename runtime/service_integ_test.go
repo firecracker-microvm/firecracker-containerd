@@ -242,14 +242,7 @@ func createTapDevice(ctx context.Context, tapName string) error {
 func TestMultipleVMs_Isolated(t *testing.T) {
 	integtest.Prepare(t)
 
-	// This test starts multiple VMs and some may hit firecracker-containerd's
-	// default timeout. So overriding the timeout to wait longer.
-	// One hour should be enough to start a VM, regardless of the load of
-	// the underlying host.
-	const createVMTimeout = time.Hour
-
-	netns, err := ns.GetCurrentNS()
-	require.NoError(t, err, "failed to get a namespace")
+	var err error
 
 	// numberOfVmsEnvName = NUMBER_OF_VMS ENV and is configurable from buildkite
 	numberOfVms := defaultNumberOfVms
@@ -257,7 +250,47 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 		numberOfVms, err = strconv.Atoi(str)
 		require.NoError(t, err, "failed to get NUMBER_OF_VMS env")
 	}
-	t.Logf("TestMultipleVMs_Isolated: will run %d vm's", numberOfVms)
+	t.Logf("TestMultipleVMs_Isolated: will run up to %d VMs", numberOfVms)
+
+	// We should be able to run 10 VMs without any issues.
+	if numberOfVms <= 10 {
+		testMultipleVMs(t, 10)
+		return
+	}
+
+	// We have issues running 100 VMs (see #581).
+	// Incrementally increase the number of VMs to find the breaking point.
+	for i := 10; i <= numberOfVms; i += 10 {
+		success := t.Run(fmt.Sprintf("VMs=%d", i), func(t *testing.T) {
+			testMultipleVMs(t, i)
+		})
+		if !success {
+			// If running N VMs doesn't work, no point to go further.
+			return
+		}
+	}
+}
+
+type Event int
+
+const (
+	Created Event = iota
+	Stopped
+)
+
+func testMultipleVMs(t *testing.T, count int) {
+	// This test starts multiple VMs and some may hit firecracker-containerd's
+	// default timeout. So overriding the timeout to wait longer.
+	// One hour should be enough to start a VM, regardless of the load of
+	// the underlying host.
+	const createVMTimeout = 1 * time.Hour
+
+	// Apparently writing a lot from Firecracker's serial console blocks VMs.
+	// https://github.com/firecracker-microvm/firecracker/blob/v1.1.0/docs/prod-host-setup.md
+	kernelArgs := integtest.DefaultRuntimeConfig.KernelArgs + " 8250.nr_uarts=0 quiet loglevel=1"
+
+	netns, err := ns.GetCurrentNS()
+	require.NoError(t, err, "failed to get a namespace")
 
 	tapPrefix := os.Getenv(tapPrefixEnvName)
 
@@ -278,6 +311,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 		},
 		{
 			MaxContainers: 3,
+
 			JailerConfig: &proto.JailerConfig{
 				UID:        300000,
 				GID:        300000,
@@ -299,31 +333,48 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 	cfg, err := config.LoadConfig("")
 	require.NoError(t, err, "failed to load config")
 
+	eventCh := make(chan Event)
+
+	// Creating tap devices without goroutines somehow stabilize this test.
+	var devices []string
+
+	defer func() {
+		for _, dev := range devices {
+			err := deleteTapDevice(testCtx, dev)
+			assert.NoError(t, err)
+		}
+	}()
+
+	for i := 0; i < count; i++ {
+		tapName := fmt.Sprintf("%stap%d", tapPrefix, i)
+		err := createTapDevice(testCtx, tapName)
+		if err != nil {
+			t.Errorf("failed to create %q: %s", tapName, err)
+			return
+		}
+		devices = append(devices, tapName)
+	}
+
 	// This test spawns separate VMs in parallel and ensures containers are spawned within each expected VM. It asserts each
 	// container ends up in the right VM by assigning each VM a network device with a unique mac address and having each container
 	// print the mac address it sees inside its VM.
 	vmEg, vmEgCtx := errgroup.WithContext(testCtx)
-	for i := 0; i < numberOfVms; i++ {
+	for i, device := range devices {
 		caseTypeNumber := i % len(cases)
 		vmID := i
+		device := device
 		c := cases[caseTypeNumber]
 
 		f := func(ctx context.Context) error {
 			containerCount := c.MaxContainers
 			jailerConfig := c.JailerConfig
 
-			tapName := fmt.Sprintf("%stap%d", tapPrefix, vmID)
-			err := createTapDevice(ctx, tapName)
-			if err != nil {
-				return err
-			}
-			defer deleteTapDevice(ctx, tapName)
-
 			rootfsPath := cfg.RootDrive
 
 			vmIDStr := strconv.Itoa(vmID)
 			req := &proto.CreateVMRequest{
-				VMID: vmIDStr,
+				KernelArgs: kernelArgs,
+				VMID:       vmIDStr,
 				RootDrive: &proto.FirecrackerRootDrive{
 					HostPath: rootfsPath,
 				},
@@ -331,7 +382,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 					{
 						AllowMMDS: true,
 						StaticConfig: &proto.StaticNetworkConfiguration{
-							HostDevName: tapName,
+							HostDevName: device,
 							MacAddress:  vmIDtoMacAddr(uint(vmID)),
 						},
 					},
@@ -349,6 +400,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 			if err != nil {
 				return err
 			}
+			defer fcClient.Close()
 
 			resp, createVMErr := fcClient.CreateVM(ctx, req)
 			if createVMErr != nil {
@@ -365,6 +417,7 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 					createVMErr,
 				)
 			}
+			eventCh <- Created
 
 			containerEg, containerCtx := errgroup.WithContext(vmEgCtx)
 			for containerID := 0; containerID < int(containerCount); containerID++ {
@@ -425,10 +478,8 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 			}
 
 			_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: strconv.Itoa(vmID), TimeoutSeconds: 5})
-			if err != nil {
-				return err
-			}
-			return nil
+			eventCh <- Stopped
+			return err
 		}
 
 		vmEg.Go(func() error {
@@ -440,8 +491,26 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 		})
 	}
 
-	err = vmEg.Wait()
-	require.NoError(t, err)
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	var created int
+	for stopped := 0; stopped < count; {
+		select {
+		case <-vmEgCtx.Done():
+			require.NoError(t, vmEg.Wait())
+			return
+		case e := <-eventCh:
+			switch e {
+			case Created:
+				created++
+			case Stopped:
+				stopped++
+			}
+		case <-ticker.C:
+			t.Logf("created=%d/%d stopped=%d/%d", created, count, stopped, count)
+		}
+	}
 }
 
 func testMultipleExecs(
@@ -478,7 +547,7 @@ func testMultipleExecs(
 	if err != nil {
 		return err
 	}
-	defer newContainer.Delete(ctx)
+	defer newContainer.Delete(ctx, containerd.WithSnapshotCleanup)
 
 	var taskStdout bytes.Buffer
 	var taskStderr bytes.Buffer

@@ -32,7 +32,10 @@ func VSockDialConnector(timeout time.Duration, udsPath string, port uint32) IOCo
 			timeoutCtx, cancel := context.WithTimeout(procCtx, timeout)
 			defer cancel()
 
-			conn, err := vsock.DialContext(timeoutCtx, udsPath, port, vsock.WithLogger(logger))
+			conn, err := vsock.DialContext(
+				timeoutCtx, udsPath, port,
+				vsock.WithLogger(logger), vsock.WithRetryInterval(1*time.Second),
+			)
 			returnCh <- IOConnectorResult{
 				ReadWriteCloser: conn,
 				Err:             err,

@@ -9,6 +9,7 @@ ENV DEBIAN_FRONTEND="noninteractive"
 ARG FIRECRACKER_TARGET=x86_64-unknown-linux-musl
 ENV FICD_LOG_DIR="/var/log/firecracker-containerd-test"
 ENV FICD_CONTAINERD_OUTFILE="${FICD_LOG_DIR}/containerd.out"
+ENV CRITEST_VERSION="v1.23.0"
 
 RUN apt-get update && apt-get install --yes --no-install-recommends \
 		build-essential \
@@ -28,10 +29,13 @@ RUN mkdir -p \
     ${FICD_LOG_DIR} \
     /etc/cni/net.d
 
-RUN wget https://github.com/containerd/containerd/releases/download/v1.6.4/containerd-1.6.4-linux-amd64.tar.gz && \
-  tar zxvf containerd-1.6.4-linux-amd64.tar.gz -C /tmp/ && \
+RUN \
+  curl -sL https://github.com/containerd/containerd/releases/download/v1.6.4/containerd-1.6.4-linux-amd64.tar.gz | tar zxvf - -C /tmp/ && \
   install -D -o root -g root -m755 -t /usr/local/bin /tmp/bin/containerd-shim-runc-v2 && \
-  rm -rf containerd-1.6.4-linux-amd64.tar.gz /tmp/bin
+  rm -rf containerd-1.6.4-linux-amd64.tar.gz /tmp/bin && \
+  curl -sL https://github.com/kubernetes-sigs/cri-tools/releases/download/$CRITEST_VERSION/critest-$CRITEST_VERSION-linux-amd64.tar.gz | tar zxvf - -C /tmp/ && \
+  install -D -o root -g root -m755 -t /usr/local/bin /tmp/critest && \
+  rm -f critest-$CRITEST_VERSION-linux-amd64.tar.gz /tmp/critest
 
 # Pull the images the tests need into the content store so we don't need internet
 # access during the tests themselves. This runs as a seperate step before the other
@@ -47,13 +51,6 @@ RUN --mount=type=bind,target=/src \
 RUN containerd 2>/dev/null & \
   ctr --address /run/firecracker-containerd/containerd.sock content fetch docker.io/library/alpine:3.10.1 >/dev/null && \
   ctr --address /run/firecracker-containerd/containerd.sock content fetch docker.io/mlabbe/iperf3:3.6-r0 >/dev/null
-
-# Install critest
-ENV VERSION="v1.23.0"
-RUN wget https://github.com/kubernetes-sigs/cri-tools/releases/download/$VERSION/critest-$VERSION-linux-amd64.tar.gz && \
-  tar zxvf critest-$VERSION-linux-amd64.tar.gz -C /tmp/ && \
-  install -D -o root -g root -m755 -t /usr/local/bin /tmp/critest && \
-  rm -f critest-$VERSION-linux-amd64.tar.gz /tmp/critest
 
 # Install everything we need in this image. Due to the bind-mount, if the host has already
 # up-to-date versions of everything built, this step will be a very quick copy

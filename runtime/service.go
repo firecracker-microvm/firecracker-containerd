@@ -551,6 +551,7 @@ func (s *service) createVM(requestCtx context.Context, request *proto.CreateVMRe
 	if err != nil {
 		return errors.Wrapf(err, "failed to build VM configuration")
 	}
+	log.G(requestCtx).Infof("XXX machineConfig = %+v", s.machineConfig)
 
 	opts := []firecracker.Opt{}
 
@@ -609,7 +610,11 @@ func (s *service) createVM(requestCtx context.Context, request *proto.CreateVMRe
 	s.logger.Infof("calling agent %s", firecracker.StringValue(info.State))
 	conn, err := vsock.DialContext(
 		requestCtx, relVSockPath, defaultVsockPort,
-		vsock.WithLogger(s.logger), vsock.WithRetryInterval(5*time.Second),
+		vsock.WithLogger(s.logger),
+		vsock.WithRetryInterval(5*time.Second),
+		vsock.WithDialTimeout(5*time.Second),
+		vsock.WithConnectionMsgTimeout(5*time.Second),
+		vsock.WithAckMsgTimeout(60*time.Second),
 	)
 	if err != nil {
 		return errors.Wrapf(err, "failed to dial the VM over vsock")

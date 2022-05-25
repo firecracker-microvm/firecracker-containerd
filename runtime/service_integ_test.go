@@ -240,7 +240,9 @@ func createTapDevice(ctx context.Context, tapName string) error {
 }
 
 func TestMultipleVMs_Isolated(t *testing.T) {
-	integtest.Prepare(t)
+	integtest.Prepare(t, func(c *config.Config) {
+		c.LogLevels = []string{"error"}
+	})
 
 	var err error
 

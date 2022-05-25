@@ -35,13 +35,10 @@ version = 2
     [plugins."io.containerd.grpc.v1.cri".cni]
       bin_dir = "/opt/cni/bin"
       conf_dir = "/etc/cni/net.d"
-
-[debug]
-  level = "debug"
 EOF
 
 touch ${FICD_CONTAINERD_OUTFILE}
 chmod a+rw ${FICD_CONTAINERD_OUTFILE}
-/usr/local/bin/containerd --log-level debug &>> ${FICD_CONTAINERD_OUTFILE} &
+/usr/local/bin/containerd --log-level info &>> ${FICD_CONTAINERD_OUTFILE} &
 
 exec /bin/bash -c "$@"

@@ -28,7 +28,7 @@ var DefaultRuntimeConfig = config.Config{
 	KernelImagePath:       "/var/lib/firecracker-containerd/runtime/default-vmlinux.bin",
 	KernelArgs:            "ro console=ttyS0 noapic reboot=k panic=1 pci=off nomodules systemd.unified_cgroup_hierarchy=0 systemd.journald.forward_to_console systemd.log_color=false systemd.unit=firecracker.target init=/sbin/overlay-init",
 	RootDrive:             "/var/lib/firecracker-containerd/runtime/default-rootfs.img",
-	LogLevels:             []string{"debug"},
+	LogLevels:             []string{"info"},
 	ShimBaseDir:           ShimBaseDir(),
 	JailerConfig: config.JailerConfig{
 		RuncBinaryPath: "/usr/local/bin/runc",

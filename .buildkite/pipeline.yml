@@ -97,8 +97,8 @@ steps:
       hostname: "${BUILDKITE_AGENT_META_DATA_HOSTNAME}"
     env:
       DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
-      NUMBER_OF_VMS: 100
-      EXTRAGOARGS: "-v -count=1 -race -timeout=1h"
+      NUMBER_OF_VMS: 50
+      EXTRAGOARGS: "-v -count=1 -race"
       FICD_DM_VOLUME_GROUP: fcci-vg
     artifact_paths:
       - "runtime/logs/*"

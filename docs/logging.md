@@ -1,4 +1,4 @@
-## Logging Congiguration
+## Logging Configuration
 --
 
 firecracker-containerd allows for users to specify per application/library
@@ -31,7 +31,7 @@ firecracker-runtime.json file.
 | firecracker:debug              | Most verbose log level for firecracker                                          |
 | firecracker:output             | Logs Firecracker's stdout and stderr. Can be used with other firecracker levels |
 | firecracker-go-sdk:error       | Logs any errors information in firecracker-go-sdk                               |
-| firecracker-go-sdk:warning     | Logs any errors or warnings in firracker-go-sdk                                 |
+| firecracker-go-sdk:warning     | Logs any errors or warnings in firecracker-go-sdk                               |
 | firecracker-go-sdk:info        | Logs any errors, warnings, or infos in firecracker-go-sdk                       |
 | firecracker-go-sdk:debug       | Most verbose logging for firecracker-go-sdk                                     |
 | firecracker-containerd:error   | Logs any error information during the container/vm lifecycle                    |

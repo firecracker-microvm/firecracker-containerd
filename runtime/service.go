@@ -599,8 +599,18 @@ func (s *service) createVM(requestCtx context.Context, request *proto.CreateVMRe
 		return errors.Wrapf(err, "failed to start the VM")
 	}
 
-	s.logger.Info("calling agent")
-	conn, err := vsock.DialContext(requestCtx, relVSockPath, defaultVsockPort, vsock.WithLogger(s.logger))
+	info, err := s.machine.DescribeInstanceInfo(s.shimCtx)
+	if err != nil {
+		return err
+	}
+
+	time.Sleep(5 * time.Second)
+
+	s.logger.Infof("calling agent %s", firecracker.StringValue(info.State))
+	conn, err := vsock.DialContext(
+		requestCtx, relVSockPath, defaultVsockPort,
+		vsock.WithLogger(s.logger), vsock.WithRetryInterval(5*time.Second),
+	)
 	if err != nil {
 		return errors.Wrapf(err, "failed to dial the VM over vsock")
 	}

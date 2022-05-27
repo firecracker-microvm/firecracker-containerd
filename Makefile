@@ -121,6 +121,7 @@ distclean: clean
 	docker volume rm -f $(GO_CACHE_VOLUME_NAME)
 	$(call rmi-if-exists,$(FIRECRACKER_CONTAINERD_TEST_IMAGE):$(DOCKER_IMAGE_TAG))
 	$(call rmi-if-exists,localhost/$(PROTO_BUILDER_NAME):$(DOCKER_IMAGE_TAG))
+	$(FIRECRACKER_DIR)/tools/devtool distclean
 
 lint:
 	$(BINPATH)/ltag -t ./.headers -excludes "tools $(SUBMODULES)" -check -v
@@ -340,9 +341,7 @@ $(FIRECRACKER_BIN): $(FIRECRACKER_DIR)/Cargo.toml
 
 .PHONY: firecracker-clean
 firecracker-clean:
-	- $(FIRECRACKER_DIR)/tools/devtool distclean
-	- rm $(FIRECRACKER_BIN)
-	- rm $(KERNEL_BIN)
+	rm -f $(FIRECRACKER_BIN) $(KERNEL_BIN)
 
 .PHONY: kernel
 kernel: $(KERNEL_BIN)

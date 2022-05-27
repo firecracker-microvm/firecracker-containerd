@@ -26,6 +26,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -242,9 +243,12 @@ func createTapDevice(ctx context.Context, tapName string) error {
 func TestMultipleVMs_Isolated(t *testing.T) {
 	integtest.Prepare(t)
 
-	var err error
+	// Seems there is a deadlock (see #581).
+	// Cancel if running VMs takes more than 5 minutes.
+	const timeout = 5 * time.Minute
 
 	// numberOfVmsEnvName = NUMBER_OF_VMS ENV and is configurable from buildkite
+	var err error
 	numberOfVms := defaultNumberOfVms
 	if str := os.Getenv(numberOfVmsEnvName); str != "" {
 		numberOfVms, err = strconv.Atoi(str)
@@ -252,39 +256,28 @@ func TestMultipleVMs_Isolated(t *testing.T) {
 	}
 	t.Logf("TestMultipleVMs_Isolated: will run up to %d VMs", numberOfVms)
 
-	// We should be able to run 10 VMs without any issues.
-	if numberOfVms <= 10 {
-		testMultipleVMs(t, 10)
+	const delta = 10
+
+	if numberOfVms <= delta {
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		testMultipleVMs(ctx, t, numberOfVms)
 		return
 	}
 
-	// We have issues running 100 VMs (see #581).
-	// Incrementally increase the number of VMs to find the breaking point.
-	for i := 10; i <= numberOfVms; i += 10 {
-		success := t.Run(fmt.Sprintf("VMs=%d", i), func(t *testing.T) {
-			testMultipleVMs(t, i)
+	// Seems the instability isn't correlating with the number of VMs.
+	// Having a failure in N VMs doesn't necessary mean running more than N VMs
+	// doesn't work at all.
+	for i := delta; i <= numberOfVms; i += delta {
+		t.Run(fmt.Sprintf("VMs=%d", i), func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
+			defer cancel()
+			testMultipleVMs(ctx, t, i)
 		})
-		if !success {
-			// If running N VMs doesn't work, no point to go further.
-			return
-		}
 	}
 }
 
-type Event int
-
-const (
-	Created Event = iota
-	Stopped
-)
-
-func testMultipleVMs(t *testing.T, count int) {
-	// This test starts multiple VMs and some may hit firecracker-containerd's
-	// default timeout. So overriding the timeout to wait longer.
-	// One hour should be enough to start a VM, regardless of the load of
-	// the underlying host.
-	const createVMTimeout = 1 * time.Hour
-
+func testMultipleVMs(ctx context.Context, t *testing.T, count int) {
 	// Apparently writing a lot from Firecracker's serial console blocks VMs.
 	// https://github.com/firecracker-microvm/firecracker/blob/v1.1.0/docs/prod-host-setup.md
 	kernelArgs := integtest.DefaultRuntimeConfig.KernelArgs + " 8250.nr_uarts=0 quiet loglevel=1"
@@ -321,7 +314,7 @@ func testMultipleVMs(t *testing.T, count int) {
 		},
 	}
 
-	testCtx := namespaces.WithNamespace(context.Background(), defaultNamespace)
+	testCtx := namespaces.WithNamespace(ctx, defaultNamespace)
 
 	client, err := containerd.New(integtest.ContainerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
@@ -333,14 +326,17 @@ func testMultipleVMs(t *testing.T, count int) {
 	cfg, err := config.LoadConfig("")
 	require.NoError(t, err, "failed to load config")
 
-	eventCh := make(chan Event)
-
 	// Creating tap devices without goroutines somehow stabilize this test.
 	var devices []string
 
 	defer func() {
+		// It needs a new context to delete all of the devices
+		// even if the incoming context is being cancelled.
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+
 		for _, dev := range devices {
-			err := deleteTapDevice(testCtx, dev)
+			err := deleteTapDevice(ctx, dev)
 			assert.NoError(t, err)
 		}
 	}()
@@ -354,6 +350,11 @@ func testMultipleVMs(t *testing.T, count int) {
 		}
 		devices = append(devices, tapName)
 	}
+
+	var (
+		created int64
+		stopped int64
+	)
 
 	// This test spawns separate VMs in parallel and ensures containers are spawned within each expected VM. It asserts each
 	// container ends up in the right VM by assigning each VM a network device with a unique mac address and having each container
@@ -389,7 +390,7 @@ func testMultipleVMs(t *testing.T, count int) {
 				},
 				ContainerCount: containerCount,
 				JailerConfig:   jailerConfig,
-				TimeoutSeconds: uint32(createVMTimeout / time.Second),
+				TimeoutSeconds: 60,
 				// In tests, our in-VM agent has Go's race detector,
 				// which makes the agent resource-hoggy than its production build
 				// So the default VM size (128MB) is too small.
@@ -417,7 +418,7 @@ func testMultipleVMs(t *testing.T, count int) {
 					createVMErr,
 				)
 			}
-			eventCh <- Created
+			atomic.AddInt64(&created, 1)
 
 			containerEg, containerCtx := errgroup.WithContext(vmEgCtx)
 			for containerID := 0; containerID < int(containerCount); containerID++ {
@@ -478,7 +479,7 @@ func testMultipleVMs(t *testing.T, count int) {
 			}
 
 			_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: strconv.Itoa(vmID), TimeoutSeconds: 5})
-			eventCh <- Stopped
+			atomic.AddInt64(&stopped, 1)
 			return err
 		}
 
@@ -494,23 +495,22 @@ func testMultipleVMs(t *testing.T, count int) {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
-	var created int
-	for stopped := 0; stopped < count; {
+loop:
+	for {
 		select {
 		case <-vmEgCtx.Done():
-			require.NoError(t, vmEg.Wait())
-			return
-		case e := <-eventCh:
-			switch e {
-			case Created:
-				created++
-			case Stopped:
-				stopped++
-			}
+			break loop
 		case <-ticker.C:
-			t.Logf("created=%d/%d stopped=%d/%d", created, count, stopped, count)
+			c := atomic.LoadInt64(&created)
+			s := atomic.LoadInt64(&stopped)
+			t.Logf("%s: created=%d/%d stopped=%d/%d", time.Now(), c, count, s, count)
+			if s == int64(count) {
+				break loop
+			}
 		}
 	}
+
+	require.NoError(t, vmEg.Wait())
 }
 
 func testMultipleExecs(

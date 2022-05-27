@@ -129,10 +129,11 @@ func NewProxy(host string, monitor *Monitor, labels map[string]string, dialer fu
 				DialContext: dialer,
 			},
 		},
-		server: nil,
-		host:   host,
-		Port:   port,
-		Labels: labels,
+		server:  nil,
+		host:    host,
+		Port:    port,
+		Labels:  labels,
+		monitor: monitor,
 	}, nil
 }
 

@@ -19,4 +19,4 @@ SuccessAction=reboot
 
 [Service]
 Type=simple
-ExecStart=socat VSOCK-LISTEN:10001,reuseaddr,fork TCP:localhost:8234
+ExecStart=socat VSOCK-LISTEN:10002,reuseaddr,fork TCP:localhost:8234

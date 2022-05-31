@@ -16,6 +16,7 @@ package cache
 import (
 	"context"
 
+	"github.com/containerd/containerd/snapshots"
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux/proxy"
 )
 
@@ -27,6 +28,9 @@ type Cache interface {
 	// Retrieves the snapshotter from the underlying cache using the provided
 	// fetch function if the snapshotter is not currently cached.
 	Get(ctx context.Context, key string, fetch SnapshotterProvider) (*proxy.RemoteSnapshotter, error)
+
+	// WalkAll applies the provided function across all cached snapshotters.
+	WalkAll(ctx context.Context, fn snapshots.WalkFunc, filters ...string) error
 
 	// Closes the snapshotter and removes it from the cache.
 	Evict(key string) error

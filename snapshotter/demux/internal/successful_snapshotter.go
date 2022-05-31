@@ -73,3 +73,8 @@ func (s *SuccessfulSnapshotter) Walk(ctx context.Context, fn snapshots.WalkFunc,
 func (s *SuccessfulSnapshotter) Close() error {
 	return nil
 }
+
+// Cleanup mocks a successful remote call with a nil error.
+func (s *SuccessfulSnapshotter) Cleanup(ctx context.Context) error {
+	return nil
+}

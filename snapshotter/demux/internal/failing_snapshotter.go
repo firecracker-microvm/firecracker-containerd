@@ -74,3 +74,8 @@ func (s *FailingSnapshotter) Walk(ctx context.Context, fn snapshots.WalkFunc, fi
 func (s *FailingSnapshotter) Close() error {
 	return errors.New("mock Close error from remote snapshotter")
 }
+
+// Cleanup mocks a failing remote call with a non-nil error.
+func (s *FailingSnapshotter) Cleanup(ctx context.Context) error {
+	return errors.New("mock Cleanup error from remote snapshotter")
+}

@@ -73,6 +73,14 @@ func NewRemoteSnapshotter(ctx context.Context, address string,
 	return &RemoteSnapshotter{proxy.NewSnapshotter(snapshotsapi.NewSnapshotsClient(gRPCConn), address), metricsProxy}, nil
 }
 
+// Cleanup implements the Cleaner interface for snapshotters.
+// This enables asynchronous resource cleanup by remote snapshotters.
+//
+// See https://github.com/containerd/containerd/blob/v1.6.4/snapshots/snapshotter.go
+func (rs *RemoteSnapshotter) Cleanup(ctx context.Context) error {
+	return rs.Snapshotter.(snapshots.Cleaner).Cleanup(ctx)
+}
+
 // MetricsProxyPort returns the metrics proxy port for a remote snapshotter.
 func (rs *RemoteSnapshotter) MetricsProxyPort() int {
 	return rs.metricsProxy.Port

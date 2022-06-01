@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 
 	"github.com/containerd/containerd/containers"
+	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/oci"
 	"github.com/containerd/continuity/fs"
@@ -37,9 +38,22 @@ const (
 // Set is a set of volumes.
 type Set struct {
 	volumes   map[string]*Volume
+	providers map[string][]Mount
 	tempDir   string
 	runtime   string
 	volumeDir string
+}
+
+// Provider provides volumes from different sources.
+type Provider interface {
+	// Name of the provider.
+	Name() string
+
+	// CreateVolumesUnder creates volumes under the given directory.
+	CreateVolumesUnder(ctx context.Context, tempDir string) ([]*Volume, error)
+
+	// Delete all resources made by the provider.
+	Delete(ctx context.Context) error
 }
 
 // NewSet returns a new volume set.
@@ -49,12 +63,45 @@ func NewSet(runtime string) *Set {
 
 // NewSetWithTempDir returns a new volume set and creates all temporary files under the tempDir.
 func NewSetWithTempDir(runtime, tempDir string) *Set {
-	return &Set{runtime: runtime, volumes: make(map[string]*Volume), tempDir: tempDir}
+	return &Set{
+		runtime:   runtime,
+		providers: make(map[string][]Mount),
+		volumes:   make(map[string]*Volume),
+		tempDir:   tempDir,
+	}
 }
 
 // Add a volume to the set.
 func (vs *Set) Add(v *Volume) {
-	vs.volumes[v.name] = v
+	vs.volumes[fmt.Sprintf("named_%s", v.name)] = v
+}
+
+// AddFrom adds volumes from the given provider.
+func (vs *Set) AddFrom(ctx context.Context, vp Provider) error {
+	if _, exists := vs.providers[vp.Name()]; exists {
+		return fmt.Errorf("failed to add %q: %w", vp.Name(), errdefs.ErrAlreadyExists)
+	}
+	dir, err := os.MkdirTemp(vs.tempDir, "AddFrom")
+	if err != nil {
+		return err
+	}
+	volumes, err := vp.CreateVolumesUnder(ctx, dir)
+	if err != nil {
+		return err
+	}
+
+	mounts := make([]Mount, 0, len(volumes))
+	for _, v := range volumes {
+		if v.name == "" {
+			index := len(vs.volumes)
+			v.name = fmt.Sprintf("anon_%d", index)
+		}
+		vs.volumes[v.name] = v
+
+		mounts = append(mounts, Mount{key: v.name, Destination: v.containerPath, ReadOnly: false})
+	}
+	vs.providers[vp.Name()] = mounts
+	return nil
 }
 
 func (vs *Set) createDiskImage(ctx context.Context, size int64) (path string, retErr error) {
@@ -115,11 +162,14 @@ func (vs *Set) PrepareDirectory(ctx context.Context) (retErr error) {
 	}()
 
 	for _, v := range vs.volumes {
-		path := filepath.Join(dir, v.name)
+		path, err := fs.RootPath(dir, v.name)
+		if err != nil {
+			return err
+		}
 		if v.hostPath == "" {
 			continue
 		}
-		err := fs.CopyDir(path, v.hostPath)
+		err = fs.CopyDir(path, v.hostPath)
 		if err != nil {
 			retErr = fmt.Errorf("failed to copy volume %q: %w", v.name, err)
 			return
@@ -172,11 +222,15 @@ func (vs *Set) PrepareDriveMount(ctx context.Context, size int64) (dm *proto.Fir
 	}()
 
 	for _, v := range vs.volumes {
-		path := filepath.Join(dir, v.name)
+		path, err := fs.RootPath(dir, v.name)
+		if err != nil {
+			retErr = err
+			return
+		}
 		if v.hostPath == "" {
 			continue
 		}
-		err := fs.CopyDir(path, v.hostPath)
+		err = fs.CopyDir(path, v.hostPath)
 		if err != nil {
 			retErr = fmt.Errorf("failed to copy volume %q: %w", v.name, err)
 			return
@@ -201,6 +255,8 @@ type Mount struct {
 	Destination string
 	// ReadOnly is true if the volume is mounted as read-only.
 	ReadOnly bool
+
+	key string
 }
 
 // WithMounts expose given volumes to the container.
@@ -208,7 +264,11 @@ func (vs *Set) WithMounts(mountpoints []Mount) (oci.SpecOpts, error) {
 	mounts := []specs.Mount{}
 
 	for _, mp := range mountpoints {
-		v, ok := vs.volumes[mp.Source]
+		key := mp.key
+		if key == "" {
+			key = fmt.Sprintf("named_%s", mp.Source)
+		}
+		v, ok := vs.volumes[key]
 		if !ok {
 			return nil, fmt.Errorf("failed to find volume %q", mp.Source)
 		}
@@ -232,4 +292,9 @@ func (vs *Set) WithMounts(mountpoints []Mount) (oci.SpecOpts, error) {
 		s.Mounts = append(s.Mounts, mounts...)
 		return nil
 	}, nil
+}
+
+// WithMountsFromProvider exposes volumes from the provider.
+func (vs *Set) WithMountsFromProvider(name string) (oci.SpecOpts, error) {
+	return vs.WithMounts(vs.providers[name])
 }

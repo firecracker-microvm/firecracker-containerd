@@ -57,9 +57,9 @@ $(error "Kernel version $(KERNEL_VERSION) is not supported. Supported versions a
 endif
 
 KERNEL_CONFIG=tools/kernel-configs/microvm-kernel-$(host_arch)-$(KERNEL_VERSION).config
-# Copied from https://github.com/firecracker-microvm/firecracker/blob/v1.0.0/tools/devtool#L2015
+# Copied from https://github.com/firecracker-microvm/firecracker/blob/v1.1.0/tools/devtool#L2082
 # This allows us to specify a kernel without the patch version, but still get the correct build path to reference the kernel binary
-KERNEL_FULL_VERSION=$(shell cat "$(KERNEL_CONFIG)" | grep -Po "^\# Linux\/$(kernel_config_pattern) (([0-9]+.){2}[0-9]+)" | cut -d ' ' -f 3)
+KERNEL_FULL_VERSION=$(shell cat "$(KERNEL_CONFIG)" | grep -Po "^\# Linux\/$(kernel_config_pattern) (([0-9]+.)[0-9]+)" | cut -d ' ' -f 3)
 KERNEL_BIN=$(FIRECRACKER_DIR)/build/kernel/linux-$(KERNEL_FULL_VERSION)/vmlinux-$(KERNEL_FULL_VERSION)-$(host_arch).bin
 
 RUNC_DIR=$(SUBMODULES)/runc
@@ -190,7 +190,7 @@ test-images: test-images-stamp
 test-images-stamp: | image firecracker-containerd-test-image
 	touch $@
 
-firecracker-containerd-test-image: all-in-docker firecracker runc test-cni-bins cni-bins default-vmlinux
+firecracker-containerd-test-image: all-in-docker firecracker runc test-cni-bins cni-bins default-vmlinux kernel
 	DOCKER_BUILDKIT=1 docker build \
 		--progress=plain \
 		--file tools/docker/Dockerfile.integ-test \

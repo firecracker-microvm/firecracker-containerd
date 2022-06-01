@@ -73,6 +73,27 @@ func TestReturnErrorWhenCalledWithoutNamespacedContext(t *testing.T) {
 		{"View", func() error { _, err := uut.View(ctx, "layerKey", ""); return err }},
 		{"Commit", func() error { return uut.Commit(ctx, "layer1", "layerKey") }},
 		{"Remove", func() error { return uut.Remove(ctx, "layerKey") }},
+	}
+
+	for _, test := range tests {
+		if err := test.run(); err == nil {
+			t.Fatalf("%s call did not return error", test.name)
+		}
+	}
+}
+
+func TestNoErrorWhenCalledWithoutNamespacedContext(t *testing.T) {
+	t.Parallel()
+
+	cache := cache.NewSnapshotterCache()
+	ctx := logtest.WithT(context.Background(), t)
+
+	uut := NewSnapshotter(cache, fetchOkSnapshotter)
+
+	tests := []struct {
+		name string
+		run  func() error
+	}{
 		{"Walk", func() error {
 			var callback = func(c context.Context, i snapshots.Info) error { return nil }
 			return uut.Walk(ctx, callback)
@@ -80,8 +101,8 @@ func TestReturnErrorWhenCalledWithoutNamespacedContext(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		if err := test.run(); err == nil {
-			t.Fatal(test.name + " call did not return error")
+		if err := test.run(); err != nil {
+			t.Fatalf("%s call returned error on no namespace execution", test.name)
 		}
 	}
 }
@@ -116,7 +137,7 @@ func TestReturnErrorWhenSnapshotterNotFound(t *testing.T) {
 
 	for _, test := range tests {
 		if err := test.run(); err == nil {
-			t.Fatal(test.name + " call did not return error")
+			t.Fatalf("%s call did not return error", test.name)
 		}
 	}
 }
@@ -153,7 +174,7 @@ func TestReturnErrorAfterProxyFunctionFailure(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name+"ProxyFailure", func(t *testing.T) {
 			if err := test.run(); err == nil {
-				t.Fatal(test.name + " call did not return error")
+				t.Fatalf("%s call did not return error", test.name)
 			}
 		})
 	}
@@ -191,7 +212,7 @@ func TestNoErrorIsReturnedOnSuccessfulProxyExecution(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name+"SuccessfulProxyCall", func(t *testing.T) {
 			if err := test.run(); err != nil {
-				t.Fatal(test.name + " call incorrectly returned an error")
+				t.Fatalf("%s call incorrectly returned an error", test.name)
 			}
 		})
 	}

@@ -243,7 +243,8 @@ func (s *Snapshotter) Walk(ctx context.Context, fn snapshots.WalkFunc, filters .
 	contextLogger := log.G(ctx).WithField("function", "Walk")
 	namespace, err := getNamespaceFromContext(ctx, contextLogger)
 	if err != nil {
-		return err
+		contextLogger.Debug("no namespace found, proxying walk function to all cached snapshotters")
+		return s.cache.WalkAll(ctx, fn, filters...)
 	}
 	logger := contextLogger.WithField("namespace", namespace)
 

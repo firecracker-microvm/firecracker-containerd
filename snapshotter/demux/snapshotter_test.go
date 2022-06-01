@@ -73,6 +73,7 @@ func TestReturnErrorWhenCalledWithoutNamespacedContext(t *testing.T) {
 		{"View", func() error { _, err := uut.View(ctx, "layerKey", ""); return err }},
 		{"Commit", func() error { return uut.Commit(ctx, "layer1", "layerKey") }},
 		{"Remove", func() error { return uut.Remove(ctx, "layerKey") }},
+		{"Cleanup", func() error { return uut.(snapshots.Cleaner).Cleanup(ctx) }},
 	}
 
 	for _, test := range tests {
@@ -133,6 +134,7 @@ func TestReturnErrorWhenSnapshotterNotFound(t *testing.T) {
 			var callback = func(c context.Context, i snapshots.Info) error { return nil }
 			return uut.Walk(ctx, callback)
 		}},
+		{"Cleanup", func() error { return uut.(snapshots.Cleaner).Cleanup(ctx) }},
 	}
 
 	for _, test := range tests {
@@ -169,6 +171,7 @@ func TestReturnErrorAfterProxyFunctionFailure(t *testing.T) {
 			return uut.Walk(ctx, callback)
 		}},
 		{"Close", func() error { return uut.Close() }},
+		{"Cleanup", func() error { return uut.(snapshots.Cleaner).Cleanup(ctx) }},
 	}
 
 	for _, test := range tests {
@@ -207,6 +210,7 @@ func TestNoErrorIsReturnedOnSuccessfulProxyExecution(t *testing.T) {
 			return uut.Walk(ctx, callback)
 		}},
 		{"Close", func() error { return uut.Close() }},
+		{"Cleanup", func() error { return uut.(snapshots.Cleaner).Cleanup(ctx) }},
 	}
 
 	for _, test := range tests {

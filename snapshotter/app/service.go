@@ -63,8 +63,9 @@ func Run(config config.Config) error {
 	if config.Snapshotter.Metrics.Enable {
 		sdHost := config.Snapshotter.Metrics.Host
 		sdPort := config.Snapshotter.Metrics.ServiceDiscoveryPort
-		serviceDiscovery := discovery.NewServiceDiscovery(sdHost, sdPort, cache)
-		monitor, err := initMetricsProxyMonitor(config.Snapshotter.Metrics.PortRange)
+		serviceDiscovery = discovery.NewServiceDiscovery(sdHost, sdPort, cache)
+		var err error
+		monitor, err = initMetricsProxyMonitor(config.Snapshotter.Metrics.PortRange)
 		if err != nil {
 			log.G(ctx).WithError(err).Fatal("failed creating metrics proxy monitor")
 			return err
@@ -113,19 +114,20 @@ func Run(config config.Config) error {
 			if err := snapshotter.Close(); err != nil {
 				log.G(ctx).WithError(err).Error("failed to close snapshotter")
 			}
-			if config.Snapshotter.Metrics.Enable {
-				if err := serviceDiscovery.Shutdown(ctx); err != nil {
-					log.G(ctx).WithError(err).Error("failed to shutdown service discovery server")
-				}
-				// Senders to this channel would panic if it is closed. However snapshotter.Close() will
-				// shutdown all metrics proxies and ensure there are no more senders over the channel.
-				monitor.Stop()
-			}
 		}()
 
 		for {
 			select {
 			case <-stop:
+				// cancelling context will cause shutdown to fail; shutdown before cancel
+				if config.Snapshotter.Metrics.Enable {
+					if err := serviceDiscovery.Shutdown(ctx); err != nil {
+						log.G(ctx).WithError(err).Error("failed to shutdown service discovery server")
+					}
+					// Senders to this channel would panic if it is closed. However snapshotter.Close() will
+					// shutdown all metrics proxies and ensure there are no more senders over the channel.
+					monitor.Stop()
+				}
 				cancel()
 				return nil
 			case <-ctx.Done():

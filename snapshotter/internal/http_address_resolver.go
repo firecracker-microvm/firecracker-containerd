@@ -36,6 +36,7 @@ import (
 var (
 	port               int
 	remotePort         int
+	metricsRemotePort  int
 	containerdSockPath string
 	logger             *logrus.Logger
 )
@@ -44,6 +45,7 @@ func init() {
 	flag.IntVar(&port, "port", 10001, "service port for address resolver")
 	flag.StringVar(&containerdSockPath, "containerdSocket", "/run/firecracker-containerd/containerd.sock", "filepath to the containerd socket")
 	flag.IntVar(&remotePort, "remotePort", 10000, "the remote port on which the remote snapshotter is listening")
+	flag.IntVar(&metricsRemotePort, "metricsRemotePort", 10002, "the remote port on which the remote snapshotter metrics server is listening")
 	logger = logrus.New()
 }
 
@@ -135,6 +137,10 @@ func queryAddress(writ http.ResponseWriter, req *http.Request) {
 		Network:         "unix",
 		Address:         vmInfo.VSockPath,
 		SnapshotterPort: strconv.Itoa(remotePort),
+		MetricsPort:     strconv.Itoa(metricsRemotePort),
+		Labels: map[string]string{
+			"VMID": namespace,
+		},
 	})
 	if err != nil {
 		http.Error(writ, "Internal server error", http.StatusInternalServerError)

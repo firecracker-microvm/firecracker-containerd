@@ -45,7 +45,15 @@ cat > /etc/demux-snapshotter/config.toml <<EOF
 [snapshotter.proxy.address.resolver]
   type = "http"
   address = "http://127.0.0.1:10001"
+<<<<<<< HEAD
 
+=======
+[snapshotter.metrics]
+  enable = true
+  port_range = "9000-9999"
+  host = "0.0.0.0"
+  service_discovery_port = 8080
+>>>>>>> 456162e (add integ test for snapshotter metrics)
 [debug]
   logLevel = "debug"
 EOF

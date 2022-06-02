@@ -62,7 +62,7 @@ RUN --mount=type=bind,target=/src make -C /src \
   install \
   install-firecracker \
   install-runc \
-  install-default-vmlinux \
+  install-kernel \
   install-default-rootfs \
   install-default-runc-jailer-config \
   install-test-cni-bins \

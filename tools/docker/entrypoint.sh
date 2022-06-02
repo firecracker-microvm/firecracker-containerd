@@ -40,8 +40,25 @@ version = 2
   level = "debug"
 EOF
 
+mkdir -p /etc/demux-snapshotter /var/lib/demux-snapshotter
+cat > /etc/demux-snapshotter/config.toml <<EOF
+[snapshotter.proxy.address.resolver]
+  type = "http"
+  address = "http://127.0.0.1:10001"
+[snapshotter.metrics]
+  enable = true
+  port_range = "9000-9999"
+  host = "0.0.0.0"
+  service_discovery_port = 8080
+[debug]
+  logLevel = "debug"
+EOF
+
 touch ${FICD_CONTAINERD_OUTFILE}
 chmod a+rw ${FICD_CONTAINERD_OUTFILE}
 /usr/local/bin/containerd --log-level debug &>> ${FICD_CONTAINERD_OUTFILE} &
+
+/usr/local/bin/http-address-resolver &>> ${FICD_LOG_DIR}/http-address-resolver.out &
+/usr/local/bin/demux-snapshotter &>> ${FICD_LOG_DIR}/demux-snapshotter.out &
 
 exec /bin/bash -c "$@"

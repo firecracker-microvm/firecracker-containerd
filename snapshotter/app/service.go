@@ -27,9 +27,7 @@ import (
 	snapshotsapi "github.com/containerd/containerd/api/services/snapshots/v1"
 	"github.com/containerd/containerd/contrib/snapshotservice"
 	"github.com/containerd/containerd/log"
-	"github.com/containerd/containerd/snapshots"
 	"github.com/firecracker-microvm/firecracker-go-sdk/vsock"
-	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 
@@ -55,37 +53,37 @@ func Run(config config.Config) error {
 
 	group, ctx := errgroup.WithContext(ctx)
 
-	cache := cache.NewSnapshotterCache()
-
 	var (
 		monitor          *metrics.Monitor
 		serviceDiscovery *discovery.ServiceDiscovery
 	)
+
 	if config.Snapshotter.Metrics.Enable {
-		sdHost := config.Snapshotter.Metrics.Host
-		sdPort := config.Snapshotter.Metrics.ServiceDiscoveryPort
-		serviceDiscovery = discovery.NewServiceDiscovery(sdHost, sdPort, cache)
 		var err error
 		monitor, err = initMetricsProxyMonitor(config.Snapshotter.Metrics.PortRange)
 		if err != nil {
-			log.G(ctx).WithError(err).Fatal("failed creating metrics proxy monitor")
-			return err
+			return fmt.Errorf("failed creating metrics proxy monitor: %w", err)
 		}
-		group.Go(func() error {
-			return serviceDiscovery.Serve()
-		})
 		group.Go(func() error {
 			return monitor.Start()
 		})
 	}
 
-	snapshotter, err := initSnapshotter(ctx, config, cache, monitor)
+	cache, err := initCache(config, monitor)
 	if err != nil {
-		log.G(ctx).WithFields(
-			logrus.Fields{"resolver": config.Snapshotter.Proxy.Address.Resolver.Type},
-		).WithError(err).Fatal("failed creating socket resolver")
-		return err
+		return fmt.Errorf("failed initializing cache: %w", err)
 	}
+
+	if config.Snapshotter.Metrics.Enable {
+		sdHost := config.Snapshotter.Metrics.Host
+		sdPort := config.Snapshotter.Metrics.ServiceDiscoveryPort
+		serviceDiscovery = discovery.NewServiceDiscovery(sdHost, sdPort, cache)
+		group.Go(func() error {
+			return serviceDiscovery.Serve()
+		})
+	}
+
+	snapshotter := demux.NewSnapshotter(cache)
 
 	grpcServer := grpc.NewServer()
 	service := snapshotservice.FromSnapshotter(snapshotter)
@@ -94,13 +92,7 @@ func Run(config config.Config) error {
 	listenerConfig := config.Snapshotter.Listener
 	listener, err := net.Listen(listenerConfig.Network, listenerConfig.Address)
 	if err != nil {
-		log.G(ctx).WithFields(
-			logrus.Fields{
-				"network": listenerConfig.Network,
-				"address": listenerConfig.Address,
-			},
-		).WithError(err).Fatal("failed creating listener")
-		return err
+		return fmt.Errorf("failed creating service listener{network: %s, address: %s}: %w", listenerConfig.Network, listenerConfig.Address, err)
 	}
 
 	group.Go(func() error {
@@ -138,8 +130,7 @@ func Run(config config.Config) error {
 	})
 
 	if err := group.Wait(); err != nil {
-		log.G(ctx).WithError(err).Error("demux snapshotter error")
-		return err
+		return fmt.Errorf("demux snapshotter error: %w", err)
 	}
 
 	log.G(ctx).Info("done")
@@ -159,13 +150,37 @@ func initResolver(config config.Config) (proxyaddress.Resolver, error) {
 const base10 = 10
 const bits32 = 32
 
-func initSnapshotter(ctx context.Context, config config.Config, cache cache.Cache, monitor *metrics.Monitor) (snapshots.Snapshotter, error) {
+func initCache(config config.Config, monitor *metrics.Monitor) (*cache.RemoteSnapshotterCache, error) {
 	resolver, err := initResolver(config)
 	if err != nil {
 		return nil, err
 	}
 
-	newRemoteSnapshotterFunc := func(ctx context.Context, namespace string) (*proxy.RemoteSnapshotter, error) {
+	// TODO: https://github.com/firecracker-microvm/firecracker-containerd/issues/689
+	snapshotterDialer := func(ctx context.Context, host string, port uint64) (net.Conn, error) {
+		return vsock.DialContext(ctx, host, uint32(port), vsock.WithLogger(log.G(ctx)),
+			vsock.WithAckMsgTimeout(2*time.Second),
+			vsock.WithRetryInterval(500*time.Millisecond),
+		)
+	}
+
+	dial := func(ctx context.Context, namespace string) (net.Conn, error) {
+		r := resolver
+		response, err := r.Get(namespace)
+
+		if err != nil {
+			return nil, err
+		}
+		host := response.Address
+		port, err := strconv.ParseUint(response.SnapshotterPort, base10, bits32)
+		if err != nil {
+			return nil, err
+		}
+
+		return snapshotterDialer(ctx, host, port)
+	}
+
+	fetch := func(ctx context.Context, namespace string) (*proxy.RemoteSnapshotter, error) {
 		r := resolver
 		response, err := r.Get(namespace)
 		if err != nil {
@@ -177,12 +192,8 @@ func initSnapshotter(ctx context.Context, config config.Config, cache cache.Cach
 			return nil, err
 		}
 
-		// TODO: https://github.com/firecracker-microvm/firecracker-containerd/issues/689
-		snapshotterDialer := func(ctx context.Context, namespace string) (net.Conn, error) {
-			return vsock.DialContext(ctx, host, uint32(port), vsock.WithLogger(log.G(ctx)),
-				vsock.WithAckMsgTimeout(2*time.Second),
-				vsock.WithRetryInterval(200*time.Millisecond),
-			)
+		dial := func(ctx context.Context, namespace string) (net.Conn, error) {
+			return snapshotterDialer(ctx, host, port)
 		}
 
 		var metricsProxy *metrics.Proxy
@@ -193,10 +204,20 @@ func initSnapshotter(ctx context.Context, config config.Config, cache cache.Cach
 			}
 		}
 
-		return proxy.NewRemoteSnapshotter(ctx, host, snapshotterDialer, metricsProxy)
+		return proxy.NewRemoteSnapshotter(ctx, host, dial, metricsProxy)
 	}
 
-	return demux.NewSnapshotter(cache, newRemoteSnapshotterFunc), nil
+	opts := make([]cache.SnapshotterCacheOption, 0)
+
+	if config.Snapshotter.Cache.EvictOnConnectionFailure {
+		cachePollFrequency, err := time.ParseDuration(config.Snapshotter.Cache.PollConnectionFrequency)
+		if err != nil {
+			return nil, fmt.Errorf("invalid cache evict poll connection frequency: %w", err)
+		}
+		opts = append(opts, cache.EvictOnConnectionFailure(dial, cachePollFrequency, nil))
+	}
+
+	return cache.NewRemoteSnapshotterCache(fetch, opts...), nil
 }
 
 func initMetricsProxyMonitor(portRange string) (*metrics.Monitor, error) {

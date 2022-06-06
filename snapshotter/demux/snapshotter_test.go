@@ -36,9 +36,9 @@ func fetchSnapshotterNotFound(ctx context.Context, key string) (*proxy.RemoteSna
 	return nil, errors.New("mock snapshotter not found")
 }
 
-func createSnapshotterCacheWithSuccessfulSnapshotter(namespace string) cache.Cache {
-	cache := cache.NewSnapshotterCache()
-	cache.Get(context.Background(), namespace, fetchOkSnapshotter)
+func createSnapshotterCacheWithSuccessfulSnapshotter(namespace string) *cache.RemoteSnapshotterCache {
+	cache := cache.NewRemoteSnapshotterCache(fetchOkSnapshotter)
+	cache.Get(context.Background(), namespace)
 	return cache
 }
 
@@ -47,19 +47,19 @@ func fetchFailingSnapshotter(ctx context.Context, key string) (*proxy.RemoteSnap
 	return &proxy.RemoteSnapshotter{Snapshotter: &snapshotter}, nil
 }
 
-func createSnapshotterCacheWithFailingSnapshotter(namespace string) cache.Cache {
-	cache := cache.NewSnapshotterCache()
-	cache.Get(context.Background(), namespace, fetchFailingSnapshotter)
+func createSnapshotterCacheWithFailingSnapshotter(namespace string) *cache.RemoteSnapshotterCache {
+	cache := cache.NewRemoteSnapshotterCache(fetchFailingSnapshotter)
+	cache.Get(context.Background(), namespace)
 	return cache
 }
 
 func TestReturnErrorWhenCalledWithoutNamespacedContext(t *testing.T) {
 	t.Parallel()
 
-	cache := cache.NewSnapshotterCache()
+	cache := cache.NewRemoteSnapshotterCache(fetchOkSnapshotter)
 	ctx := logtest.WithT(context.Background(), t)
 
-	uut := NewSnapshotter(cache, fetchOkSnapshotter)
+	uut := NewSnapshotter(cache)
 
 	tests := []struct {
 		name string
@@ -86,10 +86,10 @@ func TestReturnErrorWhenCalledWithoutNamespacedContext(t *testing.T) {
 func TestNoErrorWhenCalledWithoutNamespacedContext(t *testing.T) {
 	t.Parallel()
 
-	cache := cache.NewSnapshotterCache()
+	cache := cache.NewRemoteSnapshotterCache(fetchOkSnapshotter)
 	ctx := logtest.WithT(context.Background(), t)
 
-	uut := NewSnapshotter(cache, fetchOkSnapshotter)
+	uut := NewSnapshotter(cache)
 
 	tests := []struct {
 		name string
@@ -112,11 +112,11 @@ func TestReturnErrorWhenSnapshotterNotFound(t *testing.T) {
 	t.Parallel()
 
 	const namespace = "testing"
-	cache := cache.NewSnapshotterCache()
-	ctx := namespaces.WithNamespace(context.TODO(), namespace)
+	cache := cache.NewRemoteSnapshotterCache(fetchSnapshotterNotFound)
+	ctx := namespaces.WithNamespace(context.Background(), namespace)
 	ctx = logtest.WithT(ctx, t)
 
-	uut := NewSnapshotter(cache, fetchSnapshotterNotFound)
+	uut := NewSnapshotter(cache)
 
 	tests := []struct {
 		name string
@@ -152,7 +152,7 @@ func TestReturnErrorAfterProxyFunctionFailure(t *testing.T) {
 	ctx := namespaces.WithNamespace(context.Background(), namespace)
 	ctx = logtest.WithT(ctx, t)
 
-	uut := NewSnapshotter(cache, fetchOkSnapshotter)
+	uut := NewSnapshotter(cache)
 
 	tests := []struct {
 		name string
@@ -170,8 +170,8 @@ func TestReturnErrorAfterProxyFunctionFailure(t *testing.T) {
 			var callback = func(c context.Context, i snapshots.Info) error { return nil }
 			return uut.Walk(ctx, callback)
 		}},
-		{"Close", func() error { return uut.Close() }},
 		{"Cleanup", func() error { return uut.(snapshots.Cleaner).Cleanup(ctx) }},
+		{"Close", func() error { return uut.Close() }},
 	}
 
 	for _, test := range tests {
@@ -191,7 +191,7 @@ func TestNoErrorIsReturnedOnSuccessfulProxyExecution(t *testing.T) {
 	ctx := namespaces.WithNamespace(context.Background(), namespace)
 	ctx = logtest.WithT(ctx, t)
 
-	uut := NewSnapshotter(cache, fetchOkSnapshotter)
+	uut := NewSnapshotter(cache)
 
 	tests := []struct {
 		name string
@@ -209,8 +209,8 @@ func TestNoErrorIsReturnedOnSuccessfulProxyExecution(t *testing.T) {
 			var callback = func(c context.Context, i snapshots.Info) error { return nil }
 			return uut.Walk(ctx, callback)
 		}},
-		{"Close", func() error { return uut.Close() }},
 		{"Cleanup", func() error { return uut.(snapshots.Cleaner).Cleanup(ctx) }},
+		{"Close", func() error { return uut.Close() }},
 	}
 
 	for _, test := range tests {

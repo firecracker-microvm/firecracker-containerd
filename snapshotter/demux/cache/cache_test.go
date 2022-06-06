@@ -31,34 +31,37 @@ func getSnapshotterOkFunction(ctx context.Context, key string) (*proxy.RemoteSna
 }
 
 func getSnapshotterErrorFunction(ctx context.Context, key string) (*proxy.RemoteSnapshotter, error) {
-	return &proxy.RemoteSnapshotter{Snapshotter: &internal.SuccessfulSnapshotter{}}, errors.New("mock error")
+	return nil, errors.New("Mock retrieve snapshotter error")
 }
 
 func getFailingSnapshotterOkFunction(ctx context.Context, key string) (*proxy.RemoteSnapshotter, error) {
 	return &proxy.RemoteSnapshotter{Snapshotter: &internal.FailingSnapshotter{}}, nil
 }
 
-func getSnapshotterFromEmptyCache(uut *SnapshotterCache) error {
-	_, err := uut.Get(context.Background(), "SnapshotterKey", getSnapshotterOkFunction)
+func getSnapshotterFromEmptyCache() error {
+	uut := NewRemoteSnapshotterCache(getSnapshotterOkFunction)
+	_, err := uut.Get(context.Background(), "SnapshotterKey")
 	if err != nil {
 		return fmt.Errorf("Fetch from empty cache incorrectly resulted in error: %w", err)
 	}
 	return nil
 }
 
-func getCachedSnapshotter(uut *SnapshotterCache) error {
-	if _, err := uut.Get(context.Background(), "SnapshotterKey", getSnapshotterOkFunction); err != nil {
+func getCachedSnapshotter() error {
+	uut := NewRemoteSnapshotterCache(getSnapshotterOkFunction)
+	if _, err := uut.Get(context.Background(), "SnapshotterKey"); err != nil {
 		return fmt.Errorf("Adding snapshotter to empty cache incorrectly resulted in error: %w", err)
 	}
 
-	if _, err := uut.Get(context.Background(), "SnapshotterKey", getSnapshotterOkFunction); err != nil {
+	if _, err := uut.Get(context.Background(), "SnapshotterKey"); err != nil {
 		return fmt.Errorf("Fetching cached snapshotter resulted in error: %w", err)
 	}
 	return nil
 }
 
-func getSnapshotterPropagatesErrors(uut *SnapshotterCache) error {
-	if _, err := uut.Get(context.Background(), "SnapshotterKey", getSnapshotterErrorFunction); err == nil {
+func getSnapshotterPropagatesErrors() error {
+	uut := NewRemoteSnapshotterCache(getSnapshotterErrorFunction)
+	if _, err := uut.Get(context.Background(), "SnapshotterKey"); err == nil {
 		return errors.New("Get function did not propagate errors from snapshotter generator function")
 	}
 	return nil
@@ -68,18 +71,20 @@ func successfulWalk(ctx context.Context, info snapshots.Info) error {
 	return nil
 }
 
-func applyWalkFunctionOnEmptyCache(uut *SnapshotterCache) error {
+func applyWalkFunctionOnEmptyCache() error {
+	uut := NewRemoteSnapshotterCache(getSnapshotterOkFunction)
 	if err := uut.WalkAll(context.Background(), successfulWalk); err != nil {
 		return errors.New("WalkAll on empty cache incorrectly resulted in error")
 	}
 	return nil
 }
 
-func applyWalkFunctionToAllCachedSnapshotters(uut *SnapshotterCache) error {
-	if _, err := uut.Get(context.Background(), "Snapshotter-A", getSnapshotterOkFunction); err != nil {
+func applyWalkFunctionToAllCachedSnapshotters() error {
+	uut := NewRemoteSnapshotterCache(getSnapshotterOkFunction)
+	if _, err := uut.Get(context.Background(), "Snapshotter-A"); err != nil {
 		return fmt.Errorf("Adding snapshotter A to empty cache incorrectly resulted in error: %w", err)
 	}
-	if _, err := uut.Get(context.Background(), "Snapshotter-B", getSnapshotterOkFunction); err != nil {
+	if _, err := uut.Get(context.Background(), "Snapshotter-B"); err != nil {
 		return fmt.Errorf("Adding snapshotter B to cache incorrectly resulted in error: %w", err)
 	}
 	if err := uut.WalkAll(context.Background(), successfulWalk); err != nil {
@@ -88,8 +93,9 @@ func applyWalkFunctionToAllCachedSnapshotters(uut *SnapshotterCache) error {
 	return nil
 }
 
-func applyWalkFunctionPropagatesErrors(uut *SnapshotterCache) error {
-	if _, err := uut.Get(context.Background(), "Snapshotter-A", getFailingSnapshotterOkFunction); err != nil {
+func applyWalkFunctionPropagatesErrors() error {
+	uut := NewRemoteSnapshotterCache(getFailingSnapshotterOkFunction)
+	if _, err := uut.Get(context.Background(), "Snapshotter-A"); err != nil {
 		return fmt.Errorf("Adding snapshotter A to empty cache incorrectly resulted in error: %w", err)
 	}
 	// The failing snapshotter mock will fail all Walk calls before applying
@@ -104,15 +110,17 @@ func applyWalkFunctionPropagatesErrors(uut *SnapshotterCache) error {
 	return nil
 }
 
-func evictSnapshotterFromEmptyCache(uut *SnapshotterCache) error {
+func evictSnapshotterFromEmptyCache() error {
+	uut := NewRemoteSnapshotterCache(getSnapshotterOkFunction)
 	if err := uut.Evict("SnapshotterKey"); err == nil {
 		return errors.New("Evict function did not return error on call on empty cache")
 	}
 	return nil
 }
 
-func evictSnapshotterFromCache(uut *SnapshotterCache) error {
-	if _, err := uut.Get(context.Background(), "SnapshotterKey", getSnapshotterOkFunction); err != nil {
+func evictSnapshotterFromCache() error {
+	uut := NewRemoteSnapshotterCache(getSnapshotterOkFunction)
+	if _, err := uut.Get(context.Background(), "SnapshotterKey"); err != nil {
 		return fmt.Errorf("Adding snapshotter to empty cache incorrectly resulted in error: %w", err)
 	}
 
@@ -122,8 +130,9 @@ func evictSnapshotterFromCache(uut *SnapshotterCache) error {
 	return nil
 }
 
-func evictSnapshotterFromCachePropagatesCloseError(uut *SnapshotterCache) error {
-	if _, err := uut.Get(context.Background(), "SnapshotterKey", getFailingSnapshotterOkFunction); err != nil {
+func evictSnapshotterFromCachePropagatesCloseError() error {
+	uut := NewRemoteSnapshotterCache(getFailingSnapshotterOkFunction)
+	if _, err := uut.Get(context.Background(), "SnapshotterKey"); err != nil {
 		return fmt.Errorf("Adding snapshotter to empty cache incorrectly resulted in error: %w", err)
 	}
 
@@ -133,15 +142,17 @@ func evictSnapshotterFromCachePropagatesCloseError(uut *SnapshotterCache) error 
 	return nil
 }
 
-func closeCacheWithEmptyCache(uut *SnapshotterCache) error {
+func closeCacheWithEmptyCache() error {
+	uut := NewRemoteSnapshotterCache(getSnapshotterOkFunction)
 	if err := uut.Close(); err != nil {
 		return fmt.Errorf("Close on empty cache resulted in error: %w", err)
 	}
 	return nil
 }
 
-func closeCacheWithNonEmptyCache(uut *SnapshotterCache) error {
-	uut.Get(context.Background(), "SnapshotterKey", getSnapshotterOkFunction)
+func closeCacheWithNonEmptyCache() error {
+	uut := NewRemoteSnapshotterCache(getSnapshotterOkFunction)
+	uut.Get(context.Background(), "SnapshotterKey")
 
 	if err := uut.Close(); err != nil {
 		return fmt.Errorf("Close on non-empty cache resulted in error: %w", err)
@@ -149,10 +160,10 @@ func closeCacheWithNonEmptyCache(uut *SnapshotterCache) error {
 	return nil
 }
 
-func closeCacheReturnsAllOccurringErrors(uut *SnapshotterCache) error {
-	uut.Get(context.Background(), "OkSnapshotterKey", getSnapshotterOkFunction)
-	uut.Get(context.Background(), "FailingSnapshotterKey", getFailingSnapshotterOkFunction)
-	uut.Get(context.Background(), "AnotherFailingSnapshotterKey", getFailingSnapshotterOkFunction)
+func closeCacheReturnsAllOccurringErrors() error {
+	uut := NewRemoteSnapshotterCache(getFailingSnapshotterOkFunction)
+	uut.Get(context.Background(), "FailingSnapshotterKey")
+	uut.Get(context.Background(), "AnotherFailingSnapshotterKey")
 
 	err := uut.Close()
 	if err == nil {
@@ -166,7 +177,8 @@ func closeCacheReturnsAllOccurringErrors(uut *SnapshotterCache) error {
 	return nil
 }
 
-func listEmptyCache(uut *SnapshotterCache) error {
+func listEmptyCache() error {
+	uut := NewRemoteSnapshotterCache(getSnapshotterOkFunction)
 	keys := uut.List()
 	if len(keys) > 0 {
 		return errors.New("List did not return an empty list for an empty snapshotter cache")
@@ -175,8 +187,9 @@ func listEmptyCache(uut *SnapshotterCache) error {
 	return nil
 }
 
-func listNonEmptyCache(uut *SnapshotterCache) error {
-	uut.Get(context.Background(), "OkSnapshotterKey", getSnapshotterOkFunction)
+func listNonEmptyCache() error {
+	uut := NewRemoteSnapshotterCache(getSnapshotterOkFunction)
+	uut.Get(context.Background(), "OkSnapshotterKey")
 
 	keys := uut.List()
 	if len(keys) != 1 {
@@ -194,7 +207,7 @@ func TestGetSnapshotterFromCache(t *testing.T) {
 
 	tests := []struct {
 		name string
-		run  func(*SnapshotterCache) error
+		run  func() error
 	}{
 		{"AddSnapshotterToCache", getSnapshotterFromEmptyCache},
 		{"GetCachedSnapshotter", getCachedSnapshotter},
@@ -203,8 +216,7 @@ func TestGetSnapshotterFromCache(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			uut := NewSnapshotterCache()
-			if err := test.run(uut); err != nil {
+			if err := test.run(); err != nil {
 				t.Fatalf("%s: %s", test.name, err.Error())
 			}
 		})
@@ -216,7 +228,7 @@ func TestWalkAllFunctionOnCache(t *testing.T) {
 
 	tests := []struct {
 		name string
-		run  func(*SnapshotterCache) error
+		run  func() error
 	}{
 		{"ApplyWalkFunctionOnEmptyCache", applyWalkFunctionOnEmptyCache},
 		{"ApplyWalkFunctionToAllCachedSnapshotters", applyWalkFunctionToAllCachedSnapshotters},
@@ -225,8 +237,7 @@ func TestWalkAllFunctionOnCache(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			uut := NewSnapshotterCache()
-			if err := test.run(uut); err != nil {
+			if err := test.run(); err != nil {
 				t.Fatalf("%s: %s", test.name, err.Error())
 			}
 		})
@@ -238,7 +249,7 @@ func TestEvictSnapshotterFromCache(t *testing.T) {
 
 	tests := []struct {
 		name string
-		run  func(*SnapshotterCache) error
+		run  func() error
 	}{
 		{"EvictSnapshotterFromEmptyCache", evictSnapshotterFromEmptyCache},
 		{"EvictSnapshotterFromCache", evictSnapshotterFromCache},
@@ -247,8 +258,7 @@ func TestEvictSnapshotterFromCache(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			uut := NewSnapshotterCache()
-			if err := test.run(uut); err != nil {
+			if err := test.run(); err != nil {
 				t.Fatalf("%s: %s", test.name, err.Error())
 			}
 		})
@@ -260,7 +270,7 @@ func TestCloseCache(t *testing.T) {
 
 	tests := []struct {
 		name string
-		run  func(*SnapshotterCache) error
+		run  func() error
 	}{
 		{"CloseCacheWithEmptyCache", closeCacheWithEmptyCache},
 		{"CloseCacheWithNonEmptyCache", closeCacheWithNonEmptyCache},
@@ -269,8 +279,7 @@ func TestCloseCache(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			uut := NewSnapshotterCache()
-			if err := test.run(uut); err != nil {
+			if err := test.run(); err != nil {
 				t.Fatalf("%s: %s", test.name, err.Error())
 			}
 		})
@@ -282,7 +291,7 @@ func TestListSnapshotters(t *testing.T) {
 
 	tests := []struct {
 		name string
-		run  func(*SnapshotterCache) error
+		run  func() error
 	}{
 		{"ListEmptyCache", listEmptyCache},
 		{"ListNonEmptyCache", listNonEmptyCache},
@@ -290,11 +299,9 @@ func TestListSnapshotters(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			uut := NewSnapshotterCache()
-			if err := test.run(uut); err != nil {
+			if err := test.run(); err != nil {
 				t.Fatalf("%s: %s", test.name, err.Error())
 			}
 		})
 	}
-
 }

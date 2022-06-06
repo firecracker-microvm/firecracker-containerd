@@ -33,6 +33,7 @@ type Config struct {
 type snapshotter struct {
 	Listener listener `toml:"listener"`
 	Proxy    proxy    `toml:"proxy"`
+	Cache    cache    `toml:"cache"`
 	Metrics  metrics  `toml:"metrics"`
 }
 
@@ -52,6 +53,11 @@ type address struct {
 type resolver struct {
 	Type    string `toml:"type"`
 	Address string `toml:"address"`
+}
+
+type cache struct {
+	EvictOnConnectionFailure bool   `toml:"evict_on_connection_failure" default:"true"`
+	PollConnectionFrequency  string `toml:"poll_connection_frequency" default:"60s"`
 }
 
 type debug struct {

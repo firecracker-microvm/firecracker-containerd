@@ -20,7 +20,7 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/miekg/dns v1.1.25
 	github.com/opencontainers/image-spec v1.0.3-0.20211202183452-c5a74bcca799
-	github.com/opencontainers/runc v1.1.1
+	github.com/opencontainers/runc v1.1.2
 	github.com/opencontainers/runtime-spec v1.0.3-0.20210910115017-0d6cc581aeea
 	github.com/pelletier/go-toml v1.9.3
 	github.com/pkg/errors v0.9.1

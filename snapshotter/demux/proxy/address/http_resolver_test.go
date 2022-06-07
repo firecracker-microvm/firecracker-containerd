@@ -69,13 +69,12 @@ func happyPath() error {
 				"test2": "label2"
 				}
 			}`), err: io.EOF}
-	client := mockClient{getError: nil, getResponse: http.Response{Body: &reader}}
+	client := mockClient{getError: nil, getResponse: http.Response{StatusCode: 200, Body: &reader}}
 	uut := HTTPResolver{url: "localhost:10001", client: &client}
 
 	actual, err := uut.Get("namespace")
 	if err != nil {
-		fmt.Println(err)
-		return errors.New("expected no error from HTTP resolver")
+		return fmt.Errorf("expected no error from HTTP resolver, but got %+v", err)
 	}
 
 	if actual.Network != "unix" {

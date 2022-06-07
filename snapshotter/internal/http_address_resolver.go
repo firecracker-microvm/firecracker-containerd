@@ -107,33 +107,32 @@ func queryAddress(writ http.ResponseWriter, req *http.Request) {
 	writ.Header().Set("Content-Type", "application/json")
 
 	keys, ok := req.URL.Query()["namespace"]
-
 	if !ok {
 		http.Error(writ, "Missing 'namespace' query", http.StatusBadRequest)
 		return
 	}
 
-	namespace := keys[0]
-
-	fcClient, err := client.New(containerdSockPath + ".ttrpc")
+	sock := containerdSockPath + ".ttrpc"
+	fcClient, err := client.New(sock)
 	if err != nil {
 		logger.WithError(err).Error("could not create firecracker client")
-		http.Error(writ, "Internal server error", http.StatusInternalServerError)
+		http.Error(writ, fmt.Sprintf("failed to connect %q", sock), http.StatusInternalServerError)
 		return
 	}
 	defer fcClient.Close()
 
+	namespace := keys[0]
 	ctx := namespaces.WithNamespace(req.Context(), namespace)
 	vmInfo, err := fcClient.GetVMInfo(ctx, &proto.GetVMInfoRequest{VMID: namespace})
 	if err != nil {
 		logger.WithField("VMID", namespace).WithError(err).Error("unable to retrieve VM Info")
-		http.Error(writ, "Internal server error", http.StatusInternalServerError)
+		http.Error(writ, fmt.Sprintf("failed to get VM %q", namespace), http.StatusNotFound)
 		return
 	}
 
 	writ.WriteHeader(http.StatusOK)
 
-	response, err := json.Marshal(proxyaddress.Response{
+	result := proxyaddress.Response{
 		Network:         "unix",
 		Address:         vmInfo.VSockPath,
 		SnapshotterPort: strconv.Itoa(remotePort),
@@ -141,11 +140,11 @@ func queryAddress(writ http.ResponseWriter, req *http.Request) {
 		Labels: map[string]string{
 			"VMID": namespace,
 		},
-	})
+	}
+	serialized, err := json.Marshal(&result)
 	if err != nil {
-		http.Error(writ, "Internal server error", http.StatusInternalServerError)
+		http.Error(writ, fmt.Sprintf("failed to marshal %+v", result), http.StatusInternalServerError)
 		return
 	}
-
-	writ.Write(response)
+	writ.Write(serialized)
 }

@@ -47,7 +47,9 @@ func requestURL(url string, namespace string) string {
 
 // Get queries the proxy network type and address for the specified namespace.
 func (h HTTPResolver) Get(namespace string) (Response, error) {
-	httpResponse, err := h.client.Get(requestURL(h.url, namespace))
+	url := requestURL(h.url, namespace)
+
+	httpResponse, err := h.client.Get(url)
 	if err != nil {
 		return Response{}, err
 	}
@@ -58,11 +60,15 @@ func (h HTTPResolver) Get(namespace string) (Response, error) {
 		return Response{}, err
 	}
 
+	code := httpResponse.StatusCode
+	if code != 200 {
+		return Response{}, fmt.Errorf("failed to GET %s: status=%d, body=%s", url, code, body)
+	}
+
 	var response Response
 	err = json.Unmarshal(body, &response)
 	if err != nil {
 		return Response{}, err
 	}
-
 	return response, nil
 }

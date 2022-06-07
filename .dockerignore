@@ -1,2 +1,5 @@
 tools/image-builder/rootfs/
 tmp/
+
+_submodules/firecracker/
+!_submodules/firecracker/build/kernel/linux-4.14/*.bin

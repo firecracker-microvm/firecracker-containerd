@@ -46,7 +46,7 @@ endif
 FIRECRACKER_TARGET?=$(host_arch)-unknown-linux-musl
 
 FIRECRACKER_DIR=$(SUBMODULES)/firecracker
-FIRECRACKER_BIN=$(FIRECRACKER_DIR)/build/cargo_target/$(FIRECRACKER_TARGET)/release/firecracker
+FIRECRACKER_BIN=bin/firecracker
 FIRECRACKER_BUILDER_NAME?=firecracker-builder
 CARGO_CACHE_VOLUME_NAME?=cargocache
 
@@ -337,6 +337,7 @@ $(FIRECRACKER_DIR)/Cargo.toml:
 $(FIRECRACKER_BIN): $(FIRECRACKER_DIR)/Cargo.toml
 	$(FIRECRACKER_DIR)/tools/devtool -y build --release && \
 		$(FIRECRACKER_DIR)/tools/devtool strip
+	cp $(FIRECRACKER_DIR)/build/cargo_target/$(FIRECRACKER_TARGET)/release/firecracker $@
 
 .PHONY: firecracker-clean
 firecracker-clean:

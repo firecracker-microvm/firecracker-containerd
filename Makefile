@@ -336,12 +336,12 @@ $(FIRECRACKER_DIR)/Cargo.toml:
 
 $(FIRECRACKER_BIN): $(FIRECRACKER_DIR)/Cargo.toml
 	$(FIRECRACKER_DIR)/tools/devtool -y build --release && \
-		$(FIRECRACKER_DIR)/tools/devtool strip
+		$(FIRECRACKER_DIR)/tools/devtool -y strip
 	cp $(FIRECRACKER_DIR)/build/cargo_target/$(FIRECRACKER_TARGET)/release/firecracker $@
 
 .PHONY: firecracker-clean
 firecracker-clean:
-	- $(FIRECRACKER_DIR)/tools/devtool distclean
+	- $(FIRECRACKER_DIR)/tools/devtool -y distclean
 	- rm $(FIRECRACKER_BIN)
 	- rm $(KERNEL_BIN)
 
@@ -349,7 +349,7 @@ firecracker-clean:
 kernel: $(KERNEL_BIN)
 
 $(KERNEL_BIN): $(KERNEL_CONFIG)
-	$(FIRECRACKER_DIR)/tools/devtool build_kernel --config $(KERNEL_CONFIG)
+	$(FIRECRACKER_DIR)/tools/devtool -y build_kernel --config $(KERNEL_CONFIG)
 
 .PHONY: install-kernel
 install-kernel: $(KERNEL_BIN)

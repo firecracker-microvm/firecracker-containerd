@@ -37,7 +37,9 @@ func NewSnapshotterCache() *SnapshotterCache {
 
 // Get fetches and caches the snapshotter for a given key.
 func (cache *SnapshotterCache) Get(ctx context.Context, key string, fetch SnapshotterProvider) (*proxy.RemoteSnapshotter, error) {
+	cache.mutex.RLock()
 	snapshotter, ok := cache.snapshotters[key]
+	cache.mutex.RUnlock()
 
 	if !ok {
 		cache.mutex.Lock()
@@ -92,6 +94,8 @@ func (cache *SnapshotterCache) Evict(key string) error {
 // Close calls Close on all cached remote snapshotters.
 func (cache *SnapshotterCache) Close() error {
 	var compiledErr error
+	cache.mutex.RLock()
+	defer cache.mutex.RUnlock()
 	for _, remoteSnapshotter := range cache.snapshotters {
 		if err := remoteSnapshotter.Close(); err != nil {
 			compiledErr = multierror.Append(compiledErr, err)

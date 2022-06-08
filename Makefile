@@ -335,9 +335,9 @@ $(FIRECRACKER_DIR)/Cargo.toml:
 	git submodule update --init --recursive $(FIRECRACKER_DIR)
 
 $(FIRECRACKER_BIN): $(FIRECRACKER_DIR)/Cargo.toml
-	$(FIRECRACKER_DIR)/tools/devtool -y build --release && \
-		$(FIRECRACKER_DIR)/tools/devtool -y strip
-	cp $(FIRECRACKER_DIR)/build/cargo_target/$(FIRECRACKER_TARGET)/release/firecracker $@
+	curl -L https://github.com/firecracker-microvm/firecracker/releases/download/v1.1.0/firecracker-v1.1.0-x86_64.tgz | tar zxvf -
+	mkdir -p $(dir $@)
+	cp release-v1.1.0-x86_64/firecracker-v1.1.0-x86_64 $@
 
 .PHONY: firecracker-clean
 firecracker-clean:
@@ -348,8 +348,9 @@ firecracker-clean:
 .PHONY: kernel
 kernel: $(KERNEL_BIN)
 
-$(KERNEL_BIN): $(KERNEL_CONFIG)
-	$(FIRECRACKER_DIR)/tools/devtool -y build_kernel --config $(KERNEL_CONFIG)
+$(KERNEL_BIN): $(DEFAULT_VMLINUX_NAME) $(KERNEL_CONFIG)
+	mkdir -p $(dir $@)
+	cp $(DEFAULT_VMLINUX_NAME) $@
 
 .PHONY: install-kernel
 install-kernel: $(KERNEL_BIN)

@@ -14,20 +14,26 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"strconv"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
 	"github.com/containerd/containerd"
+	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/oci"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/integtest"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	"github.com/firecracker-microvm/firecracker-containerd/runtime/firecrackeroci"
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/internal/integtest/stargz/fs/source"
+	"github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -146,4 +152,114 @@ func launchContainerWithRemoteSnapshotterInVM(ctx context.Context, t *testing.T,
 
 	_, err = integtest.RunTask(ctx, container)
 	require.NoError(t, err, "Failed to run task in VM: %s", vmID)
+}
+
+func runExec(ctx context.Context, t *testing.T, task containerd.Task, name string, args []string) {
+	var stdout, stderr bytes.Buffer
+	exec, err := task.Exec(ctx, name, &specs.Process{
+		Args: args,
+		Cwd:  "/",
+	}, cio.NewCreator(cio.WithStreams(nil, &stdout, &stderr)))
+	require.NoError(t, err)
+
+	ch, err := exec.Wait(ctx)
+	require.NoError(t, err)
+
+	err = exec.Start(ctx)
+	require.NoError(t, err)
+
+	status := <-ch
+
+	_, err = exec.Delete(ctx)
+	assert.NoError(t, err)
+
+	t.Logf("%s: stdout=%q, stderr=%q", name, stdout.String(), stderr.String())
+	require.Equal(t, uint32(0), status.ExitCode(), name)
+}
+
+func Test00Network_Isolated(t *testing.T) {
+	integtest.Prepare(t, integtest.WithDefaultNetwork())
+
+	vmID := "default"
+	namespace := vmID
+	ssName := "devmapper"
+	ref := "docker.io/library/alpine:3.10.1"
+
+	ctx := namespaces.WithNamespace(context.Background(), namespace)
+
+	client, err := containerd.New(
+		integtest.ContainerdSockPath,
+		containerd.WithDefaultRuntime(integtest.FirecrackerRuntime),
+	)
+	require.NoError(t, err)
+
+	fcClient, err := integtest.NewFCControlClient(integtest.ContainerdSockPath)
+	require.NoError(t, err)
+
+	_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
+		VMID: vmID,
+		RootDrive: &proto.FirecrackerRootDrive{
+			HostPath: "/var/lib/firecracker-containerd/runtime/rootfs-stargz.img",
+		},
+		NetworkInterfaces: []*proto.FirecrackerNetworkInterface{
+			{
+				AllowMMDS: true,
+				CNIConfig: &proto.CNIConfiguration{
+					NetworkName:   "fcnet",
+					InterfaceName: "veth0",
+				},
+			},
+		},
+		MachineCfg: &proto.FirecrackerMachineConfiguration{
+			VcpuCount:  2,
+			MemSizeMib: 2048,
+		},
+		ContainerCount: 1,
+	})
+	require.NoError(t, err)
+	defer fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
+
+	image, err := client.Pull(ctx, ref,
+		containerd.WithPullUnpack,
+		containerd.WithPullSnapshotter(ssName),
+	)
+	require.NoError(t, err, "Failed to pull image for VM: %s", vmID)
+	defer client.ImageService().Delete(ctx, image.Name())
+
+	container, err := client.NewContainer(ctx, fmt.Sprintf("container-%s", vmID),
+		containerd.WithSnapshotter(ssName),
+		containerd.WithNewSnapshot("snapshot", image),
+		containerd.WithNewSpec(
+			oci.WithProcessArgs("sleep", "60"),
+			oci.WithDefaultPathEnv,
+			firecrackeroci.WithVMID(vmID),
+			firecrackeroci.WithVMNetwork,
+		),
+	)
+	require.NoError(t, err)
+	defer container.Delete(ctx, containerd.WithSnapshotCleanup)
+
+	task, err := container.NewTask(ctx, cio.NewCreator(cio.WithStreams(nil, os.Stdout, os.Stderr)))
+	require.NoError(t, err)
+
+	exitCh, err := task.Wait(ctx)
+	require.NoError(t, err)
+
+	err = task.Start(ctx)
+	require.NoError(t, err)
+
+	runExec(ctx, t, task, "cat", []string{"/bin/sh", "-c", "cat /etc/resolv.conf"})
+
+	for i := 0; i < 5; i++ {
+		runExec(ctx, t, task, fmt.Sprintf("nslookup%d", i), []string{"/usr/bin/nslookup", "google.com"})
+		runExec(ctx, t, task, fmt.Sprintf("wget%d", i), []string{"/usr/bin/wget", "-O-", "https://google.com"})
+
+		time.Sleep(5 * time.Second)
+	}
+
+	err = task.Kill(ctx, syscall.SIGTERM)
+	require.NoError(t, err)
+
+	require.NoError(t, err)
+	<-exitCh
 }

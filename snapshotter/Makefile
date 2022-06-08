@@ -20,6 +20,7 @@ GOSUM := $(GOMOD:.mod=.sum)
 DOCKER_IMAGE_TAG?=latest
 GO_CACHE_VOLUME_NAME?=gocache
 FIRECRACKER_CONTAINERD_TEST_IMAGE?=localhost/firecracker-containerd-test
+FICD_DM_POOL?=fc-test-thinpool
 
 REVISION := $(shell git rev-parse HEAD)
 
@@ -31,7 +32,7 @@ INTEG_TESTNAMES=$(shell docker run --rm \
 	--entrypoint=/bin/bash \
 	--workdir=/src/snapshotter \
 	$(FIRECRACKER_CONTAINERD_TEST_IMAGE):$(DOCKER_IMAGE_TAG) \
-	-c "go test -list . | sed '$$d' | grep $(INTEG_TEST_SUFFIX)")
+	-c "go test -list . | sed '$$d' | grep $(INTEG_TEST_SUFFIX)" | sort)
 
 all: demux-snapshotter http-address-resolver
 
@@ -51,6 +52,7 @@ integ-test:
 	$(MAKE) $(addprefix integ-test-,$(INTEG_TESTNAMES))
 
 integ-test-%: logs
+	$(CURDIR)/../tools/thinpool.sh reset "$(FICD_DM_POOL)"
 	docker run --rm -it \
 		--privileged \
 		--ipc=host \
@@ -61,6 +63,8 @@ integ-test-%: logs
 		--volume $(CURDIR)/..:/src \
 		--volume $(GO_CACHE_VOLUME_NAME):/go \
 		--env ENABLE_ISOLATED_TESTS=1 \
+		--env FICD_DM_VOLUME_GROUP=$(FICD_DM_VOLUME_GROUP) \
+		--env FICD_DM_POOL=$(FICD_DM_POOL) \
 		--env GOPROXY=direct \
 		--env GOSUMDB=off \
 		--env GO111MODULE=on \
@@ -80,4 +84,4 @@ clean:
 distclean: clean
 	- rm -rf logs
 
-.PHONY: all demux-snapshotter http-address-resolver clean distclean install test integ-test
+.PHONY: all clean distclean install test integ-test

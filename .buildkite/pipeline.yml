@@ -38,6 +38,23 @@ steps:
 
   - wait
 
+  - label: ":running: snapshotter isolated tests"
+    agents:
+      queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
+      distro: "${BUILDKITE_AGENT_META_DATA_DISTRO}"
+      hostname: "${BUILDKITE_AGENT_META_DATA_HOSTNAME}"
+    env:
+      DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
+      NUMBER_OF_VMS: 10
+      EXTRAGOARGS: "-v -count=1 -race"
+      FICD_DM_VOLUME_GROUP: fcci-vg
+    artifact_paths:
+      - "snapshotter/logs/*"
+    command:
+      - make -C snapshotter integ-test FICD_DM_POOL=build${BUILDKITE_BUILD_NUMBER}_snapshotter
+
+  - wait
+
   # Git history validation happens after the 'wait' step so it happens
   # in parallel with the subsequent tests and does not prevent them
   # from running in the event of a validation failure.
@@ -72,21 +89,6 @@ steps:
       - cp "/local/artifacts/$BUILDKITE_BUILD_NUMBER/rootfs.img" tools/image-builder/rootfs.img
       - make test-in-docker
     timeout_in_minutes: 10
-
-  - label: ":running: snapshotter isolated tests"
-    agents:
-      queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
-      distro: "${BUILDKITE_AGENT_META_DATA_DISTRO}"
-      hostname: "${BUILDKITE_AGENT_META_DATA_HOSTNAME}"
-    env:
-      DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
-      NUMBER_OF_VMS: 10
-      EXTRAGOARGS: "-v -count=1 -race"
-      FICD_DM_VOLUME_GROUP: fcci-vg
-    artifact_paths:
-      - "snapshotter/logs/*"
-    command:
-      - make -C snapshotter integ-test FICD_DM_POOL=build${BUILDKITE_BUILD_NUMBER}_snapshotter
 
   - label: ":running: runtime isolated tests"
     agents:

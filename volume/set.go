@@ -278,10 +278,17 @@ func (vs *Set) WithMounts(mountpoints []Mount) (oci.SpecOpts, error) {
 			options = append(options, "ro")
 		}
 
+		var source string
+		if v.vmPath != "" {
+			source = v.vmPath
+		} else {
+			source = filepath.Join(vs.volumeDir, v.name)
+		}
+
 		mounts = append(mounts, specs.Mount{
 			// TODO: for volumes that are provided by the guest (e.g. in-VM snapshotters)
 			// We may be able to have bind-mounts from in-VM snapshotters' mount points.
-			Source:      filepath.Join(vs.volumeDir, v.name),
+			Source:      source,
 			Destination: mp.Destination,
 			Type:        "bind",
 			Options:     options,

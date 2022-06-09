@@ -31,21 +31,25 @@ import (
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
-type imageVolumeProvider struct {
-	client      *containerd.Client
-	image       string
-	target      string
+type imageProviderConfig struct {
 	snapshotter string
-	snapshot    string
+}
+
+type imageVolumeProvider struct {
+	config   imageProviderConfig
+	client   *containerd.Client
+	image    string
+	target   string
+	snapshot string
 }
 
 // ImageOpt allows setting optional properties of the provider.
-type ImageOpt func(*imageVolumeProvider)
+type ImageOpt func(*imageProviderConfig)
 
 // WithSnapshotter sets the snapshotter to pull images.
 func WithSnapshotter(ss string) ImageOpt {
-	return func(p *imageVolumeProvider) {
-		p.snapshotter = ss
+	return func(c *imageProviderConfig) {
+		c.snapshotter = ss
 	}
 }
 
@@ -75,14 +79,16 @@ func getV1ImageConfig(ctx context.Context, image containerd.Image) (*v1.Image, e
 // FromImage returns a new provider to that expose the volumes on the given image.
 func FromImage(client *containerd.Client, image, snapshot string, opts ...ImageOpt) Provider {
 	p := imageVolumeProvider{
-		snapshotter: containerd.DefaultSnapshotter,
-		client:      client,
-		image:       image,
-		snapshot:    snapshot,
+		config: imageProviderConfig{
+			snapshotter: containerd.DefaultSnapshotter,
+		},
+		client:   client,
+		image:    image,
+		snapshot: snapshot,
 	}
 
 	for _, opt := range opts {
-		opt(&p)
+		opt(&p.config)
 	}
 
 	return &p
@@ -99,7 +105,7 @@ func (p *imageVolumeProvider) Delete(ctx context.Context) error {
 		retErr = mount.UnmountAll(p.target, 0)
 	}
 
-	ss := p.client.SnapshotService(p.snapshotter)
+	ss := p.client.SnapshotService(p.config.snapshotter)
 	err := ss.Remove(ctx, p.snapshot)
 	if err != nil {
 		retErr = multierror.Append(retErr, err)
@@ -115,13 +121,13 @@ func (p *imageVolumeProvider) CreateVolumesUnder(ctx context.Context, tempDir st
 		return nil, err
 	}
 
-	unpacked, err := image.IsUnpacked(ctx, p.snapshotter)
+	unpacked, err := image.IsUnpacked(ctx, p.config.snapshotter)
 	if err != nil {
 		return nil, err
 	}
 
 	if !unpacked {
-		err := image.Unpack(ctx, p.snapshotter)
+		err := image.Unpack(ctx, p.config.snapshotter)
 		if err != nil {
 			return nil, err
 		}
@@ -166,7 +172,7 @@ func (p *imageVolumeProvider) mountImage(ctx context.Context, tempDir string) (s
 
 	parent := identity.ChainID(ids).String()
 
-	ss := p.client.SnapshotService(p.snapshotter)
+	ss := p.client.SnapshotService(p.config.snapshotter)
 	mounts, err := ss.View(ctx, p.snapshot, parent, snapshots.WithLabels(map[string]string{
 		"containerd.io/gc.root": time.Now().UTC().Format(time.RFC3339),
 	}))

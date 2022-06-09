@@ -20,6 +20,7 @@ GOSUM := $(GOMOD:.mod=.sum)
 DOCKER_IMAGE_TAG?=latest
 GO_CACHE_VOLUME_NAME?=gocache
 FIRECRACKER_CONTAINERD_TEST_IMAGE?=localhost/firecracker-containerd-test
+FICD_DM_POOL?=fc-test-thinpool
 
 REVISION := $(shell git rev-parse HEAD)
 
@@ -51,6 +52,7 @@ integ-test:
 	$(MAKE) $(addprefix integ-test-,$(INTEG_TESTNAMES))
 
 integ-test-%: logs
+	$(CURDIR)/../tools/thinpool.sh reset "$(FICD_DM_POOL)"
 	docker run --rm -it \
 		--privileged \
 		--ipc=host \
@@ -65,6 +67,8 @@ integ-test-%: logs
 		--env GOSUMDB=off \
 		--env GO111MODULE=on \
 		--env NUMBER_OF_VMS=$(NUMBER_OF_VMS) \
+		--env FICD_DM_VOLUME_GROUP=$(FICD_DM_VOLUME_GROUP) \
+		--env FICD_DM_POOL=$(FICD_DM_POOL) \
 		--workdir="/src/snapshotter" \
 		--init \
 		$(FIRECRACKER_CONTAINERD_TEST_IMAGE):$(DOCKER_IMAGE_TAG) \

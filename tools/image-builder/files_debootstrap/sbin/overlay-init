@@ -57,6 +57,10 @@ fi
 
 do_overlay
 
+# firecracker-containerd itself doesn't need /volumes but volume package
+# uses that to share files between in-VM snapshotters.
+mkdir /volumes
+
 # invoke the actual system init program and procede with the boot
 # process.
 exec /usr/sbin/init $@

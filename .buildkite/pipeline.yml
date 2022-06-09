@@ -11,11 +11,13 @@
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
+agents:
+  queue: kzys
+
 steps:
 
   - label: ":docker: Build"
     agents:
-      queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
       distro: "${BUILDKITE_AGENT_META_DATA_DISTRO}"
       hostname: "${BUILDKITE_AGENT_META_DATA_HOSTNAME}"
     env:
@@ -31,7 +33,6 @@ steps:
   # We probably should move that to metrics later.
   - label: ":lint-roller: loop device cleanup"
     agents:
-      queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
       distro: "${BUILDKITE_AGENT_META_DATA_DISTRO}"
       hostname: "${BUILDKITE_AGENT_META_DATA_HOSTNAME}"
     command: 'sudo losetup -l'
@@ -40,7 +41,6 @@ steps:
 
   - label: ":running: snapshotter isolated tests"
     agents:
-      queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
       distro: "${BUILDKITE_AGENT_META_DATA_DISTRO}"
       hostname: "${BUILDKITE_AGENT_META_DATA_HOSTNAME}"
     env:

@@ -20,4 +20,4 @@ Requires=local-fs.target
 Type=simple
 ExecStartPre=/bin/mkdir -p /var/lib/containerd-stargz-grpc
 ExecStartPre=/bin/mount -t tmpfs -o noatime,mode=0755 stargz /var/lib/containerd-stargz-grpc
-ExecStart=/usr/local/bin/containerd-stargz-grpc
+ExecStart=/usr/local/bin/containerd-stargz-grpc --log-level=debug

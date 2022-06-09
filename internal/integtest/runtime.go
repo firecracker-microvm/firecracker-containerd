@@ -15,6 +15,7 @@ package integtest
 
 import (
 	"os"
+	"strconv"
 )
 
 const (
@@ -22,15 +23,23 @@ const (
 	FirecrackerRuntime = "aws.firecracker"
 
 	containerdSockPathEnvVar = "CONTAINERD_SOCKET"
+	numberOfVmsEnvVar        = "NUMBER_OF_VMS"
 )
 
 var (
 	// ContainerdSockPath is the default Firecracker-containerd socket path
 	ContainerdSockPath = "/run/firecracker-containerd/containerd.sock"
+
+	// NumberOfVms is the number of VMs used in integration testing set
+	// by either environment variable read or defaults to 5 VMs.
+	NumberOfVms = 5
 )
 
 func init() {
 	if v := os.Getenv(containerdSockPathEnvVar); v != "" {
 		ContainerdSockPath = v
+	}
+	if v := os.Getenv(numberOfVmsEnvVar); v != "" {
+		NumberOfVms, _ = strconv.Atoi(v)
 	}
 }

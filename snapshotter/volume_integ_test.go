@@ -61,7 +61,15 @@ func TestGuestVolumeFrom_Isolated(t *testing.T) {
 	remoteImage := volume.FromGuestImage(
 		client, vmID, al2stargz, "al2-snapshot", []string{"/etc/yum"},
 		volume.WithSnapshotter("demux"),
+		volume.WithPullOptions(containerd.WithImageHandlerWrapper(
+			source.AppendDefaultLabelsHandlerWrapper(al2stargz, 10*mib),
+		)),
 	)
+	err = vs.AddFrom(ctx, remoteImage)
+	require.NoError(t, err)
+
+	// PrepareDriveMount only copies images that are available before starting the VM.
+	// In this case, only postgres.
 	mount, err := vs.PrepareDriveMount(ctx, 10*mib)
 	require.NoError(t, err)
 
@@ -95,15 +103,9 @@ func TestGuestVolumeFrom_Isolated(t *testing.T) {
 	})
 	require.NoError(t, err, "Failed to configure VM metadata for registry resolution")
 
-	err = remoteImage.Pull(ctx,
-		containerd.WithImageHandlerWrapper(source.AppendDefaultLabelsHandlerWrapper(al2stargz, 10*mib)),
-	)
-	require.NoError(t, err)
-
-	err = remoteImage.Copy(ctx, "image")
-	require.NoError(t, err)
-
-	err = vs.AddFrom(ctx, remoteImage)
+	// PrepareGuestVolumes only copies images that are only available after starting the VM.
+	// In this case, only al2stargz.
+	err = vs.PrepareInGuest(ctx, "prepare-in-guest")
 	require.NoError(t, err)
 
 	image, err := client.Pull(ctx,

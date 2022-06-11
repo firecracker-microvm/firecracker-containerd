@@ -86,13 +86,13 @@ func (p *GuestVolumeImageProvider) Name() string {
 	return p.image
 }
 
-// Pull the image.
-func (p *GuestVolumeImageProvider) Pull(ctx context.Context, opts ...containerd.RemoteOpt) error {
+// pull the image.
+func (p *GuestVolumeImageProvider) pull(ctx context.Context) error {
 	remoteOpts := []containerd.RemoteOpt{
 		containerd.WithPullUnpack,
 		containerd.WithPullSnapshotter(p.config.snapshotter),
 	}
-	remoteOpts = append(remoteOpts, opts...)
+	remoteOpts = append(remoteOpts, p.config.pullOpts...)
 	image, err := p.client.Pull(ctx, p.image, remoteOpts...)
 	if err != nil {
 		return err
@@ -122,30 +122,30 @@ func mountHostDirs(image string) oci.SpecOpts {
 	}
 }
 
-// Copy files from the image by launching the container.
+// copy files from the image by launching the container.
 // The name must be unique within the VM and must be /[A-Z0-9a-z][A-Z0-9a-z._-]*/.
-func (p *GuestVolumeImageProvider) Copy(ctx context.Context, name string) error {
-	err := identifiers.Validate(name)
+func (p *GuestVolumeImageProvider) copy(ctx context.Context, containerName string) error {
+	err := identifiers.Validate(containerName)
 	if err != nil {
 		return err
 	}
 	container, err := p.client.NewContainer(ctx,
-		name,
+		containerName,
 		containerd.WithSnapshotter(p.config.snapshotter),
 		containerd.WithNewSnapshot(p.snapshot, p.cImage),
 		containerd.WithNewSpec(
 			firecrackeroci.WithVMID(p.vmID),
 			oci.WithProcessArgs(filepath.Join(containerBinDir, "volume-init")),
 			oci.WithProcessCwd("/"),
-			mountHostDirs(name),
+			mountHostDirs(containerName),
 		),
 	)
 	if err != nil {
-		return fmt.Errorf("failed to create container %q with %q: %w", name, p.config.snapshotter, err)
+		return fmt.Errorf("failed to create container %q with %q: %w", containerName, p.config.snapshotter, err)
 	}
 	defer container.Delete(ctx, containerd.WithSnapshotCleanup)
 
-	input := GuestVolumeImageInput{From: "/", To: filepath.Join(containerVolumesDir, name), Volumes: p.volumes}
+	input := GuestVolumeImageInput{From: "/", To: filepath.Join(containerVolumesDir, containerName), Volumes: p.volumes}
 	b, err := json.Marshal(&input)
 	if err != nil {
 		return err
@@ -197,7 +197,7 @@ func (p *GuestVolumeImageProvider) Copy(ctx context.Context, name string) error 
 		return ctx.Err()
 	}
 
-	p.vmDir = filepath.Join(vmVolumesDir, name)
+	p.vmDir = filepath.Join(vmVolumesDir, containerName)
 	return nil
 }
 

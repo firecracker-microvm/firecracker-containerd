@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"sync"
 	"testing"
 	"time"
 
@@ -29,6 +28,7 @@ import (
 	"github.com/firecracker-microvm/firecracker-containerd/runtime/firecrackeroci"
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/internal/integtest/stargz/fs/source"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -58,7 +58,8 @@ func TestLaunchContainerWithRemoteSnapshotter_Isolated(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
 
-	launchContainerWithRemoteSnapshotterInVM(ctx, t, strconv.Itoa(vmID))
+	err := launchContainerWithRemoteSnapshotterInVM(ctx, strconv.Itoa(vmID))
+	require.NoError(t, err)
 }
 
 func TestLaunchMultipleContainersWithRemoteSnapshotter_Isolated(t *testing.T) {
@@ -68,30 +69,35 @@ func TestLaunchMultipleContainersWithRemoteSnapshotter_Isolated(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
 
-	var wg sync.WaitGroup
+	eg, ctx := errgroup.WithContext(ctx)
 
 	numberOfVms := integtest.NumberOfVms
 	for vmID := 0; vmID < numberOfVms; vmID++ {
-		wg.Add(1)
-		go func(id int) {
-			defer wg.Done()
-			launchContainerWithRemoteSnapshotterInVM(ctx, t, strconv.Itoa(id))
-		}(vmID)
+		ctx := ctx
+		id := vmID
+		eg.Go(func() error {
+			return launchContainerWithRemoteSnapshotterInVM(ctx, strconv.Itoa(id))
+		})
 	}
-	wg.Wait()
+	err := eg.Wait()
+	require.NoError(t, err)
 }
 
-func launchContainerWithRemoteSnapshotterInVM(ctx context.Context, t *testing.T, vmID string) {
+func launchContainerWithRemoteSnapshotterInVM(ctx context.Context, vmID string) error {
 	// For integration testing, assume the namespace is same as the VM ID.
 	namespace := vmID
 
 	ctx = namespaces.WithNamespace(ctx, namespace)
 
 	client, err := containerd.New(integtest.ContainerdSockPath, containerd.WithDefaultRuntime(integtest.FirecrackerRuntime))
-	require.NoError(t, err, "Unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
+	if err != nil {
+		return fmt.Errorf("Unable to create client to containerd service at %s, is containerd running? [%v]", integtest.ContainerdSockPath, err)
+	}
 
 	fcClient, err := integtest.NewFCControlClient(integtest.ContainerdSockPath)
-	require.NoError(t, err, "Failed to create fccontrol client")
+	if err != nil {
+		return fmt.Errorf("Failed to create fccontrol client. [%v]", err)
+	}
 
 	_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
 		VMID: vmID,
@@ -113,21 +119,27 @@ func launchContainerWithRemoteSnapshotterInVM(ctx context.Context, t *testing.T,
 		},
 		ContainerCount: 1,
 	})
-	require.NoErrorf(t, err, "Failed to create microVM[%s]", vmID)
+	if err != nil {
+		return fmt.Errorf("Failed to create microVM[%s] [%v]", vmID, err)
+	}
 	defer fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
 
 	_, err = fcClient.SetVMMetadata(ctx, &proto.SetVMMetadataRequest{
 		VMID:     vmID,
 		Metadata: fmt.Sprintf(dockerMetadataTemplate, "ghcr.io", noAuth, noAuth),
 	})
-	require.NoError(t, err, "Failed to configure VM metadata for registry resolution")
+	if err != nil {
+		return fmt.Errorf("Failed to configure VM metadata for registry resolution [%v]", err)
+	}
 
 	image, err := client.Pull(ctx, imageRef,
 		containerd.WithPullUnpack,
 		containerd.WithPullSnapshotter(snapshotterName),
 		containerd.WithImageHandlerWrapper(source.AppendDefaultLabelsHandlerWrapper(imageRef, 10*1024*1024)),
 	)
-	require.NoError(t, err, "Failed to pull image for VM: %s", vmID)
+	if err != nil {
+		return fmt.Errorf("Failed to pull image for VM: %s [%v]", vmID, err)
+	}
 	defer client.ImageService().Delete(ctx, image.Name())
 
 	container, err := client.NewContainer(ctx, fmt.Sprintf("container-%s", vmID),
@@ -141,9 +153,14 @@ func launchContainerWithRemoteSnapshotterInVM(ctx context.Context, t *testing.T,
 			firecrackeroci.WithVMNetwork,
 		),
 	)
-	require.NoError(t, err, "Failed to create container in VM: %s", vmID)
+	if err != nil {
+		return fmt.Errorf("Failed to create container in VM: %s, [%v]", vmID, err)
+	}
 	defer container.Delete(ctx, containerd.WithSnapshotCleanup)
 
 	_, err = integtest.RunTask(ctx, container)
-	require.NoError(t, err, "Failed to run task in VM: %s", vmID)
+	if err != nil {
+		return fmt.Errorf("Failed to run task in VM: %s [%v]", vmID, err)
+	}
+	return nil
 }

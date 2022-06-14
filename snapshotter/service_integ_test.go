@@ -99,8 +99,13 @@ func launchContainerWithRemoteSnapshotterInVM(ctx context.Context, vmID string) 
 		return fmt.Errorf("Failed to create fccontrol client. [%v]", err)
 	}
 
+	// Disable 8250 serial device and lessen the number of log messages written to the serial console.
+	// https://github.com/firecracker-microvm/firecracker/blob/v1.1.0/docs/prod-host-setup.md
+	kernelArgs := integtest.DefaultRuntimeConfig.KernelArgs + " 8250.nr_uarts=0 quiet loglevel=1"
+
 	_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
-		VMID: vmID,
+		VMID:       vmID,
+		KernelArgs: kernelArgs,
 		RootDrive: &proto.FirecrackerRootDrive{
 			HostPath: "/var/lib/firecracker-containerd/runtime/rootfs-stargz.img",
 		},
@@ -117,6 +122,7 @@ func launchContainerWithRemoteSnapshotterInVM(ctx context.Context, vmID string) 
 			VcpuCount:  1,
 			MemSizeMib: 1024,
 		},
+		TimeoutSeconds: 60,
 		ContainerCount: 1,
 	})
 	if err != nil {

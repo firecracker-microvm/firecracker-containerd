@@ -78,7 +78,7 @@ func Run(config config.Config) error {
 		})
 	}
 
-	snapshotter, err := initSnapshotter(ctx, config, cache, monitor)
+	snapshotter, err := initSnapshotter(config, cache, monitor)
 	if err != nil {
 		log.G(ctx).WithFields(
 			logrus.Fields{"resolver": config.Snapshotter.Proxy.Address.Resolver.Type},
@@ -158,13 +158,13 @@ func initResolver(config config.Config) (proxyaddress.Resolver, error) {
 const base10 = 10
 const bits32 = 32
 
-func initSnapshotter(ctx context.Context, config config.Config, cache cache.Cache, monitor *metrics.Monitor) (snapshots.Snapshotter, error) {
+func initSnapshotter(config config.Config, cache cache.Cache, monitor *metrics.Monitor) (snapshots.Snapshotter, error) {
 	resolver, err := initResolver(config)
 	if err != nil {
 		return nil, err
 	}
 
-	newRemoteSnapshotterFunc := func(ctx context.Context, namespace string) (*proxy.RemoteSnapshotter, error) {
+	newRemoteSnapshotterFunc := func(fetchSnapshotterCtx context.Context, namespace string) (*proxy.RemoteSnapshotter, error) {
 		r := resolver
 		response, err := r.Get(namespace)
 		if err != nil {
@@ -175,8 +175,8 @@ func initSnapshotter(ctx context.Context, config config.Config, cache cache.Cach
 		if err != nil {
 			return nil, err
 		}
-		snapshotterDialer := func(ctx context.Context, namespace string) (net.Conn, error) {
-			return vsock.DialContext(ctx, host, uint32(port), vsock.WithLogger(log.G(ctx)))
+		snapshotterDialer := func(dialerContext context.Context, namespace string) (net.Conn, error) {
+			return vsock.DialContext(dialerContext, host, uint32(port), vsock.WithLogger(log.G(dialerContext)))
 		}
 
 		var metricsProxy *metrics.Proxy
@@ -187,7 +187,7 @@ func initSnapshotter(ctx context.Context, config config.Config, cache cache.Cach
 			}
 		}
 
-		return proxy.NewRemoteSnapshotter(ctx, host, snapshotterDialer, metricsProxy)
+		return proxy.NewRemoteSnapshotter(fetchSnapshotterCtx, host, snapshotterDialer, metricsProxy)
 	}
 
 	return demux.NewSnapshotter(cache, newRemoteSnapshotterFunc), nil

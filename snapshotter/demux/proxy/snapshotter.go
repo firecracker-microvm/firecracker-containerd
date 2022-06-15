@@ -16,6 +16,7 @@ package proxy
 import (
 	"context"
 	"net"
+	"time"
 
 	snapshotsapi "github.com/containerd/containerd/api/services/snapshots/v1"
 	"github.com/containerd/containerd/snapshots"
@@ -60,7 +61,9 @@ func NewRemoteSnapshotter(ctx context.Context, address string,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
 	}
-	gRPCConn, err := grpc.DialContext(ctx, address, opts...)
+	dialCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	gRPCConn, err := grpc.DialContext(dialCtx, address, opts...)
 	if err != nil {
 		return nil, err
 	}

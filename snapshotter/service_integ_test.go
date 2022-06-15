@@ -162,7 +162,7 @@ func launchContainerWithRemoteSnapshotterInVM(ctx context.Context, vmID string) 
 	if err != nil {
 		return fmt.Errorf("Failed to create container in VM: %s, [%v]", vmID, err)
 	}
-	defer container.Delete(ctx, containerd.WithSnapshotCleanup)
+	defer container.Delete(ctx)
 
 	_, err = integtest.RunTask(ctx, container)
 	if err != nil {

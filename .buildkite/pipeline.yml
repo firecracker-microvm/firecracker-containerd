@@ -99,7 +99,7 @@ steps:
       hostname: "${BUILDKITE_AGENT_META_DATA_HOSTNAME}"
     env:
       DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
-      NUMBER_OF_VMS: 10
+      NUMBER_OF_VMS: 2
       EXTRAGOARGS: "-v -count=1 -race"
     artifact_paths:
       - "snapshotter/logs/*"

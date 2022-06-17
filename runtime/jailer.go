@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
 	"github.com/firecracker-microvm/firecracker-containerd/config"
@@ -90,7 +89,7 @@ func newJailer(
 	}
 
 	if err := os.MkdirAll(ociBundlePath, 0700); err != nil {
-		return nil, errors.Wrapf(err, "failed to create oci bundle path: %s", ociBundlePath)
+		return nil, fmt.Errorf("failed to create oci bundle path: %s: %w", ociBundlePath, err)
 	}
 
 	l := logger.WithField("jailer", "runc")

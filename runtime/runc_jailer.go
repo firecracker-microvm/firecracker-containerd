@@ -28,7 +28,6 @@ import (
 	"github.com/containerd/go-runc"
 	"github.com/hashicorp/go-multierror"
 	"github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 
@@ -108,11 +107,11 @@ func newRuncJailer(
 	spec := specs.Spec{}
 	configBytes, err := ioutil.ReadFile(cfg.RuncConfigPath)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to read %s", cfg.RuncConfigPath)
+		return nil, fmt.Errorf("failed to read %s: %w", cfg.RuncConfigPath, err)
 	}
 
 	if err = json.Unmarshal(configBytes, &spec); err != nil {
-		return nil, errors.Wrapf(err, "failed to unmarshal %s", cfg.RuncConfigPath)
+		return nil, fmt.Errorf("failed to unmarshal %s: %w", cfg.RuncConfigPath, err)
 	}
 
 	j.configSpec = spec
@@ -123,7 +122,7 @@ func newRuncJailer(
 	// Create the proper paths needed for the runc jailer
 	j.logger.WithField("rootPath", rootPath).Debug("Creating root drive path")
 	if err := mkdirAndChown(rootPath, mode, j.Config.UID, j.Config.GID); err != nil {
-		return nil, errors.Wrapf(err, "%s failed to mkdirAndChown", rootPath)
+		return nil, fmt.Errorf("%s failed to mkdirAndChown: %w", rootPath, err)
 	}
 
 	if j.Config.DriveExposePolicy == proto.DriveExposePolicy_BIND {
@@ -222,7 +221,7 @@ func (j *runcJailer) BuildJailedRootHandler(cfg *config.Config, machineConfig *f
 			rootPathToConfig := filepath.Join(ociBundlePath, "config.json")
 			j.logger.WithField("rootPathToConfig", rootPathToConfig).Debug("Copying config")
 			if err := copyFile(j.Config.RuncConfigPath, rootPathToConfig, 0400); err != nil {
-				return errors.Wrapf(err, "failed to copy config from %v to %v", j.Config.RuncConfigPath, rootPathToConfig)
+				return fmt.Errorf("failed to copy config from %v to %v: %w", j.Config.RuncConfigPath, rootPathToConfig, err)
 			}
 
 			// copy the firecracker binary
@@ -249,7 +248,7 @@ func (j *runcJailer) BuildJailedRootHandler(cfg *config.Config, machineConfig *f
 
 				f, err := os.Open(drivePath)
 				if err != nil {
-					return errors.Wrap(err, "failed to open drive file")
+					return fmt.Errorf("failed to open drive file: %w", err)
 				}
 
 				// This closes the file in the event an error occurred, otherwise we
@@ -291,7 +290,7 @@ func (j *runcJailer) BuildJailedRootHandler(cfg *config.Config, machineConfig *f
 			// we pass m.Cfg as opposed to machineConfig as we want the populated
 			// config defaults when calling NewMachine
 			if err := j.overwriteConfig(&m.Cfg, filepath.Base(m.Cfg.SocketPath), rootPathToConfig); err != nil {
-				return errors.Wrap(err, "failed to overwrite config.json")
+				return fmt.Errorf("failed to overwrite config.json: %w", err)
 			}
 
 			j.logger.Info("Successfully ran jailer handler")
@@ -354,7 +353,7 @@ func (j runcJailer) StubDrivesOptions() []FileOpt {
 		func(file *os.File) error {
 			err := unix.Fchown(int(file.Fd()), int(j.Config.UID), int(j.Config.GID))
 			if err != nil {
-				return errors.Wrapf(err, "failed to chown stub file %q", file.Name())
+				return fmt.Errorf("failed to chown stub file %q: %w", file.Name(), err)
 			}
 			return nil
 		},
@@ -432,7 +431,7 @@ func (j *runcJailer) bindMountFileToJail(src, dst string) error {
 	if j.started {
 		_, err := os.Stat(dst)
 		if err != nil {
-			return errors.Wrapf(err, "%q must be created by runc", dst)
+			return fmt.Errorf("%q must be created by runc: %w", dst, err)
 		}
 		return nil
 	}
@@ -492,7 +491,7 @@ func copyFile(src, dst string, mode os.FileMode) error {
 	// --sparse=always is a GNU-only option
 	output, err := exec.Command("cp", "--sparse=always", src, dst).CombinedOutput()
 	if err != nil {
-		return errors.Wrapf(err, "failed to copy %q to %q: %s", src, dst, output)
+		return fmt.Errorf("failed to cpy %q to %q: %s: %w", src, dst, output, err)
 	}
 	return os.Chmod(dst, mode)
 }

@@ -14,8 +14,9 @@
 package client
 
 import (
+	"fmt"
+
 	"github.com/containerd/containerd/pkg/ttrpcutil"
-	"github.com/pkg/errors"
 
 	fccontrol "github.com/firecracker-microvm/firecracker-containerd/proto/service/fccontrol/ttrpc"
 )
@@ -31,7 +32,7 @@ type Client struct {
 func New(ttrpcAddress string) (*Client, error) {
 	ttrpcClient, err := ttrpcutil.NewClient(ttrpcAddress)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create ttrpc client")
+		return nil, fmt.Errorf("failed to create ttrpc client: %w", err)
 	}
 
 	client, err := ttrpcClient.Client()

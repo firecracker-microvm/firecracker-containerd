@@ -23,7 +23,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -135,7 +134,7 @@ func ParseProcMountLines(lines ...string) ([]MountInfo, error) {
 		)
 		_, err := fmt.Sscanf(line, "%s %s %s %s %d %d", &source, &dest, &fstype, &optionsStr, &dumpFreq, &passno)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to parse /proc/mount line %q", line)
+			return nil, fmt.Errorf("failed to parse /proc/mount line %q: %w", line, err)
 		}
 
 		mountInfos = append(mountInfos, MountInfo{

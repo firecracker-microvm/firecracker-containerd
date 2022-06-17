@@ -25,6 +25,8 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
@@ -32,7 +34,6 @@ import (
 	"github.com/containernetworking/cni/pkg/version"
 	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/containernetworking/plugins/pkg/utils/buildversion"
-	"github.com/pkg/errors"
 	"github.com/vishvananda/netlink"
 )
 
@@ -67,7 +68,7 @@ func add(args *skel.CmdArgs) error {
 			}
 		}
 		if vethIPConf == nil {
-			return errors.Errorf("did not find veth ip: %+v", currentResult)
+			return fmt.Errorf("did not find veth ip: %+v", currentResult)
 		}
 
 		err = netlink.AddrDel(vethLink, &netlink.Addr{
@@ -167,12 +168,12 @@ func getCurrentResult(args *skel.CmdArgs) (*current.Result, error) {
 	cniConf := types.NetConf{}
 	err := json.Unmarshal(args.StdinData, &cniConf)
 	if err != nil {
-		return nil, errors.Wrap(err, "failure checking for previous result output")
+		return nil, fmt.Errorf("failure checking for previous result output: %w", err)
 	}
 
 	err = version.ParsePrevResult(&cniConf)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to parse previous CNI result")
+		return nil, fmt.Errorf("failed to parse previous CNI result: %w", err)
 	}
 
 	if cniConf.PrevResult == nil {
@@ -181,8 +182,7 @@ func getCurrentResult(args *skel.CmdArgs) (*current.Result, error) {
 
 	currentResult, err := current.NewResultFromResult(cniConf.PrevResult)
 	if err != nil {
-		return nil, errors.Wrap(err,
-			"failed to generate current result from previous CNI result")
+		return nil, fmt.Errorf("failed to generate current result from previous CNI result: %w", err)
 	}
 
 	return currentResult, nil

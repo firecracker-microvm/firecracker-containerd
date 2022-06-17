@@ -14,13 +14,12 @@
 package metrics
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"github.com/pkg/errors"
 )
 
 func okPortRange(startPort, endPort int) error {

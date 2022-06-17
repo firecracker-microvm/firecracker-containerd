@@ -15,13 +15,13 @@ package bundle
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/runtime/firecrackeroci"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -83,7 +83,7 @@ type OCIConfig struct {
 func (c *OCIConfig) File() (*os.File, error) {
 	f, err := os.Open(c.path)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to open OCI config file %s", c.path)
+		return nil, fmt.Errorf("failed to open OCI config file %s: %w", c.path, err)
 	}
 
 	return f, nil
@@ -93,7 +93,7 @@ func (c *OCIConfig) File() (*os.File, error) {
 func (c *OCIConfig) Bytes() ([]byte, error) {
 	f, err := ioutil.ReadFile(c.path)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to read OCI config file %s", c.path)
+		return nil, fmt.Errorf("failed to read OCI config file %s: %w", c.path, err)
 	}
 
 	return f, nil
@@ -103,7 +103,7 @@ func (c *OCIConfig) Bytes() ([]byte, error) {
 func (c *OCIConfig) Write(contents []byte) error {
 	err := ioutil.WriteFile(c.path, contents, 0700)
 	if err != nil {
-		return errors.Wrapf(err, "failed to write OCI config file %s", c.path)
+		return fmt.Errorf("failed to write OCI config file %s: %w", c.path, err)
 	}
 
 	return nil
@@ -122,7 +122,7 @@ func (c *OCIConfig) VMID() (string, error) {
 	}
 
 	if err := json.NewDecoder(ociConfigFile).Decode(&ociConfig); err != nil {
-		return "", errors.Wrapf(err, "failed to parse Annotations section of OCI config file %s", c.path)
+		return "", fmt.Errorf("failed to parse Annotations section of OCI config file %s: %w", c.path, err)
 	}
 
 	// This will return empty string if the key is not present in the OCI config, which the caller can decide

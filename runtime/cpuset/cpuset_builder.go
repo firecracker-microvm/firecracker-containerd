@@ -46,7 +46,7 @@ import (
 //
 //	_, err = fcClient.CreateVM(ctx, createVMRequest)
 //	if err != nil {
-//		return errors.Wrap(err, "failed to create VM")
+//      return fmt.Errorf("failed to create VM: %w", err)
 //	}
 type Builder struct {
 	cpus      []int

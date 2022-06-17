@@ -15,6 +15,7 @@ package vm
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -22,7 +23,6 @@ import (
 	"github.com/containerd/containerd/identifiers"
 	"github.com/containerd/containerd/runtime/v2/shim"
 	"github.com/containerd/fifo"
-	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
@@ -37,16 +37,16 @@ func ShimDir(shimBaseDir, namespace, vmID string) (Dir, error) {
 
 func shimDir(varRunDir, namespace, vmID string) (Dir, error) {
 	if err := identifiers.Validate(namespace); err != nil {
-		return "", errors.Wrap(err, "invalid namespace")
+		return "", fmt.Errorf("invalid namespace: %w", err)
 	}
 
 	if err := identifiers.Validate(vmID); err != nil {
-		return "", errors.Wrap(err, "invalid vm id")
+		return "", fmt.Errorf("invalid vm id: %w", err)
 	}
 
 	resolvedVarRunDir, err := filepath.EvalSymlinks(varRunDir)
 	if err != nil {
-		return "", errors.Wrapf(err, "failed evaluating any symlinks in path %q", varRunDir)
+		return "", fmt.Errorf("failed evaluating any symlinks in path %q: %w", varRunDir, err)
 	}
 
 	return Dir(filepath.Join(resolvedVarRunDir, namespace+"#"+vmID)), nil
@@ -123,7 +123,7 @@ func (d Dir) FirecrackerMetricsFifoPath() string {
 // inside the VM of this vm dir.
 func (d Dir) BundleLink(containerID string) (bundle.Dir, error) {
 	if err := identifiers.Validate(containerID); err != nil {
-		return "", errors.Wrapf(err, "invalid container id %q", containerID)
+		return "", fmt.Errorf("invalid container id %q: %w", containerID, err)
 	}
 
 	return bundle.Dir(filepath.Join(d.RootPath(), containerID)), nil
@@ -170,7 +170,7 @@ func (d Dir) WriteAddress(shimSocketAddress string) error {
 func createSymlink(oldPath, newPath string, errMsgName string) error {
 	err := os.Symlink(oldPath, newPath)
 	if err != nil {
-		return errors.Wrapf(err, `failed to create %s symlink from "%s"->"%s"`, errMsgName, newPath, oldPath)
+		return fmt.Errorf(`failed to create %s symlink from "%s"->"%s": %w`, errMsgName, newPath, oldPath, err)
 	}
 
 	return nil
@@ -179,12 +179,12 @@ func createSymlink(oldPath, newPath string, errMsgName string) error {
 func relPathTo(absPath string) (string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
-		return "", errors.Wrapf(err, "failed to get current working directory")
+		return "", fmt.Errorf("failed to get current working directory: %w", err)
 	}
 
 	relPath, err := filepath.Rel(cwd, absPath)
 	if err != nil {
-		return "", errors.Wrapf(err, "failed to get relative path from %q to %q", cwd, absPath)
+		return "", fmt.Errorf("failed to get relative path from %q to %q: %w", cwd, absPath, err)
 	}
 
 	return relPath, nil

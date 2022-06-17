@@ -158,6 +158,12 @@ func (s *Snapshotter) Commit(ctx context.Context, name string, key string, opts 
 func (s *Snapshotter) Remove(ctx context.Context, key string) error {
 	contextLogger := log.G(ctx).WithField("function", "Remove")
 
+	_, err := getNamespaceFromContext(ctx, contextLogger)
+	if err != nil {
+		contextLogger.Debug("no namespace found, proxying remove function to all cached snapshotters")
+		return s.cache.RemoveAll(ctx, key)
+	}
+
 	snapshotter, err := s.getSnapshotterFromCache(ctx, contextLogger)
 	if err != nil {
 		return err
@@ -198,6 +204,12 @@ func (s *Snapshotter) Close() error {
 // See https://github.com/containerd/containerd/blob/v1.6.4/snapshots/snapshotter.go
 func (s *Snapshotter) Cleanup(ctx context.Context) error {
 	contextLogger := log.G(ctx).WithField("function", "Cleanup")
+
+	_, err := getNamespaceFromContext(ctx, contextLogger)
+	if err != nil {
+		contextLogger.Debug("no namespace found, proxying cleanup call to all cached snapshotters")
+		return s.cache.CleanupAll(ctx)
+	}
 
 	snapshotter, err := s.getSnapshotterFromCache(ctx, contextLogger)
 	if err != nil {

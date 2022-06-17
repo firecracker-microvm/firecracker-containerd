@@ -29,8 +29,14 @@ type Cache interface {
 	// fetch function if the snapshotter is not currently cached.
 	Get(ctx context.Context, key string, fetch SnapshotterProvider) (*proxy.RemoteSnapshotter, error)
 
+	// RemoveAll removes the snapshot by the provided key from all cached snapshotters.
+	RemoveAll(ctx context.Context, key string) error
+
 	// WalkAll applies the provided function across all cached snapshotters.
 	WalkAll(ctx context.Context, fn snapshots.WalkFunc, filters ...string) error
+
+	// CleanupAll issues a cleanup call to all cached snapshotters.
+	CleanupAll(ctx context.Context) error
 
 	// Closes the snapshotter and removes it from the cache.
 	Evict(key string) error

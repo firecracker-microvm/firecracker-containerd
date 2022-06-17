@@ -23,13 +23,12 @@ import (
 	"github.com/containerd/containerd/snapshots"
 
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux/cache"
-	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux/internal"
+	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux/internal/mock"
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux/proxy"
 )
 
 func fetchOkSnapshotter(ctx context.Context, key string) (*proxy.RemoteSnapshotter, error) {
-	var snapshotter internal.SuccessfulSnapshotter = internal.SuccessfulSnapshotter{}
-	return &proxy.RemoteSnapshotter{Snapshotter: &snapshotter}, nil
+	return &proxy.RemoteSnapshotter{Snapshotter: &mock.Snapshotter{}}, nil
 }
 
 func fetchSnapshotterNotFound(ctx context.Context, key string) (*proxy.RemoteSnapshotter, error) {
@@ -43,8 +42,19 @@ func createSnapshotterCacheWithSuccessfulSnapshotter(namespace string) cache.Cac
 }
 
 func fetchFailingSnapshotter(ctx context.Context, key string) (*proxy.RemoteSnapshotter, error) {
-	var snapshotter internal.FailingSnapshotter = internal.FailingSnapshotter{}
-	return &proxy.RemoteSnapshotter{Snapshotter: &snapshotter}, nil
+	return &proxy.RemoteSnapshotter{Snapshotter: &mock.Snapshotter{
+		StatError:    errors.New("mock stat error"),
+		UpdateError:  errors.New("mock update error"),
+		UsageError:   errors.New("mock usage error"),
+		MountsError:  errors.New("mock mounts error"),
+		PrepareError: errors.New("mock prepare error"),
+		ViewError:    errors.New("mock view error"),
+		CommitError:  errors.New("mock commit error"),
+		RemoveError:  errors.New("mock remove error"),
+		WalkError:    errors.New("mock walk error"),
+		CloseError:   errors.New("mock close error"),
+		CleanupError: errors.New("mock cleanup error"),
+	}}, nil
 }
 
 func createSnapshotterCacheWithFailingSnapshotter(namespace string) cache.Cache {
@@ -72,8 +82,6 @@ func TestReturnErrorWhenCalledWithoutNamespacedContext(t *testing.T) {
 		{"Prepare", func() error { _, err := uut.Prepare(ctx, "layerKey", ""); return err }},
 		{"View", func() error { _, err := uut.View(ctx, "layerKey", ""); return err }},
 		{"Commit", func() error { return uut.Commit(ctx, "layer1", "layerKey") }},
-		{"Remove", func() error { return uut.Remove(ctx, "layerKey") }},
-		{"Cleanup", func() error { return uut.(snapshots.Cleaner).Cleanup(ctx) }},
 	}
 
 	for _, test := range tests {
@@ -95,10 +103,12 @@ func TestNoErrorWhenCalledWithoutNamespacedContext(t *testing.T) {
 		name string
 		run  func() error
 	}{
+		{"Remove", func() error { return uut.Remove(ctx, "layerKey") }},
 		{"Walk", func() error {
 			var callback = func(c context.Context, i snapshots.Info) error { return nil }
 			return uut.Walk(ctx, callback)
 		}},
+		{"Cleanup", func() error { return uut.(snapshots.Cleaner).Cleanup(ctx) }},
 	}
 
 	for _, test := range tests {

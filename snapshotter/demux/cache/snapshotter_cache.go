@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/snapshots"
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux/proxy"
 	"github.com/hashicorp/go-multierror"
@@ -59,6 +60,21 @@ func (cache *SnapshotterCache) Get(ctx context.Context, key string, fetch Snapsh
 	return snapshotter, nil
 }
 
+// RemoveAll removes the snapshot by the provided key from all cached snapshotters.
+func (cache *SnapshotterCache) RemoveAll(ctx context.Context, key string) error {
+	cache.mutex.RLock()
+	defer cache.mutex.RUnlock()
+
+	var allErr error
+
+	for namespace, snapshotter := range cache.snapshotters {
+		if err := snapshotter.Remove(ctx, key); err != nil && err != errdefs.ErrNotFound {
+			allErr = multierror.Append(allErr, fmt.Errorf("failed to remove snapshot on snapshotter[%s]: %w", namespace, err))
+		}
+	}
+	return allErr
+}
+
 // WalkAll applies the provided function to all cached snapshotters.
 func (cache *SnapshotterCache) WalkAll(ctx context.Context, fn snapshots.WalkFunc, filters ...string) error {
 	cache.mutex.RLock()
@@ -69,6 +85,21 @@ func (cache *SnapshotterCache) WalkAll(ctx context.Context, fn snapshots.WalkFun
 	for namespace, snapshotter := range cache.snapshotters {
 		if err := snapshotter.Walk(ctx, fn, filters...); err != nil {
 			allErr = multierror.Append(allErr, fmt.Errorf("failed to walk function on snapshotter[%s]: %w", namespace, err))
+		}
+	}
+	return allErr
+}
+
+// CleanupAll issues a cleanup to all cached snapshotters.
+func (cache *SnapshotterCache) CleanupAll(ctx context.Context) error {
+	cache.mutex.RLock()
+	defer cache.mutex.RUnlock()
+
+	var allErr error
+
+	for namespace, snapshotter := range cache.snapshotters {
+		if err := snapshotter.Cleanup(ctx); err != nil {
+			allErr = multierror.Append(allErr, fmt.Errorf("failed cleanup function on snapshotter[%s]: %w", namespace, err))
 		}
 	}
 	return allErr

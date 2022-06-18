@@ -29,10 +29,17 @@ RUN mkdir -p \
   ${FICD_LOG_DIR} \
   /etc/cni/net.d
 
-RUN wget https://github.com/containerd/containerd/releases/download/v1.6.4/containerd-1.6.4-linux-amd64.tar.gz && \
-  tar zxvf containerd-1.6.4-linux-amd64.tar.gz -C /tmp/ && \
+# Install containerd to have runc shim.
+ENV CTRD_VERSION="1.6.4"
+RUN wget --quiet -O- https://github.com/containerd/containerd/releases/download/v$CTRD_VERSION/containerd-$CTRD_VERSION-linux-amd64.tar.gz | tar zxf - -C /tmp/ && \
   install -D -o root -g root -m755 -t /usr/local/bin /tmp/bin/containerd-shim-runc-v2 && \
-  rm -rf containerd-1.6.4-linux-amd64.tar.gz /tmp/bin
+  rm -rf /tmp/bin
+
+# Install critest.
+ENV CRITEST_VERSION="1.23.0"
+RUN wget --quiet -O- https://github.com/kubernetes-sigs/cri-tools/releases/download/v$CRITEST_VERSION/critest-v$CRITEST_VERSION-linux-amd64.tar.gz | tar zxf - -C /tmp/ && \
+  install -D -o root -g root -m755 -t /usr/local/bin /tmp/critest && \
+  rm -f /tmp/critest
 
 # Pull the images the tests need into the content store so we don't need internet
 # access during the tests themselves. This runs as a seperate step before the other
@@ -45,17 +52,11 @@ RUN --mount=type=bind,target=/src \
   make -C /src install && \
   ln -sv /usr/local/bin/firecracker-containerd /usr/local/bin/containerd && \
   ln -sv /usr/local/bin/firecracker-ctr /usr/local/bin/ctr
+
 RUN containerd 2>/dev/null & \
   ctr --address /run/firecracker-containerd/containerd.sock content fetch docker.io/library/alpine:3.10.1 >/dev/null && \
   ctr --address /run/firecracker-containerd/containerd.sock content fetch docker.io/mlabbe/iperf3:3.6-r0 >/dev/null && \
   ctr --address /run/firecracker-containerd/containerd.sock content fetch docker.io/library/postgres:14.3 >/dev/null
-
-# Install critest
-ENV VERSION="v1.23.0"
-RUN wget https://github.com/kubernetes-sigs/cri-tools/releases/download/$VERSION/critest-$VERSION-linux-amd64.tar.gz && \
-  tar zxvf critest-$VERSION-linux-amd64.tar.gz -C /tmp/ && \
-  install -D -o root -g root -m755 -t /usr/local/bin /tmp/critest && \
-  rm -f critest-$VERSION-linux-amd64.tar.gz /tmp/critest
 
 ADD bin/firecracker /usr/local/bin
 

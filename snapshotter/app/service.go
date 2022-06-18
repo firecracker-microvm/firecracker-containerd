@@ -19,9 +19,11 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	snapshotsapi "github.com/containerd/containerd/api/services/snapshots/v1"
 	"github.com/containerd/containerd/contrib/snapshotservice"
@@ -109,6 +111,11 @@ func Run(config config.Config) error {
 	group.Go(func() error {
 		defer func() {
 			log.G(ctx).Info("stopping server")
+
+			buf := make([]byte, 1<<20)
+			stacklen := runtime.Stack(buf, true)
+			log.G(ctx).Info("goroutines: %s", buf[:stacklen])
+
 			grpcServer.Stop()
 
 			if err := snapshotter.Close(); err != nil {
@@ -176,7 +183,15 @@ func initSnapshotter(ctx context.Context, config config.Config, cache cache.Cach
 			return nil, err
 		}
 		snapshotterDialer := func(ctx context.Context, namespace string) (net.Conn, error) {
-			return vsock.DialContext(ctx, host, uint32(port), vsock.WithLogger(log.G(ctx)))
+			logger := log.G(ctx).WithFields(logrus.Fields{"ns": namespace})
+			return vsock.DialContext(
+				ctx, host, uint32(port),
+				vsock.WithLogger(logger),
+				vsock.WithDialTimeout(1*time.Minute),
+				vsock.WithConnectionMsgTimeout(1*time.Minute),
+				vsock.WithAckMsgTimeout(1*time.Minute),
+				vsock.WithRetryInterval(30*time.Second),
+			)
 		}
 
 		var metricsProxy *metrics.Proxy

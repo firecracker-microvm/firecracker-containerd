@@ -121,7 +121,7 @@ func launchContainerWithRemoteSnapshotterInVM(ctx context.Context, vmID string, 
 
 	// Disable 8250 serial device and lessen the number of log messages written to the serial console.
 	// https://github.com/firecracker-microvm/firecracker/blob/v1.1.0/docs/prod-host-setup.md
-	kernelArgs := integtest.DefaultRuntimeConfig.KernelArgs + " 8250.nr_uarts=0 quiet loglevel=1"
+	kernelArgs := integtest.DefaultRuntimeConfig.KernelArgs // + " 8250.nr_uarts=0 quiet loglevel=1"
 
 	_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
 		VMID:       vmID,

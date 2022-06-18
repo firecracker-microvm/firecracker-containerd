@@ -58,7 +58,7 @@ func TestLaunchContainerWithRemoteSnapshotter_Isolated(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
 
-	err := launchContainerWithRemoteSnapshotterInVM(ctx, strconv.Itoa(vmID))
+	err := launchContainerWithRemoteSnapshotterInVM(ctx, strconv.Itoa(vmID), false)
 	require.NoError(t, err)
 }
 
@@ -76,14 +76,34 @@ func TestLaunchMultipleContainersWithRemoteSnapshotter_Isolated(t *testing.T) {
 		ctx := ctx
 		id := vmID
 		eg.Go(func() error {
-			return launchContainerWithRemoteSnapshotterInVM(ctx, strconv.Itoa(id))
+			return launchContainerWithRemoteSnapshotterInVM(ctx, strconv.Itoa(id), false)
 		})
 	}
 	err := eg.Wait()
 	require.NoError(t, err)
 }
 
-func launchContainerWithRemoteSnapshotterInVM(ctx context.Context, vmID string) error {
+func Test00PullOnly_Isolated(t *testing.T) {
+	integtest.Prepare(t, integtest.WithDefaultNetwork())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	eg, ctx := errgroup.WithContext(ctx)
+
+	numberOfVms := integtest.NumberOfVms
+	for vmID := 0; vmID < numberOfVms; vmID++ {
+		ctx := ctx
+		id := vmID
+		eg.Go(func() error {
+			return launchContainerWithRemoteSnapshotterInVM(ctx, strconv.Itoa(id), true)
+		})
+	}
+	err := eg.Wait()
+	require.NoError(t, err)
+}
+
+func launchContainerWithRemoteSnapshotterInVM(ctx context.Context, vmID string, onlyPull bool) error {
 	// For integration testing, assume the namespace is same as the VM ID.
 	namespace := vmID
 
@@ -147,6 +167,10 @@ func launchContainerWithRemoteSnapshotterInVM(ctx context.Context, vmID string) 
 		return fmt.Errorf("Failed to pull image for VM: %s [%v]", vmID, err)
 	}
 	defer client.ImageService().Delete(ctx, image.Name())
+
+	if onlyPull {
+		return nil
+	}
 
 	container, err := client.NewContainer(ctx, fmt.Sprintf("container-%s", vmID),
 		containerd.WithSnapshotter(snapshotterName),

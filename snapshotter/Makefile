@@ -31,7 +31,7 @@ INTEG_TESTNAMES=$(shell docker run --rm \
 	--entrypoint=/bin/bash \
 	--workdir=/src/snapshotter \
 	$(FIRECRACKER_CONTAINERD_TEST_IMAGE):$(DOCKER_IMAGE_TAG) \
-	-c "go test -list . | sed '$$d' | grep $(INTEG_TEST_SUFFIX)")
+	-c "go test -list . | sed '$$d' | grep $(INTEG_TEST_SUFFIX)" | sort)
 
 all: demux-snapshotter http-address-resolver
 

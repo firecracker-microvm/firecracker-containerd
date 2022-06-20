@@ -5,22 +5,27 @@ go 1.16
 require (
 	github.com/StackExchange/wmi v0.0.0-20181212234831-e0a55b97c705 // indirect
 	github.com/awslabs/tc-redirect-tap v0.0.0-20211025175357-e30dfca224c2
-	github.com/containerd/containerd v1.6.3
-	github.com/containerd/continuity v0.2.2
+	github.com/containerd/cgroups v1.0.4 // indirect
+	github.com/containerd/containerd v1.6.6
+	github.com/containerd/continuity v0.3.0
 	github.com/containerd/fifo v1.0.0
 	github.com/containerd/go-runc v1.0.0
 	github.com/containerd/ttrpc v1.1.0
 	github.com/containerd/typeurl v1.0.2
-	github.com/containernetworking/cni v1.0.1
+	github.com/containernetworking/cni v1.1.1
 	github.com/containernetworking/plugins v1.1.1
 	github.com/firecracker-microvm/firecracker-go-sdk v0.22.1-0.20220427214706-47505a9cf951
 	github.com/go-ole/go-ole v1.2.4 // indirect
 	github.com/gofrs/uuid v3.3.0+incompatible
+	github.com/gogo/googleapis v1.4.1 // indirect
 	github.com/gogo/protobuf v1.3.2
 	github.com/hashicorp/go-multierror v1.1.1
+	github.com/klauspost/compress v1.15.6 // indirect
 	github.com/miekg/dns v1.1.25
+	github.com/moby/sys/mountinfo v0.6.2 // indirect
+	github.com/moby/sys/signal v0.7.0 // indirect
 	github.com/opencontainers/image-spec v1.0.3-0.20211202183452-c5a74bcca799
-	github.com/opencontainers/runc v1.1.2
+	github.com/opencontainers/runc v1.1.3
 	github.com/opencontainers/runtime-spec v1.0.3-0.20210910115017-0d6cc581aeea
 	github.com/pelletier/go-toml v1.9.3
 	github.com/shirou/gopsutil v2.18.12+incompatible
@@ -28,9 +33,12 @@ require (
 	github.com/sirupsen/logrus v1.8.1
 	github.com/stretchr/testify v1.7.1
 	github.com/vishvananda/netlink v1.1.1-0.20210330154013-f5de75959ad5
-	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.0.0-20220209214540-3681064d5158
-	google.golang.org/grpc v1.43.0
+	golang.org/x/net v0.0.0-20220617184016-355a448f1bc9 // indirect
+	golang.org/x/sync v0.0.0-20220601150217-0de741cfad7f
+	golang.org/x/sys v0.0.0-20220615213510-4f61da869c0c
+	google.golang.org/genproto v0.0.0-20220617124728-180714bec0ad // indirect
+	google.golang.org/grpc v1.47.0
+	google.golang.org/protobuf v1.28.0 // indirect
 )
 
 replace (

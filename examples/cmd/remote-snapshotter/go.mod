@@ -8,10 +8,4 @@ require (
 	github.com/firecracker-microvm/firecracker-containerd v0.0.0-20220430002346-5f6efb9fdce8
 )
 
-require (
-	github.com/containerd/continuity v0.3.0 // indirect
-	google.golang.org/genproto v0.0.0-20220107163113-42d7afdf6368 // indirect
-
-)
-
 replace github.com/firecracker-microvm/firecracker-containerd => ../../..

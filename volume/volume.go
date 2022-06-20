@@ -21,6 +21,7 @@ package volume
 type Volume struct {
 	name          string
 	hostPath      string
+	vmPath        string
 	containerPath string
 }
 

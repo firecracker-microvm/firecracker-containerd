@@ -11,7 +11,7 @@
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
-SUBDIRS:=agent runtime examples firecracker-control/cmd/containerd snapshotter docker-credential-mmds
+SUBDIRS:=agent runtime examples firecracker-control/cmd/containerd snapshotter docker-credential-mmds volume
 TEST_SUBDIRS:=$(addprefix test-,$(SUBDIRS))
 INTEG_TEST_SUBDIRS:=$(addprefix integ-test-,$(SUBDIRS))
 
@@ -147,9 +147,10 @@ files_ephemeral: $(RUNC_BIN) agent-in-docker
 	cp agent/agent tools/image-builder/files_ephemeral/usr/local/bin
 	touch tools/image-builder/files_ephemeral
 
-files_ephemeral_stargz: $(STARGZ_BIN) docker-credential-mmds-in-docker
+files_ephemeral_stargz: $(STARGZ_BIN) docker-credential-mmds-in-docker volume-in-docker
 	mkdir -p tools/image-builder/files_ephemeral_stargz/usr/local/bin
 	cp docker-credential-mmds/docker-credential-mmds tools/image-builder/files_ephemeral_stargz/usr/local/bin
+	cp volume/volume-init tools/image-builder/files_ephemeral_stargz/usr/local/bin
 	cp $(STARGZ_BIN) tools/image-builder/files_ephemeral_stargz/usr/local/bin
 
 image: files_ephemeral

@@ -34,7 +34,7 @@ import (
 const (
 	snapshotterName = "demux"
 
-	imageRef = "ghcr.io/firecracker-microvm/firecracker-containerd/amazonlinux:latest-esgz"
+	al2stargz = "ghcr.io/firecracker-microvm/firecracker-containerd/amazonlinux:latest-esgz"
 
 	noAuth = ""
 
@@ -138,10 +138,10 @@ func launchContainerWithRemoteSnapshotterInVM(ctx context.Context, vmID string) 
 		return fmt.Errorf("Failed to configure VM metadata for registry resolution [%v]", err)
 	}
 
-	image, err := client.Pull(ctx, imageRef,
+	image, err := client.Pull(ctx, al2stargz,
 		containerd.WithPullUnpack,
 		containerd.WithPullSnapshotter(snapshotterName),
-		containerd.WithImageHandlerWrapper(source.AppendDefaultLabelsHandlerWrapper(imageRef, 10*1024*1024)),
+		containerd.WithImageHandlerWrapper(source.AppendDefaultLabelsHandlerWrapper(al2stargz, 10*1024*1024)),
 	)
 	if err != nil {
 		return fmt.Errorf("Failed to pull image for VM: %s [%v]", vmID, err)

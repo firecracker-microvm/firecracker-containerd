@@ -38,7 +38,8 @@ const (
 // Set is a set of volumes.
 type Set struct {
 	volumes   map[string]*Volume
-	providers map[string][]Mount
+	mounts    map[string][]Mount
+	providers map[string]Provider
 	tempDir   string
 	runtime   string
 	volumeDir string
@@ -65,7 +66,8 @@ func NewSet(runtime string) *Set {
 func NewSetWithTempDir(runtime, tempDir string) *Set {
 	return &Set{
 		runtime:   runtime,
-		providers: make(map[string][]Mount),
+		mounts:    make(map[string][]Mount),
+		providers: make(map[string]Provider),
 		volumes:   make(map[string]*Volume),
 		tempDir:   tempDir,
 	}
@@ -81,7 +83,12 @@ func (vs *Set) AddFrom(ctx context.Context, vp Provider) error {
 	if _, exists := vs.providers[vp.Name()]; exists {
 		return fmt.Errorf("failed to add %q: %w", vp.Name(), errdefs.ErrAlreadyExists)
 	}
-	dir, err := os.MkdirTemp(vs.tempDir, "AddFrom")
+	vs.providers[vp.Name()] = vp
+	return nil
+}
+
+func (vs *Set) copyToHostFromProvider(ctx context.Context, vp Provider) error {
+	dir, err := os.MkdirTemp(vs.tempDir, "copyToHostFromProvider")
 	if err != nil {
 		return err
 	}
@@ -100,7 +107,7 @@ func (vs *Set) AddFrom(ctx context.Context, vp Provider) error {
 
 		mounts = append(mounts, Mount{key: v.name, Destination: v.containerPath, ReadOnly: false})
 	}
-	vs.providers[vp.Name()] = mounts
+	vs.mounts[vp.Name()] = mounts
 	return nil
 }
 
@@ -147,7 +154,7 @@ func mountDiskImage(source, target string) error {
 
 // PrepareDirectory creates a directory that have volumes.
 func (vs *Set) PrepareDirectory(ctx context.Context) (retErr error) {
-	dir, err := os.MkdirTemp(vs.tempDir, "Prepare")
+	dir, err := os.MkdirTemp(vs.tempDir, "PrepareDirectory")
 	if err != nil {
 		retErr = err
 		return
@@ -161,19 +168,10 @@ func (vs *Set) PrepareDirectory(ctx context.Context) (retErr error) {
 		}
 	}()
 
-	for _, v := range vs.volumes {
-		path, err := fs.RootPath(dir, v.name)
-		if err != nil {
-			return err
-		}
-		if v.hostPath == "" {
-			continue
-		}
-		err = fs.CopyDir(path, v.hostPath)
-		if err != nil {
-			retErr = fmt.Errorf("failed to copy volume %q: %w", v.name, err)
-			return
-		}
+	err = vs.copyToHost(ctx, dir)
+	if err != nil {
+		retErr = err
+		return
 	}
 
 	vs.volumeDir = dir
@@ -221,20 +219,10 @@ func (vs *Set) PrepareDriveMount(ctx context.Context, size int64) (dm *proto.Fir
 		}
 	}()
 
-	for _, v := range vs.volumes {
-		path, err := fs.RootPath(dir, v.name)
-		if err != nil {
-			retErr = err
-			return
-		}
-		if v.hostPath == "" {
-			continue
-		}
-		err = fs.CopyDir(path, v.hostPath)
-		if err != nil {
-			retErr = fmt.Errorf("failed to copy volume %q: %w", v.name, err)
-			return
-		}
+	err = vs.copyToHost(ctx, dir)
+	if err != nil {
+		retErr = err
+		return
 	}
 
 	dm = &proto.FirecrackerDriveMount{
@@ -245,6 +233,61 @@ func (vs *Set) PrepareDriveMount(ctx context.Context, size int64) (dm *proto.Fir
 	}
 	vs.volumeDir = vmVolumePath
 	return
+}
+
+// PrepareInGuest prepares volumes inside the VM.
+func (vs *Set) PrepareInGuest(ctx context.Context, container string) error {
+	for _, provider := range vs.providers {
+		gp, guest := provider.(*GuestVolumeImageProvider)
+		if !guest {
+			continue
+		}
+
+		err := gp.pull(ctx)
+		if err != nil {
+			return err
+		}
+
+		err = gp.copy(ctx, container)
+		if err != nil {
+			return err
+		}
+
+		err = vs.copyToHostFromProvider(ctx, provider)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (vs *Set) copyToHost(ctx context.Context, dir string) error {
+	for _, provider := range vs.providers {
+		_, guest := provider.(*GuestVolumeImageProvider)
+		if guest {
+			continue
+		}
+
+		err := vs.copyToHostFromProvider(ctx, provider)
+		if err != nil {
+			return err
+		}
+	}
+
+	for _, v := range vs.volumes {
+		path, err := fs.RootPath(dir, v.name)
+		if err != nil {
+			return err
+		}
+		if v.hostPath == "" {
+			continue
+		}
+		err = fs.CopyDir(path, v.hostPath)
+		if err != nil {
+			return fmt.Errorf("failed to copy volume %q: %w", v.name, err)
+		}
+	}
+	return nil
 }
 
 // Mount is used to expose volumes to containers.
@@ -278,10 +321,17 @@ func (vs *Set) WithMounts(mountpoints []Mount) (oci.SpecOpts, error) {
 			options = append(options, "ro")
 		}
 
+		var source string
+		if v.vmPath != "" {
+			source = v.vmPath
+		} else {
+			source = filepath.Join(vs.volumeDir, v.name)
+		}
+
 		mounts = append(mounts, specs.Mount{
 			// TODO: for volumes that are provided by the guest (e.g. in-VM snapshotters)
 			// We may be able to have bind-mounts from in-VM snapshotters' mount points.
-			Source:      filepath.Join(vs.volumeDir, v.name),
+			Source:      source,
 			Destination: mp.Destination,
 			Type:        "bind",
 			Options:     options,
@@ -296,5 +346,10 @@ func (vs *Set) WithMounts(mountpoints []Mount) (oci.SpecOpts, error) {
 
 // WithMountsFromProvider exposes volumes from the provider.
 func (vs *Set) WithMountsFromProvider(name string) (oci.SpecOpts, error) {
-	return vs.WithMounts(vs.providers[name])
+	_, exists := vs.providers[name]
+	if !exists {
+		return nil, fmt.Errorf("failed to find volume %q: %w", name, errdefs.ErrNotFound)
+	}
+
+	return vs.WithMounts(vs.mounts[name])
 }

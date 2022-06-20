@@ -28,7 +28,6 @@ import (
 	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/oci"
-	"github.com/pkg/errors"
 
 	fcclient "github.com/firecracker-microvm/firecracker-containerd/firecracker-control/client"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
@@ -63,7 +62,7 @@ func taskWorkflow(containerCIDR, gateway, snapshotter string) (err error) {
 	log.Println("Creating containerd client")
 	client, err := containerd.New(containerdAddress)
 	if err != nil {
-		return errors.Wrapf(err, "creating client")
+		return fmt.Errorf("creating client: %w", err)
 	}
 
 	defer client.Close()
@@ -75,7 +74,7 @@ func taskWorkflow(containerCIDR, gateway, snapshotter string) (err error) {
 		containerd.WithPullSnapshotter(snapshotter),
 	)
 	if err != nil {
-		return errors.Wrapf(err, "creating container")
+		return fmt.Errorf("creating container: %w", err)
 	}
 
 	fcClient, err := fcclient.New(containerdTTRPCAddress)
@@ -110,7 +109,7 @@ func taskWorkflow(containerCIDR, gateway, snapshotter string) (err error) {
 
 	_, err = fcClient.CreateVM(ctx, createVMRequest)
 	if err != nil {
-		return errors.Wrap(err, "failed to create VM")
+		return fmt.Errorf("failed to create VM: %w", err)
 	}
 
 	defer func() {
@@ -143,7 +142,7 @@ func taskWorkflow(containerCIDR, gateway, snapshotter string) (err error) {
 
 	task, err := container.NewTask(ctx, cio.NewCreator(cio.WithStdio))
 	if err != nil {
-		return errors.Wrapf(err, "creating task")
+		return fmt.Errorf("creating task: %w", err)
 
 	}
 	defer task.Delete(ctx)
@@ -151,14 +150,12 @@ func taskWorkflow(containerCIDR, gateway, snapshotter string) (err error) {
 	log.Printf("Successfully created task: %s for the container\n", task.ID())
 	exitStatusC, err := task.Wait(ctx)
 	if err != nil {
-		return errors.Wrapf(err, "waiting for task")
-
+		return fmt.Errorf("waiting for task: %w", err)
 	}
 
 	log.Println("Completed waiting for the container task")
 	if err := task.Start(ctx); err != nil {
-		return errors.Wrapf(err, "starting task")
-
+		return fmt.Errorf("starting task: %w", err)
 	}
 
 	log.Println("Successfully started the container task")
@@ -169,7 +166,7 @@ func taskWorkflow(containerCIDR, gateway, snapshotter string) (err error) {
 		ip, _, err := net.ParseCIDR(containerCIDR)
 		if err != nil {
 			// this is validated as part of the CreateVM call, should never happen
-			return errors.Wrapf(err, "failed parsing CIDR %q", containerCIDR)
+			return fmt.Errorf("failed parsing CIDR %q: %w", containerCIDR, err)
 		}
 
 		log.Println("Executing http GET on " + ip.String())
@@ -180,13 +177,13 @@ func taskWorkflow(containerCIDR, gateway, snapshotter string) (err error) {
 	}
 
 	if err := task.Kill(ctx, syscall.SIGTERM); err != nil {
-		return errors.Wrapf(err, "killing task")
+		return fmt.Errorf("killing task: %w", err)
 	}
 
 	status := <-exitStatusC
 	code, _, err := status.Result()
 	if err != nil {
-		return errors.Wrapf(err, "getting task's exit code")
+		return fmt.Errorf("getting task's exit code: %w", err)
 	}
 	log.Printf("task exited with status: %d\n", code)
 
@@ -196,13 +193,13 @@ func taskWorkflow(containerCIDR, gateway, snapshotter string) (err error) {
 func getResponse(containerIP string) error {
 	response, err := http.Get(fmt.Sprintf("http://%s/", containerIP))
 	if err != nil {
-		return errors.Wrapf(err, "Unable to get response from %s", containerIP)
+		return fmt.Errorf("Unable to get response from %s: %w", containerIP, err)
 	}
 	defer response.Body.Close()
 
 	contents, err := ioutil.ReadAll(response.Body)
 	if err != nil {
-		return errors.Wrapf(err, "Unable to read response body from %s", containerIP)
+		return fmt.Errorf("Unable to read response body from %s: %w", containerIP, err)
 	}
 
 	log.Printf("Response from [%s]: \n[%s]\n", containerIP, contents)

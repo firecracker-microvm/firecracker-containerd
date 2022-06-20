@@ -16,6 +16,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"net"
@@ -48,7 +49,6 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/gogo/protobuf/types"
 	"github.com/hashicorp/go-multierror"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 	"google.golang.org/grpc/codes"
@@ -194,7 +194,7 @@ func NewService(shimCtx context.Context, id string, remotePublisher shim.Publish
 
 		shimDir, err = vm.ShimDir(cfg.ShimBaseDir, namespace, vmID)
 		if err != nil {
-			return nil, errors.Wrap(err, "invalid shim directory")
+			return nil, fmt.Errorf("invalid shim directory: %s", err)
 		}
 	}
 
@@ -228,7 +228,7 @@ func NewService(shimCtx context.Context, id string, remotePublisher shim.Publish
 
 	err = s.serveFCControl()
 	if err != nil {
-		err = errors.Wrap(err, "failed to start fccontrol server")
+		err = fmt.Errorf("failed to start fccontrol server: %w", err)
 		s.logger.WithError(err).Error()
 		return nil, err
 	}
@@ -288,7 +288,7 @@ func (s *service) serveFCControl() error {
 
 	socketFD, err := strconv.Atoi(fcSocketFDEnvVal)
 	if err != nil {
-		err = errors.Wrap(err, "failed to parse fccontrol socket FD value")
+		err = fmt.Errorf("failed to parse fccontrol socket FD value: %w", err)
 		s.logger.WithError(err).Error()
 		return err
 	}
@@ -328,7 +328,7 @@ func (s *service) StartShim(shimCtx context.Context, opts shim.StartOpts) (strin
 	// directory is the bundle directory
 	cwd, err := os.Getwd()
 	if err != nil {
-		return "", errors.Wrap(err, "failed to get current working directory")
+		return "", fmt.Errorf("failed to get current working directory: %w", err)
 	}
 	bundleDir := bundle.Dir(cwd)
 
@@ -348,7 +348,7 @@ func (s *service) StartShim(shimCtx context.Context, opts shim.StartOpts) (strin
 		// specified by the client.
 		uuid, err := uuid.NewV4()
 		if err != nil {
-			return "", errors.Wrap(err, "failed to generate UUID for VMID")
+			return "", fmt.Errorf("failed to generate UUID for VMID: %w", err)
 		}
 		s.vmID = uuid.String()
 
@@ -382,7 +382,7 @@ func (s *service) StartShim(shimCtx context.Context, opts shim.StartOpts) (strin
 		errStatus, ok := status.FromError(err)
 		// ignore AlreadyExists errors, that just means the shim is already up and running
 		if !ok || errStatus.Code() != codes.AlreadyExists {
-			return "", errors.Wrap(err, "unexpected error from CreateVM")
+			return "", fmt.Errorf("unexpected error from CreateVM: %w", err)
 		}
 	}
 
@@ -482,10 +482,10 @@ func (s *service) CreateVM(requestCtx context.Context, request *proto.CreateVMRe
 	if err != nil {
 		s.shimCancel()
 		s.logger.WithError(err).Error("failed to create VM")
-		if errors.Cause(err) == context.DeadlineExceeded {
+		if errors.Is(err, context.DeadlineExceeded) {
 			return nil, status.Errorf(codes.DeadlineExceeded, "VM %q didn't start within %s: %s", request.VMID, timeout, err)
 		}
-		return nil, errors.Wrap(err, "failed to create VM")
+		return nil, fmt.Errorf("failed to create VM: %w", err)
 	}
 
 	// creating the VM succeeded, setup monitors and publish events to celebrate
@@ -538,7 +538,7 @@ func (s *service) createVM(requestCtx context.Context, request *proto.CreateVMRe
 	s.logger.Info("creating new VM")
 	s.jailer, err = newJailer(s.shimCtx, s.logger, dir.RootPath(), s, request)
 	if err != nil {
-		return errors.Wrap(err, "failed to create jailer")
+		return fmt.Errorf("failed to create jailer: %w", err)
 	}
 
 	defer func() {
@@ -552,7 +552,7 @@ func (s *service) createVM(requestCtx context.Context, request *proto.CreateVMRe
 
 	s.machineConfig, err = s.buildVMConfiguration(request)
 	if err != nil {
-		return errors.Wrapf(err, "failed to build VM configuration")
+		return fmt.Errorf("failed to build VM configuration: %w", err)
 	}
 
 	opts := []firecracker.Opt{}
@@ -564,12 +564,12 @@ func (s *service) createVM(requestCtx context.Context, request *proto.CreateVMRe
 	}
 	relVSockPath, err := s.jailer.JailPath().FirecrackerVSockRelPath()
 	if err != nil {
-		return errors.Wrapf(err, "failed to get relative path to firecracker vsock")
+		return fmt.Errorf("failed to get relative path to firecracker vsock: %w", err)
 	}
 
 	jailedOpts, err := s.jailer.BuildJailedMachine(s.config, s.machineConfig, s.vmID)
 	if err != nil {
-		return errors.Wrap(err, "failed to build jailed machine options")
+		return fmt.Errorf("failed to build jailed machine options: %w", err)
 	}
 
 	if request.BalloonDevice == nil {
@@ -578,11 +578,11 @@ func (s *service) createVM(requestCtx context.Context, request *proto.CreateVMRe
 		// Creates a new balloon device if one does not already exist, otherwise updates it, before machine startup.
 		balloon, err := s.createBalloon(requestCtx, request)
 		if err != nil {
-			return errors.Wrap(err, "failed to create balloon device")
+			return fmt.Errorf("failed to create balloon device: %w", err)
 		}
 		balloonOpts, err := s.buildBalloonDeviceOpt(balloon)
 		if err != nil {
-			return errors.Wrap(err, "failed to create balloon device options")
+			return fmt.Errorf("failed to create balloon device options: %w", err)
 		}
 		opts = append(opts, balloonOpts...)
 	}
@@ -595,17 +595,17 @@ func (s *service) createVM(requestCtx context.Context, request *proto.CreateVMRe
 	// the shim context that was provided here.
 	s.machine, err = firecracker.NewMachine(s.shimCtx, *s.machineConfig, opts...)
 	if err != nil {
-		return errors.Wrapf(err, "failed to create new machine instance")
+		return fmt.Errorf("failed to create new machine instance: %w", err)
 	}
 
 	if err = s.machine.Start(s.shimCtx); err != nil {
-		return errors.Wrapf(err, "failed to start the VM")
+		return fmt.Errorf("failed to start the VM: %w", err)
 	}
 
 	s.logger.Info("calling agent")
 	conn, err := vsock.DialContext(requestCtx, relVSockPath, defaultVsockPort, vsock.WithLogger(s.logger))
 	if err != nil {
-		return errors.Wrapf(err, "failed to dial the VM over vsock")
+		return fmt.Errorf("failed to dial the VM over vsock: %w", err)
 	}
 
 	rpcClient := ttrpc.NewClient(conn, ttrpc.WithOnClose(func() { _ = conn.Close() }))
@@ -628,7 +628,7 @@ func (s *service) mountDrives(requestCtx context.Context) error {
 	for _, stubDrive := range s.driveMountStubs {
 		err := stubDrive.PatchAndMount(requestCtx, s.machine, s.driveMountClient)
 		if err != nil {
-			return errors.Wrapf(err, "failed to patch drive mount stub")
+			return fmt.Errorf("failed to patch drive mount stub: %w", err)
 		}
 	}
 	return nil
@@ -732,7 +732,7 @@ func (s *service) SetVMMetadata(requestCtx context.Context, request *proto.SetVM
 	s.logger.Info("setting VM metadata")
 	jayson := json.RawMessage(request.Metadata)
 	if err := s.machine.SetMetadata(requestCtx, jayson); err != nil {
-		err = errors.Wrap(err, "failed to set VM metadata")
+		err = fmt.Errorf("failed to set VM metadata: %w", err)
 		s.logger.WithError(err).Error()
 		return nil, err
 	}
@@ -756,7 +756,7 @@ func (s *service) UpdateVMMetadata(requestCtx context.Context, request *proto.Up
 	s.logger.Info("updating VM metadata")
 	jayson := json.RawMessage(request.Metadata)
 	if err := s.machine.UpdateMetadata(requestCtx, jayson); err != nil {
-		err = errors.Wrap(err, "failed to update VM metadata")
+		err = fmt.Errorf("failed to update VM metadata: %w", err)
 		s.logger.WithError(err).Error()
 		return nil, err
 	}
@@ -780,7 +780,7 @@ func (s *service) GetVMMetadata(requestCtx context.Context, request *proto.GetVM
 	s.logger.Info("Get VM metadata")
 	var metadata json.RawMessage
 	if err := s.machine.GetMetadata(requestCtx, &metadata); err != nil {
-		err = errors.Wrap(err, "failed to get VM metadata")
+		err = fmt.Errorf("failed to get VM metadata: %w", err)
 		s.logger.WithError(err).Error()
 		return nil, err
 	}
@@ -796,7 +796,7 @@ func (s *service) createBalloon(requestCtx context.Context, request *proto.Creat
 	balloonDevice := firecracker.NewBalloonDevice(amountMiB, deflateOnOom, firecracker.WithStatsPollingIntervals(statsPollingIntervals))
 	balloon := balloonDevice.Build()
 	if balloon.AmountMib == nil || balloon.DeflateOnOom == nil {
-		return balloon, errors.Errorf("One of balloon properties is nil, please check %+v: ", balloon)
+		return balloon, fmt.Errorf("One of balloon properties is nil, please check %+v: ", balloon)
 	}
 	s.logger.Infof("Creating a balloon device: AmountMib=%d, DeflateOnOom=%t and statsPollingIntervals=%d ", *balloon.AmountMib, *balloon.DeflateOnOom, balloon.StatsPollingIntervals)
 	return balloon, nil
@@ -825,7 +825,7 @@ func (s *service) GetBalloonConfig(requestCtx context.Context, req *proto.GetBal
 	s.logger.Info("Getting configuration for the balloon device")
 	balloon, err := s.machine.GetBalloonConfig(requestCtx)
 	if err != nil {
-		return nil, errors.Errorf("Fail to get balloon configuration. Please check if you have successfully created a balloon device")
+		return nil, errors.New("Failed to get balloon configuration. Please check if you have successfully created a balloon device")
 	}
 	balloonConfig := &proto.FirecrackerBalloonDevice{
 		AmountMib:             *balloon.AmountMib,
@@ -847,7 +847,7 @@ func (s *service) UpdateBalloon(requestCtx context.Context, req *proto.UpdateBal
 
 	s.logger.Infof("Updating balloon memory size, the new amount memory is %d MiB", req.AmountMib)
 	if err := s.machine.UpdateBalloon(requestCtx, req.AmountMib); err != nil {
-		err = errors.Wrap(err, "failed to update memory balloon")
+		err = fmt.Errorf("failed to update memory balloon: %w", err)
 		s.logger.WithError(err).Error()
 		return nil, err
 	}
@@ -868,7 +868,7 @@ func (s *service) GetBalloonStats(requestCtx context.Context, req *proto.GetBall
 	s.logger.Info("Getting statistics for the balloon device")
 	balloonStats, err := s.machine.GetBalloonStats(requestCtx)
 	if err != nil {
-		err = errors.Wrap(err, "failed to get balloon statistics")
+		err = fmt.Errorf("failed to get balloon statistics: %w", err)
 		s.logger.WithError(err).Error()
 		return nil, err
 	}
@@ -877,7 +877,7 @@ func (s *service) GetBalloonStats(requestCtx context.Context, req *proto.GetBall
 		balloonStats.ActualPages == nil ||
 		balloonStats.TargetMib == nil ||
 		balloonStats.TargetPages == nil {
-		return nil, errors.Errorf("One of BalloonStats properties is nil, please check %+v: ", balloonStats)
+		return nil, fmt.Errorf("One of BalloonStats properties is nil, please check %+v: ", balloonStats)
 	}
 
 	resp := &proto.GetBalloonStatsResponse{
@@ -914,7 +914,7 @@ func (s *service) UpdateBalloonStats(requestCtx context.Context, req *proto.Upda
 
 	s.logger.Info("updating balloon device statistics interval")
 	if err := s.machine.UpdateBalloonStats(requestCtx, req.StatsPollingIntervals); err != nil {
-		err = errors.Wrap(err, "failed to update balloon device statistics interval")
+		err = fmt.Errorf("failed to update balloon device statistics interval: %w", err)
 		s.logger.WithError(err).Error()
 		return nil, err
 	}
@@ -927,18 +927,18 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 		// Verify the request specified an absolute path for the source/dest of drives.
 		// Otherwise, users can implicitly rely on the CWD of this shim or agent.
 		if !strings.HasPrefix(driveMount.HostPath, "/") || !strings.HasPrefix(driveMount.VMPath, "/") {
-			return nil, errors.Errorf("driveMount %s contains relative path", driveMount.String())
+			return nil, fmt.Errorf("driveMount %s contains relative path", driveMount.String())
 		}
 	}
 
 	relSockPath, err := s.shimDir.FirecrackerSockRelPath()
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to get relative path to firecracker api socket")
+		return nil, fmt.Errorf("failed to get relative path to firecracker api socket: %w", err)
 	}
 
 	relVSockPath, err := s.jailer.JailPath().FirecrackerVSockRelPath()
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to get relative path to firecracker vsock")
+		return nil, fmt.Errorf("failed to get relative path to firecracker vsock: %w", err)
 	}
 
 	cfg := firecracker.Config{
@@ -1017,13 +1017,13 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 	s.containerStubHandler, err = CreateContainerStubs(
 		&cfg, s.jailer, containerCount, s.logger)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to create container stub drives")
+		return nil, fmt.Errorf("failed to create container stub drives: %w", err)
 	}
 
 	s.driveMountStubs, err = CreateDriveMountStubs(
 		&cfg, s.jailer, req.DriveMounts, s.logger)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to create drive mount stub drives")
+		return nil, fmt.Errorf("failed to create drive mount stub drives: %w", err)
 	}
 
 	// If no value for NetworkInterfaces was specified (not even an empty but non-nil list) and
@@ -1038,7 +1038,7 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 	for _, ni := range req.NetworkInterfaces {
 		netCfg, err := networkConfigFromProto(ni, s.vmID)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to convert network config %+v", ni)
+			return nil, fmt.Errorf("failed to convert network config %+v: %w", ni, err)
 		}
 
 		cfg.NetworkInterfaces = append(cfg.NetworkInterfaces, *netCfg)
@@ -1068,7 +1068,7 @@ func (s *service) newIOProxy(logger *logrus.Entry, stdin, stdout, stderr string,
 
 	relVSockPath, err := s.jailer.JailPath().FirecrackerVSockRelPath()
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to get relative path to firecracker vsock")
+		return nil, fmt.Errorf("failed to get relative path to firecracker vsock: %w", err)
 	}
 
 	if vm.IsAgentOnlyIO(stdout, logger) {
@@ -1160,14 +1160,14 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 
 	err = s.shimDir.CreateBundleLink(request.ID, hostBundleDir)
 	if err != nil {
-		err = errors.Wrap(err, "failed to create VM dir bundle link")
+		err = fmt.Errorf("failed to create VM dir bundle link: %w", err)
 		logger.WithError(err).Error()
 		return nil, err
 	}
 
 	err = s.shimDir.CreateAddressLink(request.ID)
 	if err != nil {
-		err = errors.Wrap(err, "failed to create shim address symlink")
+		err = fmt.Errorf("failed to create shim address symlink: %w", err)
 		logger.WithError(err).Error()
 		return nil, err
 	}
@@ -1175,7 +1175,7 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 	// We don't support a rootfs with multiple mounts, only one mount can be exposed to the
 	// vm per-container
 	if len(request.Rootfs) != 1 {
-		return nil, errors.Errorf("can only support rootfs with exactly one mount: %+v", request.Rootfs)
+		return nil, fmt.Errorf("can only support rootfs with exactly one mount: %+v", request.Rootfs)
 	}
 	rootfsMnt := request.Rootfs[0]
 
@@ -1187,7 +1187,7 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 		err = s.containerStubHandler.Reserve(requestCtx, request.ID,
 			rootfsMnt.Source, vmBundleDir.RootfsPath(), "ext4", nil, s.driveMountClient, s.machine)
 		if err != nil {
-			err = errors.Wrapf(err, "failed to get stub drive for task %q", request.ID)
+			err = fmt.Errorf("failed to get stub drive for task %q: %w", request.ID, err)
 			logger.WithError(err).Error()
 			return nil, err
 		}
@@ -1201,14 +1201,14 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 
 	extraData, err := s.generateExtraData(ociConfigBytes, request.Options)
 	if err != nil {
-		err = errors.Wrap(err, "failed to generate extra data")
+		err = fmt.Errorf("failed to generate extra data: %w", err)
 		logger.WithError(err).Error()
 		return nil, err
 	}
 
 	request.Options, err = types.MarshalAny(extraData)
 	if err != nil {
-		err = errors.Wrap(err, "failed to marshal extra data")
+		err = fmt.Errorf("failed to marshal extra data: %w", err)
 		logger.WithError(err).Error()
 		return nil, err
 	}
@@ -1232,7 +1232,7 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 
 	resp, err := s.taskManager.CreateTask(requestCtx, request, s.agentClient, ioConnectorSet)
 	if err != nil {
-		err = errors.Wrap(err, "failed to create task")
+		err = fmt.Errorf("failed to create task: %w", err)
 		logger.WithError(err).Error()
 		return nil, err
 	}
@@ -1288,23 +1288,23 @@ func (s *service) Delete(requestCtx context.Context, req *taskAPI.DeleteRequest)
 	if _, contains := s.blockDeviceTasks[req.ID]; contains {
 		// Trying to release stub drive for further reuse
 		if err := s.containerStubHandler.Release(requestCtx, req.ID, s.driveMountClient, s.machine); err != nil {
-			result = multierror.Append(errors.Wrapf(err, "failed to release stub drive for container: %s", req.ID))
+			result = multierror.Append(fmt.Errorf("failed to release stub drive for container: %s: %w", req.ID, err))
 		}
 	}
 
 	// Otherwise, delete the container
 	dir, err := s.shimDir.BundleLink(req.ID)
 	if err != nil {
-		result = multierror.Append(result, errors.Wrapf(err, "failed to find the bundle directory of the container: %s", req.ID))
+		result = multierror.Append(result, fmt.Errorf("failed to find the bundle directory of the container: %s: %w", req.ID, err))
 	}
 
 	_, err = os.Stat(dir.RootPath())
 	if os.IsNotExist(err) {
-		result = multierror.Append(result, errors.Wrapf(err, "failed to find the bundle directory of the container: %s", dir.RootPath()))
+		result = multierror.Append(result, fmt.Errorf("failed to find the bundle directory of the container: %s: %w", dir.RootPath(), err))
 	}
 
 	if err = os.Remove(dir.RootPath()); err != nil {
-		result = multierror.Append(result, errors.Wrapf(err, "failed to remove the bundle directory of the container: %s", dir.RootPath()))
+		result = multierror.Append(result, fmt.Errorf("failed to remove the bundle directory of the container: %s: %w", dir.RootPath(), err))
 	}
 
 	return resp, result.ErrorOrNil()
@@ -1319,14 +1319,14 @@ func (s *service) Exec(requestCtx context.Context, req *taskAPI.ExecProcessReque
 	// no OCI config bytes to provide for Exec, just leave those fields empty
 	extraData, err := s.generateExtraData(nil, req.Spec)
 	if err != nil {
-		err = errors.Wrap(err, "failed to generate extra data")
+		err = fmt.Errorf("failed to generate extra data: %w", err)
 		logger.WithError(err).Error()
 		return nil, err
 	}
 
 	req.Spec, err = types.MarshalAny(extraData)
 	if err != nil {
-		err = errors.Wrap(err, "failed to marshal extra data")
+		err = fmt.Errorf("failed to marshal extra data: %w", err)
 		logger.WithError(err).Error()
 		return nil, err
 	}
@@ -1567,7 +1567,7 @@ func (s *service) Shutdown(requestCtx context.Context, req *taskAPI.ShutdownRequ
 func (s *service) isPaused(ctx context.Context) (bool, error) {
 	info, err := s.machine.DescribeInstanceInfo(ctx)
 	if err != nil {
-		return false, errors.Wrapf(err, "failed to get instance info %v", info)
+		return false, fmt.Errorf("failed to get instance info %v: %w", info, err)
 	}
 	return *info.State == models.InstanceInfoStatePaused, nil
 }

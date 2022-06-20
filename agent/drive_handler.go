@@ -27,7 +27,6 @@ import (
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	drivemount "github.com/firecracker-microvm/firecracker-containerd/proto/service/drivemount/ttrpc"
 	"github.com/gogo/protobuf/types"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -183,7 +182,7 @@ func (dh driveHandler) MountDrive(ctx context.Context, req *drivemount.MountDriv
 
 	err := os.MkdirAll(req.DestinationPath, 0700)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to create drive mount destination %q", req.DestinationPath)
+		return nil, fmt.Errorf("failed to create drive mount destination %q: %w", req.DestinationPath, err)
 	}
 
 	// Retry the mount in the case of failure a fixed number of times. This works around a rare issue
@@ -210,12 +209,10 @@ func (dh driveHandler) MountDrive(ctx context.Context, req *drivemount.MountDriv
 			continue
 		}
 
-		return nil, errors.Wrapf(err, "non-retryable failure mounting drive from %q to %q",
-			drive.Path(), req.DestinationPath)
+		return nil, fmt.Errorf("non-retryable failure mounting drive from %q to %q: %w", drive.Path(), req.DestinationPath, err)
 	}
 
-	return nil, errors.Errorf("exhausted retries mounting drive from %q to %q",
-		drive.Path(), req.DestinationPath)
+	return nil, fmt.Errorf("exhausted retries mounting drive from %q to %q", drive.Path(), req.DestinationPath)
 }
 
 func (dh driveHandler) UnmountDrive(ctx context.Context, req *drivemount.UnmountDriveRequest) (*types.Empty, error) {
@@ -229,23 +226,18 @@ func (dh driveHandler) UnmountDrive(ctx context.Context, req *drivemount.Unmount
 		return &types.Empty{}, nil
 	}
 
-	return nil, errors.Errorf("failed to unmount the drive %q",
-		drive.Path())
+	return nil, fmt.Errorf("failed to unmount the drive %q", drive.Path())
 }
 
 func isSystemDir(path string) error {
 	resolvedDest, err := evalAnySymlinks(path)
 	if err != nil {
-		return errors.Wrapf(err,
-			"failed to evaluate any symlinks in drive ummount destination %q", path)
+		return fmt.Errorf("failed to evaluate any symlinks in drive unmount destination %q: %w", path, err)
 	}
 
 	for _, systemDir := range bannedSystemDirs {
 		if isOrUnderDir(resolvedDest, systemDir) {
-			return errors.Errorf(
-				"drive mount destination %q resolves to path %q under banned system directory %q",
-				path, resolvedDest, systemDir,
-			)
+			return fmt.Errorf("drive mount destination %q resolves to path %q under banned system directory %q", path, resolvedDest, systemDir)
 		}
 	}
 

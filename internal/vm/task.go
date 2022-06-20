@@ -15,12 +15,12 @@ package vm
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
 	taskAPI "github.com/containerd/containerd/runtime/v2/task"
 	"github.com/gogo/protobuf/types"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -111,13 +111,13 @@ func (m *taskManager) newProc(taskID, execID string) (*vmProc, error) {
 	defer m.mu.Unlock()
 
 	if m.isShutdown {
-		return nil, errors.Errorf("cannot create new exec %q in task %q after shutdown", execID, taskID)
+		return nil, fmt.Errorf("cannot create new exec %q in task %q after shutdown", execID, taskID)
 	}
 
 	_, taskExists := m.tasks[taskID]
 	if !taskExists {
 		if execID != "" {
-			return nil, errors.Errorf("cannot add exec %q to non-existent task %q", execID, taskID)
+			return nil, fmt.Errorf("cannot add exec %q to non-existent task %q", execID, taskID)
 		}
 
 		m.tasks[taskID] = make(map[string]*vmProc)
@@ -144,12 +144,12 @@ func (m *taskManager) deleteProc(taskID, execID string) (*vmProc, error) {
 
 	_, ok := m.tasks[taskID]
 	if !ok {
-		return nil, errors.Errorf("cannot delete exec %q from non-existent task %q", execID, taskID)
+		return nil, fmt.Errorf("cannot delete exec %q from non-existent task %q", execID, taskID)
 	}
 
 	proc, ok := m.tasks[taskID][execID]
 	if !ok {
-		return nil, errors.Errorf("cannot delete non-existent exec %q from task %q", execID, taskID)
+		return nil, fmt.Errorf("cannot delete non-existent exec %q from task %q", execID, taskID)
 	}
 
 	delete(m.tasks[taskID], execID)
@@ -328,16 +328,16 @@ func (m *taskManager) IsProxyOpen(taskID, execID string) (bool, error) {
 func (m *taskManager) findProc(taskID, execID string) (*vmProc, error) {
 	_, ok := m.tasks[taskID]
 	if !ok {
-		return nil, errors.Errorf("cannot find exec %q from non-existent task %q", execID, taskID)
+		return nil, fmt.Errorf("cannot find exec %q from non-existent task %q", execID, taskID)
 	}
 
 	proc, ok := m.tasks[taskID][execID]
 	if !ok {
-		return nil, errors.Errorf("cannot find non-existent exec %q from task %q", execID, taskID)
+		return nil, fmt.Errorf("cannot find non-existent exec %q from task %q", execID, taskID)
 	}
 
 	if proc.proxy == nil {
-		return nil, errors.Errorf("exec %q and task %q are present, but no proxy", taskID, execID)
+		return nil, fmt.Errorf("exec %q and task %q are present, but no proxy", taskID, execID)
 	}
 	return proc, nil
 }

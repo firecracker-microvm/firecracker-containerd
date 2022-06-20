@@ -15,11 +15,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"os"
 	"syscall"
 
 	"github.com/firecracker-microvm/firecracker-go-sdk"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
 	"github.com/firecracker-microvm/firecracker-containerd/config"
@@ -103,7 +103,7 @@ func (j *noopJailer) StubDrivesOptions() []FileOpt {
 
 func (j *noopJailer) Stop(force bool) error {
 	if j.pid == 0 {
-		return errors.New("the machine hasn't been started")
+		return errors.New("the machine has not been started")
 	}
 
 	signal := syscall.SIGTERM

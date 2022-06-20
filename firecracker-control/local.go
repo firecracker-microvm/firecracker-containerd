@@ -32,7 +32,6 @@ import (
 	"github.com/containerd/containerd/sys"
 	"github.com/gogo/protobuf/types"
 	"github.com/hashicorp/go-multierror"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -74,12 +73,12 @@ type local struct {
 
 func newLocal(ic *plugin.InitContext) (*local, error) {
 	if err := os.MkdirAll(ic.Root, 0750); err != nil && !os.IsExist(err) {
-		return nil, errors.Wrapf(err, "failed to create root directory: %s", ic.Root)
+		return nil, fmt.Errorf("failed to create root directory: %s: %w", ic.Root, err)
 	}
 
 	cfg, err := config.LoadConfig("")
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to load config")
+		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
 
 	return &local{
@@ -104,7 +103,7 @@ func (s *local) CreateVM(requestCtx context.Context, req *proto.CreateVMRequest)
 
 	ns, err := namespaces.NamespaceRequired(requestCtx)
 	if err != nil {
-		err = errors.Wrap(err, "error retrieving namespace of request")
+		err = fmt.Errorf("error retrieving namespace of request: %w", err)
 		s.logger.WithError(err).Error()
 		return nil, err
 	}
@@ -116,7 +115,7 @@ func (s *local) CreateVM(requestCtx context.Context, req *proto.CreateVMRequest)
 	// EADDRINUSE, then we assume there is already a shim for the VM and return an AlreadyExists error.
 	shimSocketAddress, err := shim.SocketAddress(requestCtx, s.containerdAddress, id)
 	if err != nil {
-		err = errors.Wrap(err, "failed to obtain shim socket address")
+		err = fmt.Errorf("failed to obtain shim socket address: %w", err)
 		s.logger.WithError(err).Error()
 		return nil, err
 	}
@@ -125,7 +124,7 @@ func (s *local) CreateVM(requestCtx context.Context, req *proto.CreateVMRequest)
 	if shim.SocketEaddrinuse(err) {
 		return nil, status.Errorf(codes.AlreadyExists, "VM with ID %q already exists (socket: %q)", id, shimSocketAddress)
 	} else if err != nil {
-		err = errors.Wrapf(err, "failed to open shim socket at address %q", shimSocketAddress)
+		err = fmt.Errorf("failed to open shim socket at address %q: %w", shimSocketAddress, err)
 		s.logger.WithError(err).Error()
 		return nil, err
 	}
@@ -133,19 +132,19 @@ func (s *local) CreateVM(requestCtx context.Context, req *proto.CreateVMRequest)
 	// If we're here, there is no pre-existing shim for this VMID, so we spawn a new one
 	if err := os.Mkdir(s.config.ShimBaseDir, 0700); err != nil && !os.IsExist(err) {
 		s.logger.WithError(err).Error()
-		return nil, errors.Wrapf(err, "failed to make shim base directory: %s", s.config.ShimBaseDir)
+		return nil, fmt.Errorf("failed to make shim base directory: %s: %w", s.config.ShimBaseDir, err)
 	}
 
 	shimDir, err := vm.ShimDir(s.config.ShimBaseDir, ns, id)
 	if err != nil {
-		err = errors.Wrapf(err, "failed to build shim path")
+		err = fmt.Errorf("failed to build shim path: %w", err)
 		s.logger.WithError(err).Error()
 		return nil, err
 	}
 
 	err = shimDir.Mkdir()
 	if err != nil {
-		err = errors.Wrapf(err, "failed to create VM dir %q", shimDir.RootPath())
+		err = fmt.Errorf("failed to create VM dir %q: %w", shimDir.RootPath(), err)
 		s.logger.WithError(err).Error()
 		return nil, err
 	}
@@ -165,14 +164,14 @@ func (s *local) CreateVM(requestCtx context.Context, req *proto.CreateVMRequest)
 	// solution until that time.
 	fcSocketAddress, err := fcShim.FCControlSocketAddress(requestCtx, s.containerdAddress, id)
 	if err != nil {
-		err = errors.Wrap(err, "failed to obtain shim socket address")
+		err = fmt.Errorf("failed to obtain shim socket address: %w", err)
 		s.logger.WithError(err).Error()
 		return nil, err
 	}
 
 	fcSocket, err := shim.NewSocket(fcSocketAddress)
 	if err != nil {
-		err = errors.Wrapf(err, "failed to open fccontrol socket at address %q", fcSocketAddress)
+		err = fmt.Errorf("failed to open fccontrol socket at address %q: %w", fcSocketAddress, err)
 		s.logger.WithError(err).Error()
 		return nil, err
 	}
@@ -190,7 +189,7 @@ func (s *local) CreateVM(requestCtx context.Context, req *proto.CreateVMRequest)
 
 	client, err := s.shimFirecrackerClient(requestCtx, id)
 	if err != nil {
-		err = errors.Wrap(err, "failed to create firecracker shim client")
+		err = fmt.Errorf("failed to create firecracker shim client: %w", err)
 		s.logger.WithError(err).Error()
 		return nil, err
 	}
@@ -216,12 +215,12 @@ func (s *local) addShim(address string, cmd *exec.Cmd) {
 
 func (s *local) shimFirecrackerClient(requestCtx context.Context, vmID string) (*fcclient.Client, error) {
 	if err := identifiers.Validate(vmID); err != nil {
-		return nil, errors.Wrap(err, "invalid id")
+		return nil, fmt.Errorf("invalid id: %w", err)
 	}
 
 	socketAddr, err := fcShim.FCControlSocketAddress(requestCtx, s.containerdAddress, vmID)
 	if err != nil {
-		err = errors.Wrap(err, "failed to get shim's fccontrol socket address")
+		err = fmt.Errorf("failed to get shim's fccontrol socket address: %w", err)
 		s.logger.WithError(err).Error()
 		return nil, err
 	}
@@ -295,7 +294,7 @@ func (s *local) waitForShimToExit(ctx context.Context, vmID string) error {
 
 	pid, ok := s.processes[socketAddr]
 	if !ok {
-		return errors.Errorf("failed to find a shim process for %q", socketAddr)
+		return fmt.Errorf("failed to find a shim process for %q", socketAddr)
 	}
 	defer delete(s.processes, socketAddr)
 
@@ -313,7 +312,7 @@ func (s *local) GetVMInfo(requestCtx context.Context, req *proto.GetVMInfoReques
 
 	resp, err := client.GetVMInfo(requestCtx, req)
 	if err != nil {
-		err = errors.Wrap(err, "shim client failed to get vm info")
+		err = fmt.Errorf("shim client failed to get vm info: %w", err)
 		s.logger.WithError(err).Error()
 		return nil, err
 	}
@@ -332,7 +331,7 @@ func (s *local) SetVMMetadata(requestCtx context.Context, req *proto.SetVMMetada
 
 	resp, err := client.SetVMMetadata(requestCtx, req)
 	if err != nil {
-		err = errors.Wrap(err, "shim client failed to set vm metadata")
+		err = fmt.Errorf("shim client failed to set vm metadata: %w", err)
 		s.logger.WithError(err).Error()
 		return nil, err
 	}
@@ -351,7 +350,7 @@ func (s *local) UpdateVMMetadata(requestCtx context.Context, req *proto.UpdateVM
 
 	resp, err := client.UpdateVMMetadata(requestCtx, req)
 	if err != nil {
-		err = errors.Wrap(err, "shim client failed to update vm metadata")
+		err = fmt.Errorf("shim client failed to update vm metadata: %w", err)
 		s.logger.WithError(err).Error()
 		return nil, err
 	}
@@ -369,7 +368,7 @@ func (s *local) GetVMMetadata(requestCtx context.Context, req *proto.GetVMMetada
 	defer client.Close()
 	resp, err := client.GetVMMetadata(requestCtx, req)
 	if err != nil {
-		err = errors.Wrap(err, "shim client failed to get vm metadata")
+		err = fmt.Errorf("shim client failed to get vm metadata: %w", err)
 		s.logger.WithError(err).Error()
 		return nil, err
 	}
@@ -387,7 +386,7 @@ func (s *local) GetBalloonConfig(requestCtx context.Context, req *proto.GetBallo
 	defer client.Close()
 	resp, err := client.GetBalloonConfig(requestCtx, req)
 	if err != nil {
-		err = errors.Wrap(err, "shim client failed to get balloon config")
+		err = fmt.Errorf("shim client failed to get balloon config: %w", err)
 		s.logger.WithError(err).Error()
 		return nil, err
 	}
@@ -405,7 +404,7 @@ func (s *local) UpdateBalloon(requestCtx context.Context, req *proto.UpdateBallo
 	defer client.Close()
 	resp, err := client.UpdateBalloon(requestCtx, req)
 	if err != nil {
-		err = errors.Wrap(err, "shim client failed to update balloon")
+		err = fmt.Errorf("shim client failed to update balloon: %w", err)
 		s.logger.WithError(err).Error()
 		return nil, err
 	}
@@ -423,7 +422,7 @@ func (s *local) GetBalloonStats(requestCtx context.Context, req *proto.GetBalloo
 	defer client.Close()
 	resp, err := client.GetBalloonStats(requestCtx, req)
 	if err != nil {
-		err = errors.Wrap(err, "shim client failed to get balloon statistics")
+		err = fmt.Errorf("shim client failed to get balloon statistics: %w", err)
 		s.logger.WithError(err).Error()
 		return nil, err
 	}
@@ -441,7 +440,7 @@ func (s *local) UpdateBalloonStats(requestCtx context.Context, req *proto.Update
 	defer client.Close()
 	resp, err := client.UpdateBalloonStats(requestCtx, req)
 	if err != nil {
-		err = errors.Wrap(err, "shim client failed to update balloon interval")
+		err = fmt.Errorf("shim client failed to update balloon interval: %w", err)
 		s.logger.WithError(err).Error()
 		return nil, err
 	}
@@ -461,7 +460,7 @@ func (s *local) newShim(ns, vmID, containerdAddress string, shimSocket *net.Unix
 
 	shimDir, err := vm.ShimDir(s.config.ShimBaseDir, ns, vmID)
 	if err != nil {
-		err = errors.Wrap(err, "failed to create shim dir")
+		err = fmt.Errorf("failed to create shim dir: %w", err)
 		logger.WithError(err).Error()
 		return nil, err
 	}
@@ -476,14 +475,14 @@ func (s *local) newShim(ns, vmID, containerdAddress string, shimSocket *net.Unix
 
 	shimSocketFile, err := shimSocket.File()
 	if err != nil {
-		err = errors.Wrap(err, "failed to get shim socket fd")
+		err = fmt.Errorf("failed to get shim socket fd: %w", err)
 		logger.WithError(err).Error()
 		return nil, err
 	}
 
 	fcSocketFile, err := fcSocket.File()
 	if err != nil {
-		err = errors.Wrap(err, "failed to get shim fccontrol socket fd")
+		err = fmt.Errorf("failed to get shim fccontrol socket fd: %w", err)
 		logger.WithError(err).Error()
 		return nil, err
 	}
@@ -510,7 +509,7 @@ func (s *local) newShim(ns, vmID, containerdAddress string, shimSocket *net.Unix
 
 	err = cmd.Start()
 	if err != nil {
-		err = errors.Wrap(err, "failed to start shim child process")
+		err = fmt.Errorf("failed to start shim child process: %w", err)
 		logger.WithError(err).Error()
 		return nil, err
 	}
@@ -586,12 +585,12 @@ func setShimOOMScore(shimPid int) error {
 
 	score, err := sys.GetOOMScoreAdj(containerdPid)
 	if err != nil {
-		return errors.Wrap(err, "failed to get OOM score for containerd")
+		return fmt.Errorf("failed to get OOM score for containerd: %w", err)
 	}
 
 	shimScore := score + 1
 	if err := sys.SetOOMScore(shimPid, shimScore); err != nil {
-		return errors.Wrap(err, "failed to set OOM score on shim")
+		return fmt.Errorf("failed to set OOM score on shim: %w", err)
 	}
 
 	return nil

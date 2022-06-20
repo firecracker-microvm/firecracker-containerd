@@ -21,7 +21,6 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
 	firecracker "github.com/firecracker-microvm/firecracker-go-sdk"
@@ -63,7 +62,7 @@ func CreateContainerStubs(
 			jail, isWritable, rateLimiter, logger)
 
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to create container stub drive")
+			return nil, fmt.Errorf("failed to create container stub drive: %w", err)
 		}
 
 		machineCfg.Drives = append(machineCfg.Drives, models.Drive{
@@ -131,7 +130,7 @@ func (h *StubDriveHandler) Reserve(
 
 	err = stubDrive.PatchAndMount(requestCtx, machine, driveMounter)
 	if err != nil {
-		err = errors.Wrapf(err, "failed to mount drive inside vm")
+		err = fmt.Errorf("failed to mount drive inside vm: %w", err)
 		return err
 	}
 
@@ -152,19 +151,19 @@ func (h *StubDriveHandler) Release(
 	defer h.mu.Unlock()
 	drive, ok := h.usedDrives[id]
 	if !ok {
-		return errors.Errorf("container %s drive wasn't found", id)
+		return fmt.Errorf("container %s drive was not found", id)
 	}
 
 	_, err := driveMounter.UnmountDrive(requestCtx, &drivemount.UnmountDriveRequest{
 		DriveID: drive.driveID,
 	})
 	if err != nil {
-		return errors.Wrap(err, "failed to unmount drive")
+		return fmt.Errorf("failed to unmount drive: %w", err)
 	}
 
 	err = machine.UpdateGuestDrive(requestCtx, drive.driveID, filepath.Base(drive.stubPath))
 	if err != nil {
-		return errors.Wrap(err, "failed to patch drive")
+		return fmt.Errorf("failed to patch drive: %w", err)
 	}
 
 	delete(h.usedDrives, id)
@@ -196,7 +195,7 @@ func CreateDriveMountStubs(
 			filepath.Join(jail.JailPath().RootPath(), stubFileName),
 			jail, isWritable, rateLimiter, logger)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to create drive mount stub drive")
+			return nil, fmt.Errorf("failed to create drive mount stub drive: %w", err)
 		}
 
 		stubDrive.setCacheType(cacheType)
@@ -230,7 +229,7 @@ func setReadWriteOptions(options []string, isWritable bool) ([]string, error) {
 	for _, opt := range options {
 		if opt == "ro" || opt == "rw" {
 			if opt != expectedOpt {
-				return nil, errors.Errorf("mount option %s is incompatible with IsWritable=%t", opt, isWritable)
+				return nil, fmt.Errorf("mount option %s is incompatible with IsWritable=%t", opt, isWritable)
 			}
 			return options, nil
 		}
@@ -363,12 +362,12 @@ func (sd stubDrive) PatchAndMount(
 ) error {
 	err := sd.jail.ExposeFileToJail(sd.driveMount.HostPath)
 	if err != nil {
-		return errors.Wrap(err, "failed to expose patched drive contents to jail")
+		return fmt.Errorf("failed to expose patched drive contents to jail: %w", err)
 	}
 
 	err = machine.UpdateGuestDrive(requestCtx, sd.driveID, sd.driveMount.HostPath)
 	if err != nil {
-		return errors.Wrap(err, "failed to patch drive")
+		return fmt.Errorf("failed to patch drive: %w", err)
 	}
 
 	_, err = driveMounter.MountDrive(requestCtx, &drivemount.MountDriveRequest{
@@ -378,7 +377,7 @@ func (sd stubDrive) PatchAndMount(
 		Options:         sd.driveMount.Options,
 	})
 	if err != nil {
-		return errors.Wrap(err, "failed to mount newly patched drive")
+		return fmt.Errorf("failed to mount newly patched drive: %w", err)
 	}
 
 	return nil

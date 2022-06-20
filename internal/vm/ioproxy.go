@@ -15,6 +15,7 @@ package vm
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -22,7 +23,6 @@ import (
 
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/hashicorp/go-multierror"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
@@ -112,7 +112,7 @@ func (connectorPair *IOConnectorPair) proxy(
 			}
 
 			if err != nil {
-				ioInitErr = errors.Wrap(err, "error initializing io")
+				ioInitErr = fmt.Errorf("error initializing io: %w", err)
 				logger.WithError(ioInitErr).Error()
 				initDone <- ioInitErr
 			}

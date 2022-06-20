@@ -15,10 +15,9 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"os"
-
-	"github.com/pkg/errors"
 
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/debug"
@@ -81,7 +80,7 @@ func LoadConfig(path string) (*Config, error) {
 
 	data, err := ioutil.ReadFile(path)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to read config from %q", path)
+		return nil, fmt.Errorf("failed to read config from %q: %w", path, err)
 	}
 
 	cfg := &Config{
@@ -103,7 +102,7 @@ func LoadConfig(path string) (*Config, error) {
 	}
 
 	if err := json.Unmarshal(data, cfg); err != nil {
-		return nil, errors.Wrapf(err, "failed to unmarshal config from %q", path)
+		return nil, fmt.Errorf("failed to unmarshal config from %q: %w", path, err)
 	}
 
 	cfg.DebugHelper, err = debug.New(cfg.LogLevels...)

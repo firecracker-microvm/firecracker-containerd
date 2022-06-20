@@ -30,7 +30,6 @@ import (
 	taskAPI "github.com/containerd/containerd/runtime/v2/task"
 	"github.com/gogo/protobuf/types"
 	"github.com/hashicorp/go-multierror"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 
@@ -157,7 +156,7 @@ func (ts *TaskService) Create(requestCtx context.Context, req *taskAPI.CreateTas
 	// this is technically validated earlier by containerd, but is added here too for extra safety
 	taskExecID, err := TaskExecID(taskID, execID)
 	if err != nil {
-		return nil, errors.Wrap(err, "invalid task and/or exec ID")
+		return nil, fmt.Errorf("invalid task and/or exec ID: %w", err)
 	}
 
 	logger := log.G(requestCtx).WithField("TaskID", taskID).WithField("ExecID", execID)
@@ -174,7 +173,7 @@ func (ts *TaskService) Create(requestCtx context.Context, req *taskAPI.CreateTas
 
 	extraData, err := unmarshalExtraData(req.Options)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to unmarshal extra data")
+		return nil, fmt.Errorf("failed to unmarshal extra data: %w", err)
 	}
 
 	// Just provide runc the options it knows about, not our wrapper
@@ -184,7 +183,7 @@ func (ts *TaskService) Create(requestCtx context.Context, req *taskAPI.CreateTas
 	ts.addCleanup(taskExecID, func() error {
 		err := os.RemoveAll(bundleDir.RootPath())
 		if err != nil {
-			return errors.Wrapf(err, "failed to remove bundle path %q", bundleDir.RootPath())
+			return fmt.Errorf("failed to remove bundle path %q: %w", bundleDir.RootPath(), err)
 		}
 		return nil
 	})
@@ -195,22 +194,22 @@ func (ts *TaskService) Create(requestCtx context.Context, req *taskAPI.CreateTas
 	// the bundledir was not created. Create it here.
 	if isVMLocalRootFs {
 		if err := os.MkdirAll(bundleDir.RootfsPath(), 0700); err != nil {
-			return nil, errors.Wrapf(err, "Failed to create bundle's rootfs path from inside the vm %q", bundleDir.RootfsPath())
+			return nil, fmt.Errorf("Failed to create bundle's rootfs path from inside the vm %q: %w", bundleDir.RootfsPath(), err)
 		}
 	}
 
 	// check the rootfs dir has been created (presumed to be by a previous MountDrive call)
 	rootfsStat, err := os.Stat(bundleDir.RootfsPath())
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to stat bundle's rootfs path %q", bundleDir.RootfsPath())
+		return nil, fmt.Errorf("failed to stat bundle's rootfs path %q: %w", bundleDir.RootfsPath(), err)
 	}
 	if !rootfsStat.IsDir() {
-		return nil, errors.Errorf("bundle's rootfs path %q is not a dir", bundleDir.RootfsPath())
+		return nil, fmt.Errorf("bundle's rootfs path %q is not a dir", bundleDir.RootfsPath())
 	}
 	ts.addCleanup(taskExecID, func() error {
 		err := mount.UnmountAll(bundleDir.RootfsPath(), unix.MNT_DETACH)
 		if err != nil {
-			return errors.Wrapf(err, "failed to unmount bundle rootfs %q", bundleDir.RootfsPath())
+			return fmt.Errorf("failed to unmount bundle rootfs %q: %w", bundleDir.RootfsPath(), err)
 		}
 		return nil
 	})
@@ -228,12 +227,12 @@ func (ts *TaskService) Create(requestCtx context.Context, req *taskAPI.CreateTas
 		}
 		specData, err = vm.UpdateUserInSpec(requestCtx, specData, rootfsMount)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to update spec")
+			return nil, fmt.Errorf("failed to update spec: %w", err)
 		}
 	}
 	err = bundleDir.OCIConfig().Write(specData)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to write oci config file")
+		return nil, fmt.Errorf("failed to write oci config file: %w", err)
 	}
 
 	var ioConnectorSet vm.IOProxy
@@ -244,7 +243,7 @@ func (ts *TaskService) Create(requestCtx context.Context, req *taskAPI.CreateTas
 		// Override the incoming stdio FIFOs, which have paths from the host that we can't use
 		fifoSet, err := cio.NewFIFOSetInDir(bundleDir.RootPath(), taskExecID, req.Terminal)
 		if err != nil {
-			err = errors.Wrap(err, "failed to open stdio FIFOs")
+			err = fmt.Errorf("failed to open stdio FIFOs: %w", err)
 			logger.WithError(err).Error()
 			return nil, err
 		}
@@ -331,7 +330,7 @@ func (ts *TaskService) Delete(requestCtx context.Context, req *taskAPI.DeleteReq
 	// this is technically validated earlier by containerd, but is added here too for extra safety
 	taskExecID, err := TaskExecID(taskID, execID)
 	if err != nil {
-		return nil, errors.Wrap(err, "invalid task and/or exec ID")
+		return nil, fmt.Errorf("invalid task and/or exec ID: %w", err)
 	}
 
 	log.G(requestCtx).WithFields(logrus.Fields{"id": taskID, "exec_id": execID}).Debug("delete")
@@ -343,7 +342,7 @@ func (ts *TaskService) Delete(requestCtx context.Context, req *taskAPI.DeleteReq
 
 	err = ts.doCleanup(taskExecID)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to cleanup task %q exec %q", taskID, execID)
+		return nil, fmt.Errorf("failed to cleanup task %q exec %q: %w", taskID, execID, err)
 	}
 
 	log.G(requestCtx).WithFields(logrus.Fields{
@@ -437,7 +436,7 @@ func (ts *TaskService) Exec(requestCtx context.Context, req *taskAPI.ExecProcess
 	// this is technically validated earlier by containerd, but is added here too for extra safety
 	taskExecID, err := TaskExecID(taskID, execID)
 	if err != nil {
-		return nil, errors.Wrap(err, "invalid task and/or exec ID")
+		return nil, fmt.Errorf("invalid task and/or exec ID: %w", err)
 	}
 
 	logger := log.G(requestCtx).WithField("TaskID", taskID).WithField("ExecID", execID)
@@ -454,7 +453,7 @@ func (ts *TaskService) Exec(requestCtx context.Context, req *taskAPI.ExecProcess
 
 	extraData, err := unmarshalExtraData(req.Spec)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to unmarshal extra data")
+		return nil, fmt.Errorf("failed to unmarshal extra data: %w", err)
 	}
 
 	// Just provide runc the options it knows about, not our wrapper
@@ -470,7 +469,7 @@ func (ts *TaskService) Exec(requestCtx context.Context, req *taskAPI.ExecProcess
 		// Override the incoming stdio FIFOs, which have paths from the host that we can't use
 		fifoSet, err := cio.NewFIFOSetInDir(bundleDir.RootPath(), taskExecID, req.Terminal)
 		if err != nil {
-			err = errors.Wrap(err, "failed to open stdio FIFOs")
+			err = fmt.Errorf("failed to open stdio FIFOs: %w", err)
 			logger.WithError(err).Error()
 			return nil, err
 		}

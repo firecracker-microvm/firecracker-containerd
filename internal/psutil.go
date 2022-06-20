@@ -15,9 +15,10 @@ package internal
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/shirou/gopsutil/cpu"
 	"github.com/shirou/gopsutil/process"
 )
@@ -166,7 +167,7 @@ func sampleCPUTimes(ctx context.Context, sampleInterval time.Duration) <-chan *c
 
 			// we set percpu to false, so there should be only one stat
 			if len(curTimesList) != 1 {
-				sample.Err = errors.Errorf("unexpected number of cpu times in sample %d", len(curTimesList))
+				sample.Err = fmt.Errorf("unexpected number of cpu times in sample %d", len(curTimesList))
 				returnCh <- sample
 				return
 			}

@@ -23,7 +23,6 @@ import (
 	"testing"
 
 	"github.com/miekg/dns"
-	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -63,7 +62,7 @@ func NewLocalNetworkServices(t *testing.T, webpages map[string]string) (LocalNet
 
 	output, err := exec.Command("ip", "tuntap", "add", testDevName, "mode", "tun").CombinedOutput()
 	if err != nil {
-		return nil, errors.Wrapf(err, `failed to add tun dev, "ip" command output: %s`, string(output))
+		return nil, fmt.Errorf(`failed to add tun dev, "ip" command output: %s: %w`, string(output), err)
 	}
 	cleanupTap := func() {
 		exec.Command("ip", "tuntap", "del", testDevName, "mode", "tun").Run()
@@ -72,7 +71,7 @@ func NewLocalNetworkServices(t *testing.T, webpages map[string]string) (LocalNet
 
 	output, err = exec.Command("ip", "addr", "add", ipCidr, "dev", testDevName).CombinedOutput()
 	if err != nil {
-		return nil, errors.Wrapf(err, `failed to assign ip to tun dev, "ip" command output: %s`, string(output))
+		return nil, fmt.Errorf(`failed to assign ip to tun dev, "ip" command output: %s: %w`, string(output), err)
 	}
 	cleanupAddress := func() {
 		exec.Command("ip", "addr", "del", ipCidr, "dev", testDevName).Run()
@@ -81,7 +80,7 @@ func NewLocalNetworkServices(t *testing.T, webpages map[string]string) (LocalNet
 
 	output, err = exec.Command("ip", "link", "set", "dev", testDevName, "up").CombinedOutput()
 	if err != nil {
-		return nil, errors.Wrapf(err, `failed to set tun dev up, "ip" command output: %s`, string(output))
+		return nil, fmt.Errorf(`failed to set tun dev up, "ip" command output: %s: %w`, string(output), err)
 	}
 	cleanupLink := func() {
 		exec.Command("ip", "link", "del", "dev", testDevName).Run()

@@ -43,7 +43,6 @@ import (
 	"github.com/containerd/typeurl"
 	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 	"github.com/shirou/gopsutil/process"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -90,12 +89,12 @@ var (
 func unpackImage(ctx context.Context, client *containerd.Client, snapshotterName string, imageRef string) (containerd.Image, error) {
 	img, err := client.GetImage(ctx, imageRef)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get image")
+		return nil, fmt.Errorf("failed to get image: %w", err)
 	}
 
 	err = img.Unpack(ctx, snapshotterName)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to unpack image")
+		return nil, fmt.Errorf("failed to unpack image: %w", err)
 	}
 
 	return img, nil
@@ -2545,7 +2544,7 @@ type errorBuffer struct {
 }
 
 func (errorBuffer) Write(b []byte) (int, error) {
-	return 0, errors.Errorf("failed to write %d bytes", len(b))
+	return 0, fmt.Errorf("failed to write %d bytes", len(b))
 }
 
 func TestBrokenPipe_Isolated(t *testing.T) {

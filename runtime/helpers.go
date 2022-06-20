@@ -14,10 +14,9 @@
 package main
 
 import (
+	"fmt"
 	"net"
 	"time"
-
-	"github.com/pkg/errors"
 
 	"github.com/firecracker-microvm/firecracker-go-sdk"
 	models "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
@@ -84,7 +83,7 @@ func networkConfigFromProto(nwIface *proto.FirecrackerNetworkInterface, vmID str
 		if ipConf := staticConf.IPConfig; ipConf != nil {
 			ip, ipNet, err := net.ParseCIDR(ipConf.PrimaryAddr)
 			if err != nil {
-				return nil, errors.Wrapf(err, "failed to parse CIDR from %q", ipConf.PrimaryAddr)
+				return nil, fmt.Errorf("failed to parse CIDR from %q: %w", ipConf.PrimaryAddr, err)
 			}
 
 			result.StaticConfiguration.IPConfiguration = &firecracker.IPConfiguration{

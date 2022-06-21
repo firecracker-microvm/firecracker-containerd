@@ -22,6 +22,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	snapshotsapi "github.com/containerd/containerd/api/services/snapshots/v1"
 	"github.com/containerd/containerd/contrib/snapshotservice"
@@ -175,8 +176,10 @@ func initSnapshotter(ctx context.Context, config config.Config, cache cache.Cach
 		if err != nil {
 			return nil, err
 		}
+
+		ackMsgTimeout := time.Duration(config.Snapshotter.Dialer.AckMsgTimeoutInSeconds) * time.Second
 		snapshotterDialer := func(ctx context.Context, namespace string) (net.Conn, error) {
-			return vsock.DialContext(ctx, host, uint32(port), vsock.WithLogger(log.G(ctx)))
+			return vsock.DialContext(ctx, host, uint32(port), vsock.WithLogger(log.G(ctx)), vsock.WithAckMsgTimeout(ackMsgTimeout))
 		}
 
 		var metricsProxy *metrics.Proxy

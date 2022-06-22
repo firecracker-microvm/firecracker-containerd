@@ -100,12 +100,13 @@ steps:
     env:
       DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
       NUMBER_OF_VMS: 10
-      EXTRAGOARGS: "-v -count=1 -race"
+      EXTRAGOARGS: "-v -count=1 -race -timeout 3m"
       FICD_DM_VOLUME_GROUP: fcci-vg
     artifact_paths:
       - "snapshotter/logs/*"
     command:
       - make -C snapshotter integ-test FICD_DM_POOL=build_${BUILDKITE_BUILD_NUMBER}_snapshotter
+    timeout_in_minutes: 10
 
   - wait
 

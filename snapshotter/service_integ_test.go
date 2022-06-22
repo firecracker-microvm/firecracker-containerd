@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"strconv"
 	"testing"
-	"time"
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/namespaces"
@@ -53,23 +52,14 @@ func TestLaunchContainerWithRemoteSnapshotter_Isolated(t *testing.T) {
 	integtest.Prepare(t, integtest.WithDefaultNetwork())
 
 	vmID := 0
-
-	testTimeout := 300 * time.Second
-	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
-	defer cancel()
-
-	err := launchContainerWithRemoteSnapshotterInVM(ctx, strconv.Itoa(vmID))
+	err := launchContainerWithRemoteSnapshotterInVM(context.Background(), strconv.Itoa(vmID))
 	require.NoError(t, err)
 }
 
 func TestLaunchMultipleContainersWithRemoteSnapshotter_Isolated(t *testing.T) {
 	integtest.Prepare(t, integtest.WithDefaultNetwork())
 
-	testTimeout := 600 * time.Second
-	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
-	defer cancel()
-
-	eg, ctx := errgroup.WithContext(ctx)
+	eg, ctx := errgroup.WithContext(context.Background())
 
 	numberOfVms := integtest.NumberOfVms
 	for vmID := 0; vmID < numberOfVms; vmID++ {
@@ -126,7 +116,7 @@ func launchContainerWithRemoteSnapshotterInVM(ctx context.Context, vmID string) 
 		ContainerCount: 1,
 	})
 	if err != nil {
-		return fmt.Errorf("Failed to create microVM[%s] [%v]", vmID, err)
+		return fmt.Errorf("Failed to create VM[%s]: %w", vmID, err)
 	}
 	defer fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
 
@@ -135,16 +125,16 @@ func launchContainerWithRemoteSnapshotterInVM(ctx context.Context, vmID string) 
 		Metadata: fmt.Sprintf(dockerMetadataTemplate, "ghcr.io", noAuth, noAuth),
 	})
 	if err != nil {
-		return fmt.Errorf("Failed to configure VM metadata for registry resolution [%v]", err)
+		return fmt.Errorf("Failed to configure VM metadata for registry resolution: %w", err)
 	}
 
 	image, err := client.Pull(ctx, al2stargz,
 		containerd.WithPullUnpack,
 		containerd.WithPullSnapshotter(snapshotterName),
-		containerd.WithImageHandlerWrapper(source.AppendDefaultLabelsHandlerWrapper(al2stargz, 10*1024*1024)),
+		containerd.WithImageHandlerWrapper(source.AppendDefaultLabelsHandlerWrapper(al2stargz, 10*mib)),
 	)
 	if err != nil {
-		return fmt.Errorf("Failed to pull image for VM: %s [%v]", vmID, err)
+		return fmt.Errorf("Failed to pull image for VM[%s]: %w", vmID, err)
 	}
 	defer client.ImageService().Delete(ctx, image.Name())
 
@@ -160,13 +150,13 @@ func launchContainerWithRemoteSnapshotterInVM(ctx context.Context, vmID string) 
 		),
 	)
 	if err != nil {
-		return fmt.Errorf("Failed to create container in VM: %s, [%v]", vmID, err)
+		return fmt.Errorf("Failed to create container in VM[%s]: %w", vmID, err)
 	}
 	defer container.Delete(ctx, containerd.WithSnapshotCleanup)
 
 	_, err = integtest.RunTask(ctx, container)
 	if err != nil {
-		return fmt.Errorf("Failed to run task in VM: %s [%v]", vmID, err)
+		return fmt.Errorf("Failed to run task in VM[%s]: %w", vmID, err)
 	}
 	return nil
 }

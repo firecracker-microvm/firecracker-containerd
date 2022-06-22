@@ -62,6 +62,9 @@ func defaultConfig() error {
 				Network: "unix",
 				Address: "/var/lib/demux-snapshotter/snapshotter.sock",
 			},
+			Dialer: dialer{
+				AckMsgTimeoutInSeconds: 1,
+			},
 			Metrics: metrics{
 				Enable: false,
 			},
@@ -79,6 +82,8 @@ func parseExampleConfig() error {
 	  [snapshotter.listener]
 	    network = "unix"
 	    address = "/var/lib/demux-snapshotter/non-default-snapshotter.vsock"
+	  [snapshotter.dialer]
+	    ack_msg_timeout_in_seconds = 4
 	  [snapshotter.proxy.address.resolver]
 	    type = "http"
 	    address = "localhost:10001"
@@ -95,6 +100,9 @@ func parseExampleConfig() error {
 			Listener: listener{
 				Network: "unix",
 				Address: "/var/lib/demux-snapshotter/non-default-snapshotter.vsock",
+			},
+			Dialer: dialer{
+				AckMsgTimeoutInSeconds: 4,
 			},
 			Proxy: proxy{
 				Address: address{

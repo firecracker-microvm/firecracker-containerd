@@ -43,7 +43,8 @@ EOF
 mkdir -p /etc/demux-snapshotter /var/lib/demux-snapshotter
 cat > /etc/demux-snapshotter/config.toml <<EOF
 [snapshotter.dialer]
-  ack_msg_timeout_in_seconds = 2
+  connect_msg_timeout = "1s"
+  ack_msg_timeout = "2s"
 
 [snapshotter.proxy.address.resolver]
   type = "http"

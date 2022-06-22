@@ -63,7 +63,11 @@ func defaultConfig() error {
 				Address: "/var/lib/demux-snapshotter/snapshotter.sock",
 			},
 			Dialer: dialer{
-				AckMsgTimeoutInSeconds: 1,
+				DialTimeout:       "100ms",
+				RetryTimeout:      "10s",
+				RetryInterval:     "5s",
+				ConnectMsgTimeout: "500ms",
+				AckMsgTimeout:     "1s",
 			},
 			Metrics: metrics{
 				Enable: false,
@@ -78,23 +82,27 @@ func defaultConfig() error {
 
 func parseExampleConfig() error {
 	fileContents := []byte(`
-	[snapshotter]
-	  [snapshotter.listener]
+    [snapshotter]
+      [snapshotter.listener]
 	    network = "unix"
 	    address = "/var/lib/demux-snapshotter/non-default-snapshotter.vsock"
-	  [snapshotter.dialer]
-	    ack_msg_timeout_in_seconds = 4
-	  [snapshotter.proxy.address.resolver]
-	    type = "http"
-	    address = "localhost:10001"
-	  [snapshotter.metrics]
+      [snapshotter.dialer]
+        dial_timeout = "250ms"
+        retry_timeout = "10s"
+        retry_interval = "5s"
+        connect_msg_timeout = "1s"
+        ack_msg_timeout = "2s"
+      [snapshotter.proxy.address.resolver]
+        type = "http"
+        address = "localhost:10001"
+      [snapshotter.metrics]
         enable = true
-		port_range = "9000-9999"
-		host = "0.0.0.0"
-		service_discovery_port = 8080
-	[debug]
-	  logLevel = "debug"
-	`)
+        port_range = "9000-9999"
+        host = "0.0.0.0"
+        service_discovery_port = 8080
+    [debug]
+      logLevel = "debug"
+    `)
 	expected := Config{
 		Snapshotter: snapshotter{
 			Listener: listener{
@@ -102,7 +110,11 @@ func parseExampleConfig() error {
 				Address: "/var/lib/demux-snapshotter/non-default-snapshotter.vsock",
 			},
 			Dialer: dialer{
-				AckMsgTimeoutInSeconds: 4,
+				DialTimeout:       "250ms",
+				RetryTimeout:      "10s",
+				RetryInterval:     "5s",
+				ConnectMsgTimeout: "1s",
+				AckMsgTimeout:     "2s",
 			},
 			Proxy: proxy{
 				Address: address{

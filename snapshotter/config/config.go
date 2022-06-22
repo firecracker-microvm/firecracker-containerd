@@ -43,7 +43,11 @@ type listener struct {
 }
 
 type dialer struct {
-	AckMsgTimeoutInSeconds int `toml:"ack_msg_timeout_in_seconds" default:"1"`
+	DialTimeout       string `toml:"dial_timeout" default:"100ms"`
+	RetryTimeout      string `toml:"retry_timeout" default:"10s"`
+	RetryInterval     string `toml:"retry_interval" default:"5s"`
+	ConnectMsgTimeout string `toml:"connect_msg_timeout" default:"500ms"`
+	AckMsgTimeout     string `toml:"ack_msg_timeout" default:"1s"`
 }
 
 type proxy struct {

@@ -156,11 +156,54 @@ func initResolver(config config.Config) (proxyaddress.Resolver, error) {
 	}
 }
 
+type dialerTimeouts struct {
+	DialTimeout       time.Duration
+	RetryTimeout      time.Duration
+	RetryInterval     time.Duration
+	ConnectMsgTimeout time.Duration
+	AckMsgTimeout     time.Duration
+}
+
+func parseDialerTimeouts(config config.Config) (dialerTimeouts, error) {
+	dialTimeout, err := time.ParseDuration(config.Snapshotter.Dialer.DialTimeout)
+	if err != nil {
+		return dialerTimeouts{}, fmt.Errorf("Failed parsing dialer dial timeout: %w", err)
+	}
+	retryTimeout, err := time.ParseDuration(config.Snapshotter.Dialer.RetryTimeout)
+	if err != nil {
+		return dialerTimeouts{}, fmt.Errorf("Failed parsing dialer retry timeout: %w", err)
+	}
+	retryInterval, err := time.ParseDuration(config.Snapshotter.Dialer.RetryInterval)
+	if err != nil {
+		return dialerTimeouts{}, fmt.Errorf("Failed parsing dialer retry interval: %w", err)
+	}
+	connectMsgTimeout, err := time.ParseDuration(config.Snapshotter.Dialer.ConnectMsgTimeout)
+	if err != nil {
+		return dialerTimeouts{}, fmt.Errorf("Failed parsing dialer connect msg timeout: %w", err)
+	}
+	ackMsgTimeout, err := time.ParseDuration(config.Snapshotter.Dialer.AckMsgTimeout)
+	if err != nil {
+		return dialerTimeouts{}, fmt.Errorf("Failed parsing dialer ack msg timeout: %w", err)
+	}
+	return dialerTimeouts{
+		DialTimeout:       dialTimeout,
+		RetryTimeout:      retryTimeout,
+		RetryInterval:     retryInterval,
+		ConnectMsgTimeout: connectMsgTimeout,
+		AckMsgTimeout:     ackMsgTimeout,
+	}, nil
+}
+
 const base10 = 10
 const bits32 = 32
 
 func initSnapshotter(ctx context.Context, config config.Config, cache cache.Cache, monitor *metrics.Monitor) (snapshots.Snapshotter, error) {
 	resolver, err := initResolver(config)
+	if err != nil {
+		return nil, err
+	}
+
+	dialerTimeouts, err := parseDialerTimeouts(config)
 	if err != nil {
 		return nil, err
 	}
@@ -177,9 +220,15 @@ func initSnapshotter(ctx context.Context, config config.Config, cache cache.Cach
 			return nil, err
 		}
 
-		ackMsgTimeout := time.Duration(config.Snapshotter.Dialer.AckMsgTimeoutInSeconds) * time.Second
 		snapshotterDialer := func(ctx context.Context, namespace string) (net.Conn, error) {
-			return vsock.DialContext(ctx, host, uint32(port), vsock.WithLogger(log.G(ctx)), vsock.WithAckMsgTimeout(ackMsgTimeout))
+			return vsock.DialContext(ctx, host, uint32(port),
+				vsock.WithLogger(log.G(ctx)),
+				vsock.WithDialTimeout(dialerTimeouts.DialTimeout),
+				vsock.WithRetryTimeout(dialerTimeouts.RetryTimeout),
+				vsock.WithRetryInterval(dialerTimeouts.RetryInterval),
+				vsock.WithConnectionMsgTimeout(dialerTimeouts.ConnectMsgTimeout),
+				vsock.WithAckMsgTimeout(dialerTimeouts.AckMsgTimeout),
+			)
 		}
 
 		var metricsProxy *metrics.Proxy

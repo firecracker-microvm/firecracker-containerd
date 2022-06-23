@@ -43,16 +43,18 @@ func (cache *SnapshotterCache) Get(ctx context.Context, key string, fetch Snapsh
 
 	if !ok {
 		cache.mutex.Lock()
-		defer cache.mutex.Unlock()
-
 		snapshotter, ok = cache.snapshotters[key]
+		cache.mutex.Unlock()
+
 		if !ok {
 			newSnapshotter, err := fetch(ctx, key)
 			if err != nil {
 				return nil, err
 			}
 
+			cache.mutex.Lock()
 			cache.snapshotters[key] = newSnapshotter
+			cache.mutex.Unlock()
 			snapshotter = newSnapshotter
 		}
 	}

@@ -32,7 +32,6 @@ type Config struct {
 
 type snapshotter struct {
 	Listener listener `toml:"listener"`
-	Dialer   dialer   `toml:"dialer"`
 	Proxy    proxy    `toml:"proxy"`
 	Metrics  metrics  `toml:"metrics"`
 }
@@ -40,10 +39,6 @@ type snapshotter struct {
 type listener struct {
 	Network string `toml:"network" default:"unix"`
 	Address string `toml:"address" default:"/var/lib/demux-snapshotter/snapshotter.sock"`
-}
-
-type dialer struct {
-	AckMsgTimeoutInSeconds int `toml:"ack_msg_timeout_in_seconds" default:"1"`
 }
 
 type proxy struct {

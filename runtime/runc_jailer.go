@@ -25,6 +25,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/containerd/continuity/fs"
 	"github.com/containerd/go-runc"
 	"github.com/hashicorp/go-multierror"
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -144,7 +145,11 @@ func (j *runcJailer) prepareBindMounts(mounts []*proto.FirecrackerDriveMount) er
 		// Only bindMount regular file.
 		// To avoid duplicate files, for block device, we will use system call to create device file for it.
 		if stat.Mode&syscall.S_IFMT == syscall.S_IFREG {
-			err := j.bindMountFileToJail(m.HostPath, filepath.Join(j.RootPath(), m.HostPath))
+			dest, err := fs.RootPath(j.RootPath(), m.HostPath)
+			if err != nil {
+				return err
+			}
+			err = j.bindMountFileToJail(m.HostPath, dest)
 			if err != nil {
 				return err
 			}

@@ -223,3 +223,57 @@ func TestFifoHandler(t *testing.T) {
 		})
 	}
 }
+
+func TestPrepareBindMount(t *testing.T) {
+	// Because of chown(2).
+	internal.RequiresRoot(t)
+
+	t.Run("no mounts", func(t *testing.T) {
+		j := &runcJailer{}
+		err := j.prepareBindMounts([]*proto.FirecrackerDriveMount{})
+		require.NoError(t, err)
+	})
+
+	dir, err := ioutil.TempDir("", t.Name())
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	j := &runcJailer{Config: runcJailerConfig{
+		OCIBundlePath: filepath.Join(dir, "bundle"),
+		UID:           1234,
+		GID:           5678,
+	}}
+
+	err = ioutil.WriteFile(dir+"/foobar", []byte("hello"), 0700)
+	require.NoError(t, err)
+
+	testcases := []struct {
+		name     string
+		hostPath string
+	}{
+		{
+			name:     "absolute path",
+			hostPath: dir + "/foobar",
+		},
+		{
+			name:     "use dots to access the original directory",
+			hostPath: "/../../../../../.." + dir + "/foobar",
+		},
+	}
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			err = j.prepareBindMounts([]*proto.FirecrackerDriveMount{{
+				HostPath:       tc.hostPath,
+				FilesystemType: "ext4",
+				VMPath:         "/mnt",
+			}})
+			require.NoError(t, err)
+			stat, err := os.Stat(dir)
+			require.NoError(t, err)
+
+			s := stat.Sys().(*syscall.Stat_t)
+			assert.Equal(t, 0, int(s.Uid), "UID")
+			assert.Equal(t, 0, int(s.Gid), "GID")
+		})
+	}
+}

@@ -177,9 +177,12 @@ func initSnapshotter(ctx context.Context, config config.Config, cache cache.Cach
 			return nil, err
 		}
 
-		ackMsgTimeout := time.Duration(config.Snapshotter.Dialer.AckMsgTimeoutInSeconds) * time.Second
+		// TODO: https://github.com/firecracker-microvm/firecracker-containerd/issues/689
 		snapshotterDialer := func(ctx context.Context, namespace string) (net.Conn, error) {
-			return vsock.DialContext(ctx, host, uint32(port), vsock.WithLogger(log.G(ctx)), vsock.WithAckMsgTimeout(ackMsgTimeout))
+			return vsock.DialContext(ctx, host, uint32(port), vsock.WithLogger(log.G(ctx)),
+				vsock.WithAckMsgTimeout(2*time.Second),
+				vsock.WithRetryInterval(200*time.Millisecond),
+			)
 		}
 
 		var metricsProxy *metrics.Proxy

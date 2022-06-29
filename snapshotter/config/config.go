@@ -33,8 +33,14 @@ type Config struct {
 type snapshotter struct {
 	Listener listener `toml:"listener"`
 	Proxy    proxy    `toml:"proxy"`
+	Dialer   dialer   `toml:"dialer"`
 	Cache    cache    `toml:"cache"`
 	Metrics  metrics  `toml:"metrics"`
+}
+
+type dialer struct {
+	Timeout       string `toml:"timeout" default:"5s"`
+	RetryInterval string `toml:"retry_interval" default:"100ms"`
 }
 
 type listener struct {

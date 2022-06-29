@@ -156,11 +156,19 @@ func initCache(config config.Config, monitor *metrics.Monitor) (*cache.RemoteSna
 		return nil, err
 	}
 
-	// TODO: https://github.com/firecracker-microvm/firecracker-containerd/issues/689
-	snapshotterDialer := func(ctx context.Context, host string, port uint64) (net.Conn, error) {
+	dialTimeout, err := time.ParseDuration(config.Snapshotter.Dialer.Timeout)
+	if err != nil {
+		return nil, fmt.Errorf("Error parsing dialer retry interval from config: %w", err)
+	}
+	retryInterval, err := time.ParseDuration(config.Snapshotter.Dialer.RetryInterval)
+	if err != nil {
+		return nil, fmt.Errorf("Error parsing dialer retry interval from config: %w", err)
+	}
+
+	vsockDial := func(ctx context.Context, host string, port uint64) (net.Conn, error) {
 		return vsock.DialContext(ctx, host, uint32(port), vsock.WithLogger(log.G(ctx)),
 			vsock.WithAckMsgTimeout(2*time.Second),
-			vsock.WithRetryInterval(500*time.Millisecond),
+			vsock.WithRetryInterval(retryInterval),
 		)
 	}
 
@@ -177,8 +185,9 @@ func initCache(config config.Config, monitor *metrics.Monitor) (*cache.RemoteSna
 			return nil, err
 		}
 
-		return snapshotterDialer(ctx, host, port)
+		return vsockDial(ctx, host, port)
 	}
+	dialer := proxy.Dialer{Dial: dial, Timeout: dialTimeout}
 
 	fetch := func(ctx context.Context, namespace string) (*proxy.RemoteSnapshotter, error) {
 		r := resolver
@@ -193,7 +202,7 @@ func initCache(config config.Config, monitor *metrics.Monitor) (*cache.RemoteSna
 		}
 
 		dial := func(ctx context.Context, namespace string) (net.Conn, error) {
-			return snapshotterDialer(ctx, host, port)
+			return vsockDial(ctx, host, port)
 		}
 
 		var metricsProxy *metrics.Proxy
@@ -214,7 +223,7 @@ func initCache(config config.Config, monitor *metrics.Monitor) (*cache.RemoteSna
 		if err != nil {
 			return nil, fmt.Errorf("invalid cache evict poll connection frequency: %w", err)
 		}
-		opts = append(opts, cache.EvictOnConnectionFailure(dial, cachePollFrequency, nil))
+		opts = append(opts, cache.EvictOnConnectionFailure(dialer, cachePollFrequency))
 	}
 
 	return cache.NewRemoteSnapshotterCache(fetch, opts...), nil

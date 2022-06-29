@@ -42,6 +42,10 @@ EOF
 
 mkdir -p /etc/demux-snapshotter /var/lib/demux-snapshotter
 cat > /etc/demux-snapshotter/config.toml <<EOF
+[snapshotter.dialer]
+  timeout = "5s"
+  retry_interval = "500ms"
+
 [snapshotter.proxy.address.resolver]
   type = "http"
   address = "http://127.0.0.1:10001"

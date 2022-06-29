@@ -16,14 +16,13 @@ package cache
 import (
 	"context"
 	"fmt"
-	"net"
 	"sync"
 	"time"
 
 	"github.com/containerd/containerd/snapshots"
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux/proxy"
 	"github.com/hashicorp/go-multierror"
-	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 )
 
 // SnapshotterProvider defines a snapshotter fetch function.
@@ -64,28 +63,28 @@ func NewRemoteSnapshotterCache(fetch SnapshotterProvider, opts ...SnapshotterCac
 }
 
 // EvictOnConnectionFailure is a caching option for evicting entries from the cache after a failed connection attempt.
-func EvictOnConnectionFailure(dial func(context.Context, string) (net.Conn, error), frequency time.Duration, log *logrus.Logger) func(*RemoteSnapshotterCache) {
+func EvictOnConnectionFailure(dialer proxy.Dialer, frequency time.Duration) func(*RemoteSnapshotterCache) {
 	return func(c *RemoteSnapshotterCache) {
 		c.evict = make(chan string)
-		c.lease = NewEvictOnConnectionFailurePolicy(c.evict, c.stop, dial, frequency)
-		c.startBackgroundReaper(log)
+		c.lease = NewEvictOnConnectionFailurePolicy(c.evict, dialer, frequency, c.stop)
+		c.startBackgroundReaper()
 	}
 }
 
-func (c *RemoteSnapshotterCache) startBackgroundReaper(log *logrus.Logger) {
-	reap := func(log *logrus.Entry) {
+func (c *RemoteSnapshotterCache) startBackgroundReaper() {
+	reap := func() {
 		for {
 			s, ok := <-c.evict
 			if !ok {
 				break
 			}
 			if err := c.Evict(s); err != nil {
-				log.Error(err)
+				log.WithField("context", "cache reaper").Error(err)
 			}
 		}
 	}
 	c.reaper.Do(func() {
-		go reap(log.WithField("context", "cache reaper"))
+		go reap()
 	})
 }
 

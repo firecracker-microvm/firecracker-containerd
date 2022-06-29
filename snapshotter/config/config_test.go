@@ -62,6 +62,10 @@ func defaultConfig() error {
 				Network: "unix",
 				Address: "/var/lib/demux-snapshotter/snapshotter.sock",
 			},
+			Dialer: dialer{
+				Timeout:       "5s",
+				RetryInterval: "100ms",
+			},
 			Cache: cache{
 				EvictOnConnectionFailure: true,
 				PollConnectionFrequency:  "60s",
@@ -83,6 +87,9 @@ func parseExampleConfig() error {
       [snapshotter.listener]
         network = "unix"
         address = "/var/lib/demux-snapshotter/non-default-snapshotter.vsock"
+	  [snapshotter.dialer]
+	    timeout = "5s"
+		retry_interval = "100ms"
       [snapshotter.proxy.address.resolver]
         type = "http"
         address = "localhost:10001"
@@ -110,6 +117,10 @@ func parseExampleConfig() error {
 						Address: "localhost:10001",
 					},
 				},
+			},
+			Dialer: dialer{
+				Timeout:       "5s",
+				RetryInterval: "100ms",
 			},
 			Cache: cache{
 				EvictOnConnectionFailure: false,

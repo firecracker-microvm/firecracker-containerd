@@ -22,7 +22,6 @@ import (
 
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux/proxy"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 )
@@ -49,8 +48,8 @@ func TestCacheEvictionOnConnectionFailure(t *testing.T) {
 		return nil, errors.New("mock dial error")
 	}
 	frequency := 2 * time.Millisecond
-	log := logrus.New()
-	cache := NewRemoteSnapshotterCache(getSnapshotter, EvictOnConnectionFailure(dial, frequency, log))
+	dialer := proxy.Dialer{Dial: dial, Timeout: 1 * time.Second}
+	cache := NewRemoteSnapshotterCache(getSnapshotter, EvictOnConnectionFailure(dialer, frequency))
 	defer cache.Close()
 
 	_, err := cache.Get(context.Background(), "test")
@@ -85,8 +84,8 @@ func TestCacheNotEvictedIfConnectionIsHealthy(t *testing.T) {
 		return &net.UnixConn{}, nil
 	}
 	frequency := 1 * time.Millisecond
-	log := logrus.New()
-	cache := NewRemoteSnapshotterCache(getSnapshotter, EvictOnConnectionFailure(dial, frequency, log))
+	dialer := proxy.Dialer{Dial: dial, Timeout: 1 * time.Second}
+	cache := NewRemoteSnapshotterCache(getSnapshotter, EvictOnConnectionFailure(dialer, frequency))
 	defer cache.Close()
 
 	_, err := cache.Get(context.Background(), "test")
@@ -119,8 +118,8 @@ func TestBackgroundEnforcersCanBeStopped(t *testing.T) {
 		return &net.UnixConn{}, nil
 	}
 	frequency := 1 * time.Millisecond
-	log := logrus.New()
-	cache := NewRemoteSnapshotterCache(getSnapshotter, EvictOnConnectionFailure(dial, frequency, log))
+	dialer := proxy.Dialer{Dial: dial, Timeout: 1 * time.Second}
+	cache := NewRemoteSnapshotterCache(getSnapshotter, EvictOnConnectionFailure(dialer, frequency))
 
 	_, err := cache.Get(context.Background(), "test")
 	require.NoError(t, err, "Snapshotter not added to cache correctly")
@@ -137,8 +136,8 @@ func TestLogErrorOnEvictionFailure(t *testing.T) {
 		return nil, errors.New("mock dial error")
 	}
 	frequency := 1 * time.Millisecond
-	log := logrus.New()
-	cache := NewRemoteSnapshotterCache(getErrorSnapshotter, EvictOnConnectionFailure(dial, frequency, log))
+	dialer := proxy.Dialer{Dial: dial, Timeout: 1 * time.Second}
+	cache := NewRemoteSnapshotterCache(getErrorSnapshotter, EvictOnConnectionFailure(dialer, frequency))
 	defer cache.Close()
 
 	_, err := cache.Get(context.Background(), "test")
@@ -156,6 +155,7 @@ func TestLogErrorOnEvictionFailure(t *testing.T) {
 			if cache.length() == 1 {
 				continue
 			}
+
 			return
 		case <-ctx.Done():
 			require.Len(t, cache.snapshotters, 1, "Cache entry was never evicted")

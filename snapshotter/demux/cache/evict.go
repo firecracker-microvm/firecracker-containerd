@@ -15,8 +15,9 @@ package cache
 
 import (
 	"context"
-	"net"
 	"time"
+
+	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux/proxy"
 )
 
 // EvictionPolicy defines the interface for enforcing a cache eviction policy.
@@ -35,40 +36,41 @@ type evictionPolicy struct {
 type EvictOnConnectionFailurePolicy struct {
 	evictionPolicy
 
-	dial      func(context.Context, string) (net.Conn, error)
+	dialer proxy.Dialer
+
 	frequency time.Duration
 }
 
 // NewEvictOnConnectionFailurePolicy creates a new policy to evict on remote snapshotter
 // connection failure on a specified frequency duration.
-func NewEvictOnConnectionFailurePolicy(evictChan chan string, stopCondition chan struct{}, dial func(context.Context, string) (net.Conn, error), frequency time.Duration) EvictionPolicy {
-	return &EvictOnConnectionFailurePolicy{evictionPolicy: evictionPolicy{evict: evictChan, stop: stopCondition}, dial: dial, frequency: frequency}
+func NewEvictOnConnectionFailurePolicy(evictChan chan string, dialer proxy.Dialer, frequency time.Duration, stopCondition chan struct{}) EvictionPolicy {
+	return &EvictOnConnectionFailurePolicy{evictionPolicy: evictionPolicy{evict: evictChan, stop: stopCondition}, dialer: dialer, frequency: frequency}
 }
 
 // Enforce launches a go routine which periodically attempts to dial the cached entry
 // using the provided dial function.
 //
 // On connection failure, the entry will be evicted from cache.
-func (p *EvictOnConnectionFailurePolicy) Enforce(key string) {
-	go func(dial func(context.Context, string) (net.Conn, error)) {
+func (p EvictOnConnectionFailurePolicy) Enforce(key string) {
+	go func() {
 		ticker := time.NewTicker(p.frequency)
 		defer ticker.Stop()
-
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
 
 		for {
 			select {
 			case <-ticker.C:
-				conn, err := dial(ctx, key)
+				ctx, cancel := context.WithTimeout(context.Background(), p.dialer.Timeout)
+				conn, err := p.dialer.Dial(ctx, key)
 				if err != nil {
 					p.evict <- key
+					cancel()
 					return
 				}
+				cancel()
 				conn.Close()
 			case <-p.stop:
 				return
 			}
 		}
-	}(p.dial)
+	}()
 }

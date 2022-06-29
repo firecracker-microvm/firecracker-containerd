@@ -6,6 +6,10 @@
   type = "http"
   address = "127.0.0.1:10001"
 
+[snapshotter.dialer]
+  timeout = "5s"
+  retry_interval = "500ms"
+
 [snapshotter.cache]
   evict_on_connection_failure = true
   poll_connection_frequency = "60s"

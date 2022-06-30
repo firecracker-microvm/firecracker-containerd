@@ -62,6 +62,14 @@ func defaultConfig() error {
 				Network: "unix",
 				Address: "/var/lib/demux-snapshotter/snapshotter.sock",
 			},
+			Dialer: dialer{
+				Timeout:       "5s",
+				RetryInterval: "100ms",
+			},
+			Cache: cache{
+				EvictOnConnectionFailure: true,
+				PollConnectionFrequency:  "60s",
+			},
 			Metrics: metrics{
 				Enable: false,
 			},
@@ -75,21 +83,27 @@ func defaultConfig() error {
 
 func parseExampleConfig() error {
 	fileContents := []byte(`
-	[snapshotter]
-	  [snapshotter.listener]
-	    network = "unix"
-	    address = "/var/lib/demux-snapshotter/non-default-snapshotter.vsock"
-	  [snapshotter.proxy.address.resolver]
-	    type = "http"
-	    address = "localhost:10001"
-	  [snapshotter.metrics]
+    [snapshotter]
+      [snapshotter.listener]
+        network = "unix"
+        address = "/var/lib/demux-snapshotter/non-default-snapshotter.vsock"
+	  [snapshotter.dialer]
+	    timeout = "5s"
+		retry_interval = "100ms"
+      [snapshotter.proxy.address.resolver]
+        type = "http"
+        address = "localhost:10001"
+      [snapshotter.cache]
+        evict_on_connection_failure = false
+        poll_connection_frequency = "120s"
+      [snapshotter.metrics]
         enable = true
-		port_range = "9000-9999"
-		host = "0.0.0.0"
-		service_discovery_port = 8080
-	[debug]
-	  logLevel = "debug"
-	`)
+        port_range = "9000-9999"
+        host = "0.0.0.0"
+        service_discovery_port = 8080
+    [debug]
+      logLevel = "debug"
+    `)
 	expected := Config{
 		Snapshotter: snapshotter{
 			Listener: listener{
@@ -103,6 +117,14 @@ func parseExampleConfig() error {
 						Address: "localhost:10001",
 					},
 				},
+			},
+			Dialer: dialer{
+				Timeout:       "5s",
+				RetryInterval: "100ms",
+			},
+			Cache: cache{
+				EvictOnConnectionFailure: false,
+				PollConnectionFrequency:  "120s",
 			},
 			Metrics: metrics{
 				Enable:               true,

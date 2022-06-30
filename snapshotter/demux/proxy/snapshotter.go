@@ -16,19 +16,25 @@ package proxy
 import (
 	"context"
 	"net"
+	"time"
 
 	snapshotsapi "github.com/containerd/containerd/api/services/snapshots/v1"
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/containerd/snapshots/proxy"
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux/metrics"
 	"github.com/hashicorp/go-multierror"
-	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-// SnapshotterDialer defines an interface for establishing a network connection.
-type SnapshotterDialer = func(context.Context, *logrus.Entry, string, uint32)
+// Dialer captures commonly grouped dial functionality and configuration.
+type Dialer struct {
+	// Dial is a function used to establish a network connection to a remote snapshotter.
+	Dial func(context.Context, string) (net.Conn, error)
+
+	// Timeout is the time required to establish a connection to a remote snapshotter.
+	Timeout time.Duration
+}
 
 // RemoteSnapshotter embeds a snapshots.Snapshotter and its metrics proxy.
 type RemoteSnapshotter struct {

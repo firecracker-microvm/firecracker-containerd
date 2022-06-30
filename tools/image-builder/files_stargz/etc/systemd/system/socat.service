@@ -19,4 +19,4 @@ SuccessAction=reboot
 
 [Service]
 Type=simple
-ExecStart=socat VSOCK-LISTEN:10000 UNIX-CONNECT:/run/containerd-stargz-grpc/containerd-stargz-grpc.sock
+ExecStart=socat VSOCK-LISTEN:10000,reuseaddr,fork UNIX-CONNECT:/run/containerd-stargz-grpc/containerd-stargz-grpc.sock

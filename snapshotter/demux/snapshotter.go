@@ -24,22 +24,21 @@ import (
 
 	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux/cache"
+	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux/proxy"
 	mountutil "github.com/firecracker-microvm/firecracker-containerd/snapshotter/internal/mount"
 )
 
 // Snapshotter routes snapshotter requests to their destined
 // remote snapshotter via their snapshotter namespace.
 //
-// Proxy snapshotters are cached for subsequent snapshotter requests.
+// Remote snapshotters are cached for subsequent snapshotter requests.
 type Snapshotter struct {
-	cache            cache.Cache
-	fetchSnapshotter cache.SnapshotterProvider
+	cache *cache.RemoteSnapshotterCache
 }
 
-// NewSnapshotter creates instance of Snapshotter with cache and
-// proxy snapshotter creation function.
-func NewSnapshotter(cache cache.Cache, fetchSnapshotter cache.SnapshotterProvider) snapshots.Snapshotter {
-	return &Snapshotter{cache, fetchSnapshotter}
+// NewSnapshotter creates instance of Snapshotter with provided cache.
+func NewSnapshotter(cache *cache.RemoteSnapshotterCache) snapshots.Snapshotter {
+	return &Snapshotter{cache}
 }
 
 // Stat proxies remote snapshotter stat request.
@@ -204,17 +203,17 @@ func (s *Snapshotter) Cleanup(ctx context.Context) error {
 		return err
 	}
 
-	return snapshotter.(snapshots.Cleaner).Cleanup(ctx)
+	return snapshotter.Cleanup(ctx)
 }
 
 const snapshotterNotFoundErrorString = "Snapshotter not found in cache"
 
-func (s *Snapshotter) getSnapshotterFromCache(ctx context.Context, log *logrus.Entry) (snapshots.Snapshotter, error) {
+func (s *Snapshotter) getSnapshotterFromCache(ctx context.Context, log *logrus.Entry) (*proxy.RemoteSnapshotter, error) {
 	namespace, err := getNamespaceFromContext(ctx, log)
 	if err != nil {
 		return nil, err
 	}
-	snapshotter, err := s.cache.Get(ctx, namespace, s.fetchSnapshotter)
+	snapshotter, err := s.cache.Get(ctx, namespace)
 	if err != nil {
 		log.WithField("namespace", namespace).WithError(err).Error(snapshotterNotFoundErrorString)
 		return nil, err

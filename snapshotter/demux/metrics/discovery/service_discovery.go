@@ -28,13 +28,13 @@ import (
 // and serves a []MetricsTarget on an HTTP server.
 type ServiceDiscovery struct {
 	// cache is the shared host-level cache of snapshotters also used by the demux snapshotter.
-	cache cache.Cache
+	cache *cache.RemoteSnapshotterCache
 	// server is the HTTP server that returns a list of targets to pull metrics from and apply labels to those metrics.
 	server *http.Server
 }
 
 // NewServiceDiscovery returns a ServiceDiscovery with configured HTTP server and provided cache.
-func NewServiceDiscovery(host string, port int, c cache.Cache) *ServiceDiscovery {
+func NewServiceDiscovery(host string, port int, c *cache.RemoteSnapshotterCache) *ServiceDiscovery {
 	return &ServiceDiscovery{
 		server: &http.Server{
 			Addr: host + ":" + strconv.Itoa(port),
@@ -77,7 +77,7 @@ func (sd *ServiceDiscovery) serviceDiscoveryHandler(w http.ResponseWriter, req *
 	namespaces := sd.cache.List()
 	services := []metricsTarget{}
 	for _, ns := range namespaces {
-		cachedSnapshotter, err := sd.cache.Get(ctx, ns, nil)
+		cachedSnapshotter, err := sd.cache.Get(ctx, ns)
 		if err != nil {
 			log.G(ctx).Error("unable to retrieve from snapshotter cache: ", err)
 			continue

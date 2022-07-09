@@ -40,7 +40,6 @@ jobs:
       - uses: actions/setup-go@v1
         with:
           go-version: ${{ matrix.go }}
-      - run: make deps
       - run: make
       - run: make lint
       - name: make test

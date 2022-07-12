@@ -1,0 +1,66 @@
+@startuml
+participant orchestrator
+participant containerd
+participant "control plugin"
+participant "demux-snapshotter"
+
+orchestrator -> "control plugin": create VM $id
+create shim
+"control plugin" -> shim: Launch VM $id
+create Firecracker
+shim -> Firecracker: Launch
+shim -> Firecracker ++ : configure and boot
+create MMDS
+Firecracker -> MMDS: start
+create agent
+Firecracker -> agent: start
+create "remote-snapshotter"
+Firecracker -> "remote-snapshotter": start
+"shim" <-> agent: connect
+"control plugin" -> orchestrator: VM running
+
+orchestrator -> "control plugin": Put registry credentials
+"control plugin" -> MMDS: Put registry credentials
+
+
+loop "for each container"
+orchestrator -> containerd: prepare snapshot
+containerd -> "demux-snapshotter": prepare snapshot
+"demux-snapshotter" <-> "remote-snapshotter": connect
+"demux-snapshotter" -> "remote-snapshotter": prepare snapshot
+create "docker-credential-mmds"
+"remote-snapshotter" -> "docker-credential-mmds": Get credentials
+"docker-credential-mmds" -> MMDS: Get credentials
+MMDS -> "docker-credential-mmds": credentials
+"docker-credential-mmds" -> "remote-snapshotter": credentials
+
+create FUSE
+"remote-snapshotter" -> FUSE : spawn
+activate FUSE
+"remote-snapshotter" -> "demux-snapshotter": snapshot $foo
+"demux-snapshotter" -> containerd: snapshot $foo
+containerd -> orchestrator: snapshot $foo
+orchestrator -> containerd: run container $bar with snapshot $foo
+containerd -> shim: run container $bar with snapshot $foo
+shim -> agent: run container $bar with snapshot $foo
+agent -> FUSE: mount snapshot $foo
+create "container process"
+agent -> "container process": start process
+activate "container process"
+"container process" -> "FUSE": access files
+FUSE <-> registry: download files
+FUSE -> "container process": file content/metadata
+note left of "container process"
+After some 
+time, container 
+process exits
+end note
+return
+agent -> shim: container $bar exited
+shim -> containerd: container $bar exited
+containerd -> orchestrator: container $bar exited
+end
+orchestrator -> "control plugin": stop VM $id
+"control plugin" -> Firecracker: stop
+deactivate Firecracker
+@enduml

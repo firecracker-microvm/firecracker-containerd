@@ -34,15 +34,12 @@ INTEG_TESTNAMES=$(shell docker run --rm \
 	$(FIRECRACKER_CONTAINERD_TEST_IMAGE):$(DOCKER_IMAGE_TAG) \
 	-c "go test -list . | sed '$$d' | grep $(INTEG_TEST_SUFFIX)")
 
-all: demux-snapshotter http-address-resolver
+all: demux-snapshotter
 
 demux-snapshotter: $(SOURCES) $(GOMOD) $(GOSUM)
 	go build $(EXTRAGOARGS) -ldflags "-X main.revision=$(REVISION)" -o $@
 
-http-address-resolver: $(SOURCES) $(GOMOD) $(GOSUM)
-	go build $(EXTRAGOARGS) -ldflags "-X main.revision=$(REVISION)" -o $@ internal/http_address_resolver.go
-
-install: demux-snapshotter http-address-resolver
+install: demux-snapshotter
 	install -D -o root -g root -m755 -t $(INSTALLROOT)/bin $^
 
 test:
@@ -79,6 +76,8 @@ logs:
 
 clean:
 	- rm -f demux-snapshotter
+# Leaving legacy binary cleanup so that existing copies can get to a clean
+# state after pulling from main
 	- rm -f http-address-resolver
 
 distclean: clean

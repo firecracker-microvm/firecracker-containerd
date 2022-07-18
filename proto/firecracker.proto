@@ -49,6 +49,7 @@ message CreateVMResponse {
     string LogFifoPath = 3;
     string MetricsFifoPath = 4;
     string CgroupPath = 5;
+    string VSockPath = 6;
 }
 
 message PauseVMRequest {

@@ -36,6 +36,14 @@ type Dialer struct {
 	Timeout time.Duration
 }
 
+// RemoteSnapshotterConfig is the configuration needed to create a new remote snapshotter.
+type RemoteSnapshotterConfig struct {
+	VSockPath             string
+	RemoteSnapshotterPort uint32
+	MetricsPort           uint32
+	MetricsLabels         map[string]string
+}
+
 // RemoteSnapshotter embeds a snapshots.Snapshotter and its metrics proxy.
 type RemoteSnapshotter struct {
 	snapshots.Snapshotter

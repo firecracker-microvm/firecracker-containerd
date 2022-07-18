@@ -25,6 +25,7 @@ import (
 	"github.com/firecracker-microvm/firecracker-containerd/internal/integtest"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	"github.com/firecracker-microvm/firecracker-containerd/runtime/firecrackeroci"
+	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux"
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/internal/integtest/stargz/fs/source"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -93,7 +94,7 @@ func launchContainerWithRemoteSnapshotterInVM(ctx context.Context, vmID string) 
 	// https://github.com/firecracker-microvm/firecracker/blob/v1.1.0/docs/prod-host-setup.md
 	kernelArgs := integtest.DefaultRuntimeConfig.KernelArgs + " 8250.nr_uarts=0 quiet loglevel=1"
 
-	_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
+	vminfo, err := fcClient.CreateVM(ctx, &proto.CreateVMRequest{
 		VMID:       vmID,
 		KernelArgs: kernelArgs,
 		RootDrive: &proto.FirecrackerRootDrive{
@@ -130,7 +131,10 @@ func launchContainerWithRemoteSnapshotterInVM(ctx context.Context, vmID string) 
 
 	image, err := client.Pull(ctx, al2stargz,
 		containerd.WithPullUnpack,
-		containerd.WithPullSnapshotter(snapshotterName),
+		containerd.WithPullSnapshotter(snapshotterName,
+			demux.WithVSockPath(vminfo.VSockPath),
+			demux.WithRemoteSnapshotterPort(10000),
+		),
 		containerd.WithImageHandlerWrapper(source.AppendDefaultLabelsHandlerWrapper(al2stargz, 10*mib)),
 	)
 	if err != nil {

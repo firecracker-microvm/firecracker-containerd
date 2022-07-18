@@ -37,7 +37,6 @@ import (
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux/metrics"
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux/metrics/discovery"
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux/proxy"
-	proxyaddress "github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux/proxy/address"
 )
 
 // Run the demultiplexing snapshotter service.
@@ -137,25 +136,7 @@ func Run(config config.Config) error {
 	return nil
 }
 
-func initResolver(config config.Config) (proxyaddress.Resolver, error) {
-	resolverConfig := config.Snapshotter.Proxy.Address.Resolver
-	switch resolverConfig.Type {
-	case "http":
-		return proxyaddress.NewHTTPResolver(resolverConfig.Address), nil
-	default:
-		return nil, fmt.Errorf("invalid resolver type: %s", resolverConfig.Type)
-	}
-}
-
-const base10 = 10
-const bits32 = 32
-
 func initCache(config config.Config, monitor *metrics.Monitor) (*cache.RemoteSnapshotterCache, error) {
-	resolver, err := initResolver(config)
-	if err != nil {
-		return nil, err
-	}
-
 	dialTimeout, err := time.ParseDuration(config.Snapshotter.Dialer.Timeout)
 	if err != nil {
 		return nil, fmt.Errorf("Error parsing dialer retry interval from config: %w", err)
@@ -172,48 +153,31 @@ func initCache(config config.Config, monitor *metrics.Monitor) (*cache.RemoteSna
 		)
 	}
 
-	dial := func(ctx context.Context, namespace string) (net.Conn, error) {
-		r := resolver
-		response, err := r.Get(namespace)
-
-		if err != nil {
-			return nil, err
-		}
-		host := response.Address
-		port, err := strconv.ParseUint(response.SnapshotterPort, base10, bits32)
-		if err != nil {
-			return nil, err
-		}
-
+	dial := func(ctx context.Context, host string) (net.Conn, error) {
+		// Todo: wire RemoteSnapshotterConfig here somehow
+		port := uint64(10000)
 		return vsockDial(ctx, host, port)
 	}
 	dialer := proxy.Dialer{Dial: dial, Timeout: dialTimeout}
 
-	fetch := func(ctx context.Context, namespace string) (*proxy.RemoteSnapshotter, error) {
-		r := resolver
-		response, err := r.Get(namespace)
-		if err != nil {
-			return nil, err
-		}
-		host := response.Address
-		port, err := strconv.ParseUint(response.SnapshotterPort, base10, bits32)
-		if err != nil {
-			return nil, err
-		}
+	fetch := func(ctx context.Context, snapshotterConfig proxy.RemoteSnapshotterConfig) (*proxy.RemoteSnapshotter, error) {
 
 		dial := func(ctx context.Context, namespace string) (net.Conn, error) {
-			return vsockDial(ctx, host, port)
+			return vsockDial(ctx, snapshotterConfig.VSockPath, uint64(snapshotterConfig.RemoteSnapshotterPort))
 		}
 
 		var metricsProxy *metrics.Proxy
 		if config.Snapshotter.Metrics.Enable {
-			metricsProxy, err = initMetricsProxy(config, monitor, host, response.MetricsPort, response.Labels)
+			metricsProxy, err = initMetricsProxy(config, monitor,
+				snapshotterConfig.VSockPath,
+				snapshotterConfig.MetricsPort,
+				snapshotterConfig.MetricsLabels)
 			if err != nil {
 				return nil, err
 			}
 		}
 
-		return proxy.NewRemoteSnapshotter(ctx, host, dial, metricsProxy)
+		return proxy.NewRemoteSnapshotter(ctx, snapshotterConfig.VSockPath, dial, metricsProxy)
 	}
 
 	opts := make([]cache.SnapshotterCacheOption, 0)
@@ -247,14 +211,9 @@ func initMetricsProxyMonitor(portRange string) (*metrics.Monitor, error) {
 	return metrics.NewMonitor(lower, upper)
 }
 
-func initMetricsProxy(config config.Config, monitor *metrics.Monitor, host, port string, labels map[string]string) (*metrics.Proxy, error) {
-	metricsPort, err := strconv.ParseUint(port, base10, bits32)
-	if err != nil {
-		return nil, err
-	}
-
+func initMetricsProxy(config config.Config, monitor *metrics.Monitor, host string, port uint32, labels map[string]string) (*metrics.Proxy, error) {
 	metricsDialer := func(ctx context.Context, _, _ string) (net.Conn, error) {
-		return vsock.DialContext(ctx, host, uint32(metricsPort), vsock.WithLogger(log.G(ctx)))
+		return vsock.DialContext(ctx, host, port, vsock.WithLogger(log.G(ctx)))
 	}
 
 	metricsHost := config.Snapshotter.Metrics.Host

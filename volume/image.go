@@ -32,8 +32,9 @@ import (
 )
 
 type imageProviderConfig struct {
-	snapshotter string
-	pullOpts    []containerd.RemoteOpt
+	snapshotter  string
+	pullOpts     []containerd.RemoteOpt
+	snapshotOpts []snapshots.Opt
 }
 
 type imageVolumeProvider struct {
@@ -58,6 +59,13 @@ func WithSnapshotter(ss string) ImageOpt {
 func WithPullOptions(opts ...containerd.RemoteOpt) ImageOpt {
 	return func(c *imageProviderConfig) {
 		c.pullOpts = opts
+	}
+}
+
+// WithSnapshotOptions sets the snapshotter's snapshot options.
+func WithSnapshotOptions(opts ...snapshots.Opt) ImageOpt {
+	return func(c *imageProviderConfig) {
+		c.snapshotOpts = opts
 	}
 }
 

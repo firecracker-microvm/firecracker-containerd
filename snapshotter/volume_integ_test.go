@@ -24,6 +24,7 @@ import (
 	"github.com/firecracker-microvm/firecracker-containerd/internal/integtest"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	"github.com/firecracker-microvm/firecracker-containerd/runtime/firecrackeroci"
+	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux"
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/internal/integtest/stargz/fs/source"
 	"github.com/firecracker-microvm/firecracker-containerd/volume"
 	"github.com/stretchr/testify/assert"
@@ -56,24 +57,12 @@ func TestGuestVolumeFrom_Isolated(t *testing.T) {
 	err = vs.AddFrom(ctx, localImage)
 	require.NoError(t, err)
 
-	// Add a stargz image.
-	// The volume directories must be specified since the host's containerd doesn't know about the image.
-	remoteImage := volume.FromGuestImage(
-		client, vmID, al2stargz, "al2-snapshot", []string{"/etc/yum"},
-		volume.WithSnapshotter("demux"),
-		volume.WithPullOptions(containerd.WithImageHandlerWrapper(
-			source.AppendDefaultLabelsHandlerWrapper(al2stargz, 10*mib),
-		)),
-	)
-	err = vs.AddFrom(ctx, remoteImage)
-	require.NoError(t, err)
-
 	// PrepareDriveMount only copies images that are available before starting the VM.
 	// In this case, only postgres.
 	mount, err := vs.PrepareDriveMount(ctx, 10*mib)
 	require.NoError(t, err)
 
-	_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
+	vminfo, err := fcClient.CreateVM(ctx, &proto.CreateVMRequest{
 		VMID: vmID,
 		RootDrive: &proto.FirecrackerRootDrive{
 			HostPath: "/var/lib/firecracker-containerd/runtime/rootfs-stargz.img",
@@ -96,6 +85,22 @@ func TestGuestVolumeFrom_Isolated(t *testing.T) {
 	})
 	require.NoErrorf(t, err, "Failed to create microVM[%s]", vmID)
 	defer fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
+
+	// Add a stargz image.
+	// The volume directories must be specified since the host's containerd doesn't know about the image.
+	remoteImage := volume.FromGuestImage(
+		client, vmID, al2stargz, "al2-snapshot", []string{"/etc/yum"},
+		volume.WithSnapshotter("demux"),
+		volume.WithPullOptions(containerd.WithImageHandlerWrapper(
+			source.AppendDefaultLabelsHandlerWrapper(al2stargz, 10*mib),
+		)),
+		volume.WithSnapshotOptions(
+			demux.WithVSockPath(vminfo.VSockPath),
+			demux.WithRemoteSnapshotterPort(10000),
+		),
+	)
+	err = vs.AddFrom(ctx, remoteImage)
+	require.NoError(t, err)
 
 	_, err = fcClient.SetVMMetadata(ctx, &proto.SetVMMetadataRequest{
 		VMID:     vmID,

@@ -15,7 +15,12 @@ package demux
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strconv"
 
+	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/namespaces"
@@ -25,8 +30,22 @@ import (
 	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux/cache"
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux/proxy"
+
 	mountutil "github.com/firecracker-microvm/firecracker-containerd/snapshotter/internal/mount"
 )
+
+const (
+	// VSockPathLabel is a snapshot label that contains the VM's vsock path.
+	VSockPathLabel = "containerd.io/snapshot/remote/demux.vsock.address"
+	// RemoteSnapshotterPortLabel is a snapshot label that contains the vsock port the remote snapshotter is listening on inside the VM.
+	RemoteSnapshotterPortLabel = "containerd.io/snapshot/remote/demux.vsock.port"
+	// MetricsPortLabel is a snapshot label that contains the vsock port the remote snapshotter's metrics server is listening on inside the VM.
+	MetricsPortLabel = "containerd.io/snapshot/remote/demux.metrics.port"
+	// MetricsLabelsLabel is a snapshot label that contains the set of labels to attach to metrics when scraping.
+	MetricsLabelsLabel = "containerd.io/snapshot/remote/demux.metrics.labels"
+)
+
+var errNoVsockPath = fmt.Errorf("the snapshot is missing the %s label", VSockPathLabel)
 
 // Snapshotter routes snapshotter requests to their destined
 // remote snapshotter via their snapshotter namespace.
@@ -109,7 +128,17 @@ func (s *Snapshotter) Prepare(ctx context.Context, key string, parent string, op
 
 	snapshotter, err := s.getSnapshotterFromCache(ctx, contextLogger)
 	if err != nil {
-		return []mount.Mount{}, err
+		if !errors.Is(err, errdefs.ErrNotFound) {
+			return nil, err
+		}
+		snapshotterConfig, err := extractRemoteSnapshotterConfig(opts...)
+		if err != nil {
+			return nil, err
+		}
+		snapshotter, err = s.putSnapshotterIntoCache(ctx, snapshotterConfig, contextLogger)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	mounts, err := snapshotter.Prepare(ctx, key, parent, opts...)
@@ -221,6 +250,19 @@ func (s *Snapshotter) getSnapshotterFromCache(ctx context.Context, log *logrus.E
 	return snapshotter, nil
 }
 
+func (s *Snapshotter) putSnapshotterIntoCache(ctx context.Context, snapshotterConfig proxy.RemoteSnapshotterConfig, log *logrus.Entry) (*proxy.RemoteSnapshotter, error) {
+	namespace, err := getNamespaceFromContext(ctx, log)
+	if err != nil {
+		return nil, err
+	}
+	snapshotter, err := s.cache.Put(ctx, namespace, snapshotterConfig)
+	if err != nil {
+		log.WithField("namespace", namespace).WithError(err).Error(snapshotterNotFoundErrorString)
+		return nil, err
+	}
+	return snapshotter, nil
+}
+
 const missingNamespaceErrorString = "Function called without namespaced context"
 
 func getNamespaceFromContext(ctx context.Context, log *logrus.Entry) (string, error) {
@@ -230,4 +272,57 @@ func getNamespaceFromContext(ctx context.Context, log *logrus.Entry) (string, er
 		return "", err
 	}
 	return namespace, nil
+}
+
+func extractRemoteSnapshotterConfig(opts ...snapshots.Opt) (proxy.RemoteSnapshotterConfig, error) {
+	var base snapshots.Info
+	for _, opt := range opts {
+		if err := opt(&base); err != nil {
+			return proxy.RemoteSnapshotterConfig{}, err
+		}
+	}
+
+	// extract vsock path
+	path, ok := base.Labels[VSockPathLabel]
+	if !ok {
+		return proxy.RemoteSnapshotterConfig{}, errNoVsockPath
+	}
+
+	// extract remote snapshotter port
+	snapshotterPortStr, ok := base.Labels[RemoteSnapshotterPortLabel]
+	if !ok {
+		return proxy.RemoteSnapshotterConfig{}, fmt.Errorf("the snapshot is missing the %s label", RemoteSnapshotterPortLabel)
+	}
+	snapshotterPort, err := strconv.Atoi(snapshotterPortStr)
+	if err != nil {
+		return proxy.RemoteSnapshotterConfig{}, err
+	}
+
+	// extract metrics port
+	metricsPortStr, ok := base.Labels[MetricsPortLabel]
+	var metricsPort int
+	if ok {
+		metricsPort, err = strconv.Atoi(metricsPortStr)
+		if err != nil {
+			return proxy.RemoteSnapshotterConfig{}, err
+		}
+	}
+
+	// extract metrics labels
+	var metricsLabels map[string]string
+	metricsLabelsSerialied := base.Labels[MetricsLabelsLabel]
+	if metricsLabelsSerialied != "" {
+		err := json.Unmarshal([]byte(metricsLabelsSerialied), &metricsLabels)
+		if err != nil {
+			return proxy.RemoteSnapshotterConfig{}, err
+		}
+	}
+
+	return proxy.RemoteSnapshotterConfig{
+		VSockPath:             path,
+		RemoteSnapshotterPort: uint32(snapshotterPort),
+		MetricsPort:           uint32(metricsPort),
+		MetricsLabels:         metricsLabels,
+	}, nil
+
 }

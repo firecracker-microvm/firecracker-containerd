@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/snapshots"
 	"github.com/hashicorp/go-multierror"
 
@@ -26,22 +27,22 @@ import (
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux/proxy"
 )
 
-func getSnapshotterOkFunction(ctx context.Context, key string) (*proxy.RemoteSnapshotter, error) {
+func getSnapshotterOkFunction(ctx context.Context, config proxy.RemoteSnapshotterConfig) (*proxy.RemoteSnapshotter, error) {
 	return &proxy.RemoteSnapshotter{Snapshotter: &internal.SuccessfulSnapshotter{}}, nil
 }
 
-func getSnapshotterErrorFunction(ctx context.Context, key string) (*proxy.RemoteSnapshotter, error) {
+func getSnapshotterErrorFunction(ctx context.Context, config proxy.RemoteSnapshotterConfig) (*proxy.RemoteSnapshotter, error) {
 	return nil, errors.New("Mock retrieve snapshotter error")
 }
 
-func getFailingSnapshotterOkFunction(ctx context.Context, key string) (*proxy.RemoteSnapshotter, error) {
+func getFailingSnapshotterOkFunction(ctx context.Context, config proxy.RemoteSnapshotterConfig) (*proxy.RemoteSnapshotter, error) {
 	return &proxy.RemoteSnapshotter{Snapshotter: &internal.FailingSnapshotter{}}, nil
 }
 
 func getSnapshotterFromEmptyCache() error {
 	uut := NewRemoteSnapshotterCache(getSnapshotterOkFunction)
 	_, err := uut.Get(context.Background(), "SnapshotterKey")
-	if err != nil {
+	if err != nil && !errors.Is(err, errdefs.ErrNotFound) {
 		return fmt.Errorf("Fetch from empty cache incorrectly resulted in error: %w", err)
 	}
 	return nil
@@ -49,7 +50,7 @@ func getSnapshotterFromEmptyCache() error {
 
 func getCachedSnapshotter() error {
 	uut := NewRemoteSnapshotterCache(getSnapshotterOkFunction)
-	if _, err := uut.Get(context.Background(), "SnapshotterKey"); err != nil {
+	if _, err := uut.Put(context.Background(), "SnapshotterKey", proxy.RemoteSnapshotterConfig{}); err != nil {
 		return fmt.Errorf("Adding snapshotter to empty cache incorrectly resulted in error: %w", err)
 	}
 
@@ -81,10 +82,10 @@ func applyWalkFunctionOnEmptyCache() error {
 
 func applyWalkFunctionToAllCachedSnapshotters() error {
 	uut := NewRemoteSnapshotterCache(getSnapshotterOkFunction)
-	if _, err := uut.Get(context.Background(), "Snapshotter-A"); err != nil {
+	if _, err := uut.Put(context.Background(), "Snapshotter-A", proxy.RemoteSnapshotterConfig{}); err != nil {
 		return fmt.Errorf("Adding snapshotter A to empty cache incorrectly resulted in error: %w", err)
 	}
-	if _, err := uut.Get(context.Background(), "Snapshotter-B"); err != nil {
+	if _, err := uut.Put(context.Background(), "Snapshotter-B", proxy.RemoteSnapshotterConfig{}); err != nil {
 		return fmt.Errorf("Adding snapshotter B to cache incorrectly resulted in error: %w", err)
 	}
 	if err := uut.WalkAll(context.Background(), successfulWalk); err != nil {
@@ -95,7 +96,7 @@ func applyWalkFunctionToAllCachedSnapshotters() error {
 
 func applyWalkFunctionPropagatesErrors() error {
 	uut := NewRemoteSnapshotterCache(getFailingSnapshotterOkFunction)
-	if _, err := uut.Get(context.Background(), "Snapshotter-A"); err != nil {
+	if _, err := uut.Put(context.Background(), "Snapshotter-A", proxy.RemoteSnapshotterConfig{}); err != nil {
 		return fmt.Errorf("Adding snapshotter A to empty cache incorrectly resulted in error: %w", err)
 	}
 	// The failing snapshotter mock will fail all Walk calls before applying
@@ -120,7 +121,7 @@ func evictSnapshotterFromEmptyCache() error {
 
 func evictSnapshotterFromCache() error {
 	uut := NewRemoteSnapshotterCache(getSnapshotterOkFunction)
-	if _, err := uut.Get(context.Background(), "SnapshotterKey"); err != nil {
+	if _, err := uut.Put(context.Background(), "SnapshotterKey", proxy.RemoteSnapshotterConfig{}); err != nil {
 		return fmt.Errorf("Adding snapshotter to empty cache incorrectly resulted in error: %w", err)
 	}
 
@@ -132,7 +133,7 @@ func evictSnapshotterFromCache() error {
 
 func evictSnapshotterFromCachePropagatesCloseError() error {
 	uut := NewRemoteSnapshotterCache(getFailingSnapshotterOkFunction)
-	if _, err := uut.Get(context.Background(), "SnapshotterKey"); err != nil {
+	if _, err := uut.Put(context.Background(), "SnapshotterKey", proxy.RemoteSnapshotterConfig{}); err != nil {
 		return fmt.Errorf("Adding snapshotter to empty cache incorrectly resulted in error: %w", err)
 	}
 
@@ -162,8 +163,8 @@ func closeCacheWithNonEmptyCache() error {
 
 func closeCacheReturnsAllOccurringErrors() error {
 	uut := NewRemoteSnapshotterCache(getFailingSnapshotterOkFunction)
-	uut.Get(context.Background(), "FailingSnapshotterKey")
-	uut.Get(context.Background(), "AnotherFailingSnapshotterKey")
+	uut.Put(context.Background(), "FailingSnapshotterKey", proxy.RemoteSnapshotterConfig{})
+	uut.Put(context.Background(), "AnotherFailingSnapshotterKey", proxy.RemoteSnapshotterConfig{})
 
 	err := uut.Close()
 	if err == nil {
@@ -189,7 +190,7 @@ func listEmptyCache() error {
 
 func listNonEmptyCache() error {
 	uut := NewRemoteSnapshotterCache(getSnapshotterOkFunction)
-	uut.Get(context.Background(), "OkSnapshotterKey")
+	uut.Put(context.Background(), "OkSnapshotterKey", proxy.RemoteSnapshotterConfig{})
 
 	keys := uut.List()
 	if len(keys) != 1 {

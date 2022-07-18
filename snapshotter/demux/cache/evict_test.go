@@ -26,11 +26,11 @@ import (
 	"go.uber.org/goleak"
 )
 
-func getSnapshotter(ctx context.Context, key string) (*proxy.RemoteSnapshotter, error) {
+func getSnapshotter(ctx context.Context, config proxy.RemoteSnapshotterConfig) (*proxy.RemoteSnapshotter, error) {
 	return &proxy.RemoteSnapshotter{Snapshotter: &internal.SuccessfulSnapshotter{}}, nil
 }
 
-func getErrorSnapshotter(ctx context.Context, key string) (*proxy.RemoteSnapshotter, error) {
+func getErrorSnapshotter(ctx context.Context, config proxy.RemoteSnapshotterConfig) (*proxy.RemoteSnapshotter, error) {
 	return &proxy.RemoteSnapshotter{Snapshotter: &internal.FailingSnapshotter{}}, nil
 }
 
@@ -52,7 +52,7 @@ func TestCacheEvictionOnConnectionFailure(t *testing.T) {
 	cache := NewRemoteSnapshotterCache(getSnapshotter, EvictOnConnectionFailure(dialer, frequency))
 	defer cache.Close()
 
-	_, err := cache.Get(context.Background(), "test")
+	_, err := cache.Put(context.Background(), "test", proxy.RemoteSnapshotterConfig{})
 	require.NoError(t, err, "Snapshotter not added to cache correctly")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
@@ -88,7 +88,7 @@ func TestCacheNotEvictedIfConnectionIsHealthy(t *testing.T) {
 	cache := NewRemoteSnapshotterCache(getSnapshotter, EvictOnConnectionFailure(dialer, frequency))
 	defer cache.Close()
 
-	_, err := cache.Get(context.Background(), "test")
+	_, err := cache.Put(context.Background(), "test", proxy.RemoteSnapshotterConfig{})
 	require.NoError(t, err, "Snapshotter not added to cache correctly")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
@@ -121,7 +121,7 @@ func TestBackgroundEnforcersCanBeStopped(t *testing.T) {
 	dialer := proxy.Dialer{Dial: dial, Timeout: 1 * time.Second}
 	cache := NewRemoteSnapshotterCache(getSnapshotter, EvictOnConnectionFailure(dialer, frequency))
 
-	_, err := cache.Get(context.Background(), "test")
+	_, err := cache.Put(context.Background(), "test", proxy.RemoteSnapshotterConfig{})
 	require.NoError(t, err, "Snapshotter not added to cache correctly")
 
 	cache.Close()
@@ -140,7 +140,7 @@ func TestLogErrorOnEvictionFailure(t *testing.T) {
 	cache := NewRemoteSnapshotterCache(getErrorSnapshotter, EvictOnConnectionFailure(dialer, frequency))
 	defer cache.Close()
 
-	_, err := cache.Get(context.Background(), "test")
+	_, err := cache.Put(context.Background(), "test", proxy.RemoteSnapshotterConfig{})
 	require.NoError(t, err, "Snapshotter not added to cache correctly")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)

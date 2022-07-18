@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/snapshots"
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux/proxy"
 	"github.com/hashicorp/go-multierror"
@@ -26,7 +27,7 @@ import (
 )
 
 // SnapshotterProvider defines a snapshotter fetch function.
-type SnapshotterProvider = func(context.Context, string) (*proxy.RemoteSnapshotter, error)
+type SnapshotterProvider = func(context.Context, proxy.RemoteSnapshotterConfig) (*proxy.RemoteSnapshotter, error)
 
 // RemoteSnapshotterCache implements a cache for remote snapshotters.
 type RemoteSnapshotterCache struct {
@@ -101,8 +102,8 @@ func (c *RemoteSnapshotterCache) List() []string {
 	return keys
 }
 
-// Get fetches and caches the snapshotter for a given key.
-func (c *RemoteSnapshotterCache) Get(ctx context.Context, key string) (*proxy.RemoteSnapshotter, error) {
+// Put creates and adds a snapshotter to the cache.
+func (c *RemoteSnapshotterCache) Put(ctx context.Context, key string, config proxy.RemoteSnapshotterConfig) (*proxy.RemoteSnapshotter, error) {
 	c.mutex.RLock()
 	snapshotter, ok := c.snapshotters[key]
 	c.mutex.RUnlock()
@@ -113,7 +114,7 @@ func (c *RemoteSnapshotterCache) Get(ctx context.Context, key string) (*proxy.Re
 		c.mutex.Unlock()
 
 		if !ok {
-			newSnapshotter, err := c.fetch(ctx, key)
+			newSnapshotter, err := c.fetch(ctx, config)
 			if err != nil {
 				return nil, err
 			}
@@ -127,6 +128,18 @@ func (c *RemoteSnapshotterCache) Get(ctx context.Context, key string) (*proxy.Re
 			}
 			snapshotter = newSnapshotter
 		}
+	}
+	return snapshotter, nil
+}
+
+// Get retrieves the snapshotter for a given key.
+func (c *RemoteSnapshotterCache) Get(ctx context.Context, key string) (*proxy.RemoteSnapshotter, error) {
+	c.mutex.RLock()
+	snapshotter, ok := c.snapshotters[key]
+	c.mutex.RUnlock()
+
+	if !ok {
+		return nil, fmt.Errorf("error getting snapshotter for %s: %w", key, errdefs.ErrNotFound)
 	}
 	return snapshotter, nil
 }

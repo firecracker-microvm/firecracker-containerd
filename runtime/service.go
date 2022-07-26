@@ -1671,12 +1671,6 @@ func (s *service) Wait(requestCtx context.Context, req *taskAPI.WaitRequest) (*t
 func (s *service) Cleanup(requestCtx context.Context) (*taskAPI.DeleteResponse, error) {
 	defer logPanicAndDie(log.G(requestCtx))
 
-	err := s.waitVMReady()
-	if err != nil {
-		s.logger.WithError(err).Error()
-		return nil, err
-	}
-
 	log.G(requestCtx).Debug("cleanup")
 	// Destroy VM/etc here?
 	// copied from runcs impl, nothing to cleanup atm

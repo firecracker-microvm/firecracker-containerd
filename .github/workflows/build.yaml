@@ -13,7 +13,7 @@ jobs:
 
     strategy:
       matrix:
-        os: ['ubuntu-18.04', 'ubuntu-20.04']
+        os: ['ubuntu-20.04', 'ubuntu-22.04']
         go: ['1.16', '1.17']
       # Build all variants regardless of failures
       fail-fast: false
@@ -22,7 +22,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           # By default, the checkout action only fetches the last commit,
           # but we want to run DCO check against all commit messages.

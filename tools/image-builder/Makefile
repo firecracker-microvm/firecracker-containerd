@@ -46,7 +46,7 @@ define run_debootstrap =
 	debootstrap \
 		--variant=minbase \
 		--include=$(subst $(SPACE),$(COMMA),$(PACKAGES))\
-		bookworm \
+		bullseye \
 		"$(WORKDIR)" $(DEBMIRROR)
 	rm -rf "$(WORKDIR)/var/cache/apt/archives" \
 	       "$(WORKDIR)/usr/share/doc" \

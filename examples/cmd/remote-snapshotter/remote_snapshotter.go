@@ -26,6 +26,7 @@ import (
 	fcclient "github.com/firecracker-microvm/firecracker-containerd/firecracker-control/client"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	"github.com/firecracker-microvm/firecracker-containerd/runtime/firecrackeroci"
+	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux"
 )
 
 const (
@@ -92,7 +93,7 @@ func main() {
 	defer fcClient.Close()
 
 	fmt.Println("Creating VM")
-	_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
+	vminfo, err := fcClient.CreateVM(ctx, &proto.CreateVMRequest{
 		VMID: vmID,
 		NetworkInterfaces: []*proto.FirecrackerNetworkInterface{{
 			AllowMMDS: true,
@@ -121,10 +122,14 @@ func main() {
 
 	fmt.Println("Pulling the image")
 	image, err := client.Pull(ctx, imageRef,
-		containerd.WithPullSnapshotter(snapshotter),
+		containerd.WithPullSnapshotter(snapshotter,
+			demux.WithVSockPath(vminfo.VSockPath),
+			demux.WithRemoteSnapshotterPort(10000),
+		),
 		containerd.WithPullUnpack,
 		// stargz labels to tell the snapshotter to lazily load the image
-		containerd.WithImageHandlerWrapper(source.AppendDefaultLabelsHandlerWrapper(imageRef, 10*1024*1024)))
+		containerd.WithImageHandlerWrapper(source.AppendDefaultLabelsHandlerWrapper(imageRef, 10*1024*1024)),
+	)
 	if err != nil {
 		fmt.Println(err)
 		return

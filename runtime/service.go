@@ -502,6 +502,7 @@ func (s *service) CreateVM(requestCtx context.Context, request *proto.CreateVMRe
 	resp.MetricsFifoPath = s.machineConfig.MetricsFifo
 	resp.LogFifoPath = s.machineConfig.LogFifo
 	resp.SocketPath = s.shimDir.FirecrackerSockPath()
+	resp.VSockPath = s.shimDir.FirecrackerVSockPath()
 	if c, ok := s.jailer.(cgroupPather); ok {
 		resp.CgroupPath = c.CgroupPath()
 	}

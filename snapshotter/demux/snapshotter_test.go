@@ -27,29 +27,18 @@ import (
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux/proxy"
 )
 
-func fetchOkSnapshotter(ctx context.Context, key string) (*proxy.RemoteSnapshotter, error) {
+func fetchOkSnapshotter(ctx context.Context, config proxy.RemoteSnapshotterConfig) (*proxy.RemoteSnapshotter, error) {
 	var snapshotter internal.SuccessfulSnapshotter = internal.SuccessfulSnapshotter{}
 	return &proxy.RemoteSnapshotter{Snapshotter: &snapshotter}, nil
 }
 
-func fetchSnapshotterNotFound(ctx context.Context, key string) (*proxy.RemoteSnapshotter, error) {
+func fetchSnapshotterNotFound(ctx context.Context, config proxy.RemoteSnapshotterConfig) (*proxy.RemoteSnapshotter, error) {
 	return nil, errors.New("mock snapshotter not found")
 }
 
 func createSnapshotterCacheWithSuccessfulSnapshotter(namespace string) *cache.RemoteSnapshotterCache {
 	cache := cache.NewRemoteSnapshotterCache(fetchOkSnapshotter)
-	cache.Get(context.Background(), namespace)
-	return cache
-}
-
-func fetchFailingSnapshotter(ctx context.Context, key string) (*proxy.RemoteSnapshotter, error) {
-	var snapshotter internal.FailingSnapshotter = internal.FailingSnapshotter{}
-	return &proxy.RemoteSnapshotter{Snapshotter: &snapshotter}, nil
-}
-
-func createSnapshotterCacheWithFailingSnapshotter(namespace string) *cache.RemoteSnapshotterCache {
-	cache := cache.NewRemoteSnapshotterCache(fetchFailingSnapshotter)
-	cache.Get(context.Background(), namespace)
+	cache.Put(context.Background(), namespace, proxy.RemoteSnapshotterConfig{})
 	return cache
 }
 
@@ -141,45 +130,6 @@ func TestReturnErrorWhenSnapshotterNotFound(t *testing.T) {
 		if err := test.run(); err == nil {
 			t.Fatalf("%s call did not return error", test.name)
 		}
-	}
-}
-
-func TestReturnErrorAfterProxyFunctionFailure(t *testing.T) {
-	t.Parallel()
-
-	const namespace = "testing"
-	cache := createSnapshotterCacheWithFailingSnapshotter(namespace)
-	ctx := namespaces.WithNamespace(context.Background(), namespace)
-	ctx = logtest.WithT(ctx, t)
-
-	uut := NewSnapshotter(cache)
-
-	tests := []struct {
-		name string
-		run  func() error
-	}{
-		{"Stat", func() error { _, err := uut.Stat(ctx, "layerKey"); return err }},
-		{"Update", func() error { _, err := uut.Update(ctx, snapshots.Info{}); return err }},
-		{"Usage", func() error { _, err := uut.Usage(ctx, "layerKey"); return err }},
-		{"Mounts", func() error { _, err := uut.Mounts(ctx, "layerKey"); return err }},
-		{"Prepare", func() error { _, err := uut.Prepare(ctx, "layerKey", ""); return err }},
-		{"View", func() error { _, err := uut.View(ctx, "layerKey", ""); return err }},
-		{"Commit", func() error { return uut.Commit(ctx, "layer1", "layerKey") }},
-		{"Remove", func() error { return uut.Remove(ctx, "layerKey") }},
-		{"Walk", func() error {
-			var callback = func(c context.Context, i snapshots.Info) error { return nil }
-			return uut.Walk(ctx, callback)
-		}},
-		{"Cleanup", func() error { return uut.(snapshots.Cleaner).Cleanup(ctx) }},
-		{"Close", func() error { return uut.Close() }},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name+"ProxyFailure", func(t *testing.T) {
-			if err := test.run(); err == nil {
-				t.Fatalf("%s call did not return error", test.name)
-			}
-		})
 	}
 }
 

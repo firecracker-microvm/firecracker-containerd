@@ -90,7 +90,7 @@ func (p *GuestVolumeImageProvider) Name() string {
 func (p *GuestVolumeImageProvider) pull(ctx context.Context) error {
 	remoteOpts := []containerd.RemoteOpt{
 		containerd.WithPullUnpack,
-		containerd.WithPullSnapshotter(p.config.snapshotter),
+		containerd.WithPullSnapshotter(p.config.snapshotter, p.config.snapshotOpts...),
 	}
 	remoteOpts = append(remoteOpts, p.config.pullOpts...)
 	image, err := p.client.Pull(ctx, p.image, remoteOpts...)

@@ -27,6 +27,7 @@ import (
 	"github.com/firecracker-microvm/firecracker-containerd/firecracker-control/client"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/integtest"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
+	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux"
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/internal/integtest/stargz/fs/source"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -91,7 +92,7 @@ func pullImageWithRemoteSnapshotterInVM(ctx context.Context, vmID string, fcClie
 	if err != nil {
 		return fmt.Errorf("Unable to create client to containerd service at %s, is containerd running?: %v", integtest.ContainerdSockPath, err)
 	}
-	if _, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
+	vminfo, err := fcClient.CreateVM(ctx, &proto.CreateVMRequest{
 		VMID: vmID,
 		RootDrive: &proto.FirecrackerRootDrive{
 			HostPath: "/var/lib/firecracker-containerd/runtime/rootfs-stargz.img",
@@ -110,7 +111,8 @@ func pullImageWithRemoteSnapshotterInVM(ctx context.Context, vmID string, fcClie
 			MemSizeMib: 512,
 		},
 		ContainerCount: 1,
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("Failed to create microVM[%s]: %v", vmID, err)
 	}
 
@@ -123,7 +125,11 @@ func pullImageWithRemoteSnapshotterInVM(ctx context.Context, vmID string, fcClie
 
 	image, err := client.Pull(ctx, al2stargz,
 		containerd.WithPullUnpack,
-		containerd.WithPullSnapshotter(snapshotterName),
+		containerd.WithPullSnapshotter(snapshotterName,
+			demux.WithVSockPath(vminfo.VSockPath),
+			demux.WithRemoteSnapshotterPort(10000),
+			demux.WithProxyMetricsPort(10002),
+		),
 		containerd.WithImageHandlerWrapper(source.AppendDefaultLabelsHandlerWrapper(al2stargz, 10*1024*1024)),
 	)
 	if err != nil {
@@ -162,7 +168,7 @@ func verifyMetricsResponse(t *testing.T, numberOfVms int) {
 		uniqueTargets[mt.Targets[0]] = struct{}{}
 		metricsResponse, err := http.Get("http://" + mt.Targets[0] + "/metrics")
 		require.NoError(t, err, "Failed to get metrics proxy")
-		require.Equal(t, metricsResponse.StatusCode, http.StatusOK)
+		require.Equal(t, http.StatusOK, metricsResponse.StatusCode)
 		defer metricsResponse.Body.Close()
 
 		mBytes, err := io.ReadAll(metricsResponse.Body)

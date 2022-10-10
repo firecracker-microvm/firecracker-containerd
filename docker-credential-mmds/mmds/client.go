@@ -16,7 +16,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -83,7 +83,7 @@ func (c *Client) refreshToken() error {
 		c.version = v1
 		return nil
 	}
-	token, err := ioutil.ReadAll(resp.Body)
+	token, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}
@@ -131,11 +131,11 @@ func (c *Client) getMetadata(path string) ([]byte, error) {
 func readBody(resp *http.Response) ([]byte, error) {
 	switch status := resp.StatusCode; {
 	case status < 300:
-		return ioutil.ReadAll(resp.Body)
+		return io.ReadAll(resp.Body)
 	case status == http.StatusUnauthorized:
 		return []byte{}, errUnauthorized
 	default:
-		body, err := ioutil.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		return []byte{}, fmt.Errorf("unexpected http response: %d - (err %v) %s", status, err, string(body))
 	}
 }

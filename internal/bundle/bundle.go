@@ -16,7 +16,6 @@ package bundle
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -91,7 +90,7 @@ func (c *OCIConfig) File() (*os.File, error) {
 
 // Bytes returns the bytes of config.json
 func (c *OCIConfig) Bytes() ([]byte, error) {
-	f, err := ioutil.ReadFile(c.path)
+	f, err := os.ReadFile(c.path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read OCI config file %s: %w", c.path, err)
 	}
@@ -101,7 +100,7 @@ func (c *OCIConfig) Bytes() ([]byte, error) {
 
 // Write will create or overwrite the config.json with the provided bytes
 func (c *OCIConfig) Write(contents []byte) error {
-	err := ioutil.WriteFile(c.path, contents, 0700)
+	err := os.WriteFile(c.path, contents, 0700)
 	if err != nil {
 		return fmt.Errorf("failed to write OCI config file %s: %w", c.path, err)
 	}

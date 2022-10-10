@@ -17,7 +17,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 )
 
@@ -55,7 +54,7 @@ func (h HTTPResolver) Get(namespace string) (Response, error) {
 	}
 	defer httpResponse.Body.Close()
 
-	body, err := ioutil.ReadAll(httpResponse.Body)
+	body, err := io.ReadAll(httpResponse.Body)
 	if err != nil {
 		return Response{}, err
 	}

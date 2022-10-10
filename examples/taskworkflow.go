@@ -17,7 +17,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -197,7 +197,7 @@ func getResponse(containerIP string) error {
 	}
 	defer response.Body.Close()
 
-	contents, err := ioutil.ReadAll(response.Body)
+	contents, err := io.ReadAll(response.Body)
 	if err != nil {
 		return fmt.Errorf("Unable to read response body from %s: %w", containerIP, err)
 	}

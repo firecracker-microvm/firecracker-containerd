@@ -15,7 +15,6 @@ package main
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -120,7 +119,7 @@ func testJailer(t *testing.T, jailerConfig *proto.JailerConfig) {
 
 	// If the drive files are bind-mounted, the files must be readable from the jailer's user.
 	if jailerConfig != nil && jailerConfig.DriveExposePolicy == proto.DriveExposePolicy_BIND {
-		f, err := ioutil.TempFile("", fsSafeTestName(t)+"_rootfs")
+		f, err := os.CreateTemp("", fsSafeTestName(t)+"_rootfs")
 		require.NoError(err)
 		defer f.Close()
 
@@ -181,7 +180,7 @@ func testJailer(t *testing.T, jailerConfig *proto.JailerConfig) {
 	assert.Error(t, err)
 	assert.True(t, os.IsNotExist(err))
 
-	shimContents, err := ioutil.ReadDir(integtest.ShimBaseDir())
+	shimContents, err := os.ReadDir(integtest.ShimBaseDir())
 	require.NoError(err)
 	assert.Len(t, shimContents, 0)
 }
@@ -234,7 +233,7 @@ func testAttachBlockDevice(t *testing.T, jailerConfig *proto.JailerConfig) {
 
 	// If the drive files are bind-mounted, the files must be readable from the jailer's user.
 	if jailerConfig != nil && jailerConfig.DriveExposePolicy == proto.DriveExposePolicy_BIND {
-		f, err := ioutil.TempFile("", fsSafeTestName(t)+"_rootfs")
+		f, err := os.CreateTemp("", fsSafeTestName(t)+"_rootfs")
 		require.NoError(err)
 		defer f.Close()
 
@@ -292,7 +291,7 @@ func testAttachBlockDevice(t *testing.T, jailerConfig *proto.JailerConfig) {
 	assert.Error(t, err)
 	assert.True(t, os.IsNotExist(err))
 
-	shimContents, err := ioutil.ReadDir(integtest.ShimBaseDir())
+	shimContents, err := os.ReadDir(integtest.ShimBaseDir())
 	require.NoError(err)
 	assert.Len(t, shimContents, 0)
 }

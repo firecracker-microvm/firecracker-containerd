@@ -15,7 +15,6 @@ package config
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -63,11 +62,11 @@ func TestLoadConfigOverrides(t *testing.T) {
 
 func createTempConfig(t *testing.T, contents string) (string, func()) {
 	t.Helper()
-	configFile, err := ioutil.TempFile("", "config")
+	configFile, err := os.CreateTemp("", "config")
 	if err != nil {
 		t.Fatal(err, "failed to create temp config file")
 	}
-	err = ioutil.WriteFile(configFile.Name(), []byte(contents), 0644)
+	err = os.WriteFile(configFile.Name(), []byte(contents), 0644)
 	if err != nil {
 		os.Remove(configFile.Name())
 		t.Fatal(err, "failed to write contents to temp config file")

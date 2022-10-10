@@ -16,7 +16,6 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
@@ -78,7 +77,7 @@ func LoadConfig(path string) (*Config, error) {
 		path = defaultConfigPath
 	}
 
-	data, err := ioutil.ReadFile(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config from %q: %w", path, err)
 	}

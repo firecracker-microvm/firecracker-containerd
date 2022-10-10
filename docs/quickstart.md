@@ -84,7 +84,8 @@ sudo yum -y install \
   e2fsprogs \
   util-linux \
   bc \
-  gnupg
+  gnupg \
+  gcc
 
 
 # Amazon Linux 2 packages can sometimes be dated, so let's install using

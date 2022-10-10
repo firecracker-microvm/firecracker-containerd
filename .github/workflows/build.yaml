@@ -14,7 +14,7 @@ jobs:
     strategy:
       matrix:
         os: ['ubuntu-20.04', 'ubuntu-22.04']
-        go: ['1.16', '1.17']
+        go: ['1.17', '1.18', '1.19']
       # Build all variants regardless of failures
       fail-fast: false
 
@@ -49,13 +49,6 @@ jobs:
       - run: |
           make tidy
           git diff --exit-code
-        # opencontainers/selinux uses Go 1.16's io/fs package with "go1.16"
-        # build tag. However, since go mod tidy acts as like all build tags
-        # are enabled, the file below included in go mod tidy, even
-        # Go is < 1.16.
-        # https://github.com/opencontainers/selinux/blob/v1.9.1/go-selinux/rchcon.go
-        # https://golang.org/ref/mod
-        if: matrix.go >= '1.16'
       - run: |
           make proto
           git diff --exit-code

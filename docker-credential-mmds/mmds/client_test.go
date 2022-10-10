@@ -17,7 +17,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"testing"
 
@@ -46,7 +45,7 @@ func v1TokenResponse() (*http.Response, error) {
 func v2TokenResponse() (*http.Response, error) {
 	return &http.Response{
 		StatusCode: http.StatusOK,
-		Body:       ioutil.NopCloser(bytes.NewBufferString(token)),
+		Body:       io.NopCloser(bytes.NewBufferString(token)),
 	}, nil
 }
 

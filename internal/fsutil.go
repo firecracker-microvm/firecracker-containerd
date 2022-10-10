@@ -16,7 +16,6 @@ package internal
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -52,7 +51,7 @@ type FSImgFile struct {
 func createTestExtImg(ctx context.Context, t *testing.T, extName string, testFiles ...FSImgFile) string {
 	t.Helper()
 
-	tempdir, err := ioutil.TempDir("", "")
+	tempdir, err := os.MkdirTemp("", "")
 	require.NoError(t, err, "failed to create temp dir for ext img")
 
 	for _, testFile := range testFiles {
@@ -61,11 +60,11 @@ func createTestExtImg(ctx context.Context, t *testing.T, extName string, testFil
 		err = os.MkdirAll(filepath.Dir(destPath), 0750)
 		require.NoError(t, err, "failed to mkdir for contents of ext img file")
 
-		err = ioutil.WriteFile(destPath, []byte(testFile.Contents), 0750)
+		err = os.WriteFile(destPath, []byte(testFile.Contents), 0750)
 		require.NoError(t, err, "failed to write file for contents of ext img")
 	}
 
-	imgFile, err := ioutil.TempFile("", "")
+	imgFile, err := os.CreateTemp("", "")
 	require.NoError(t, err, "failed to obtain temp file for ext img")
 
 	output, err := exec.CommandContext(ctx, "mkfs."+extName, "-d", tempdir, imgFile.Name(), "65536").CombinedOutput()
@@ -77,7 +76,7 @@ func createTestExtImg(ctx context.Context, t *testing.T, extName string, testFil
 func CreateBlockDevice(ctx context.Context, t *testing.T) (string, func()) {
 	t.Helper()
 
-	f, err := ioutil.TempFile("", "")
+	f, err := os.CreateTemp("", "")
 	require.NoError(t, err)
 
 	err = f.Truncate(32 * mib)

@@ -16,7 +16,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"strconv"
@@ -340,7 +339,7 @@ func TestCNIPlugin_Performance(t *testing.T) {
 }
 
 func writeCNIConf(path, chainedPluginName, networkName, nameserver string) error {
-	return ioutil.WriteFile(path, []byte(fmt.Sprintf(`{
+	return os.WriteFile(path, []byte(fmt.Sprintf(`{
   "cniVersion": "0.3.1",
   "name": "%s",
   "plugins": [

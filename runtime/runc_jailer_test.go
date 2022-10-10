@@ -15,7 +15,6 @@ package main
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -200,12 +199,12 @@ func TestFifoHandler(t *testing.T) {
 
 			err := os.MkdirAll(filepath.Dir(logPath), 0750)
 			require.NoError(t, err)
-			err = ioutil.WriteFile(logPath, []byte("log"), 0644)
+			err = os.WriteFile(logPath, []byte("log"), 0644)
 			require.NoError(t, err)
 
 			err = os.MkdirAll(filepath.Dir(metricsPath), 0750)
 			require.NoError(t, err)
-			err = ioutil.WriteFile(metricsPath, []byte("metrics"), 0644)
+			err = os.WriteFile(metricsPath, []byte("metrics"), 0644)
 			require.NoError(t, err)
 
 			j := runcJailer{
@@ -234,7 +233,7 @@ func TestPrepareBindMount(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	dir, err := ioutil.TempDir("", t.Name())
+	dir, err := os.MkdirTemp("", t.Name())
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
@@ -244,7 +243,7 @@ func TestPrepareBindMount(t *testing.T) {
 		GID:           5678,
 	}}
 
-	err = ioutil.WriteFile(dir+"/foobar", []byte("hello"), 0700)
+	err = os.WriteFile(dir+"/foobar", []byte("hello"), 0700)
 	require.NoError(t, err)
 
 	testcases := []struct {

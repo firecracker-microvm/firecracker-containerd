@@ -17,7 +17,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -106,7 +105,7 @@ func newRuncJailer(
 	}
 
 	spec := specs.Spec{}
-	configBytes, err := ioutil.ReadFile(cfg.RuncConfigPath)
+	configBytes, err := os.ReadFile(cfg.RuncConfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read %s: %w", cfg.RuncConfigPath, err)
 	}
@@ -557,7 +556,7 @@ func (j *runcJailer) overwriteConfig(machineConfig *firecracker.Config, socketPa
 		return err
 	}
 
-	if err := ioutil.WriteFile(configPath, configBytes, 0400); err != nil {
+	if err := os.WriteFile(configPath, configBytes, 0400); err != nil {
 		return err
 	}
 

@@ -16,7 +16,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -124,7 +123,7 @@ func (d drive) Path() string {
 
 func getListOfBlockDeviceNames(path string) ([]string, error) {
 	names := []string{}
-	infos, err := ioutil.ReadDir(path)
+	infos, err := os.ReadDir(path)
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +143,7 @@ func (dh driveHandler) buildDrive(name string) (drive, error) {
 		DrivePath: dh.DrivePath,
 	}
 
-	majorMinorStr, err := ioutil.ReadFile(filepath.Join(dh.BlockPath, name, blockMajorMinor))
+	majorMinorStr, err := os.ReadFile(filepath.Join(dh.BlockPath, name, blockMajorMinor))
 	if err != nil {
 		return d, err
 	}

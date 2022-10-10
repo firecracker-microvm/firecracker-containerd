@@ -18,7 +18,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -186,7 +186,7 @@ func TestShimExitsUponContainerDelete_Isolated(t *testing.T) {
 
 		cfg, err := config.LoadConfig("")
 		require.NoError(t, err, "failed to load config")
-		varRunFCContents, err := ioutil.ReadDir(cfg.ShimBaseDir)
+		varRunFCContents, err := os.ReadDir(cfg.ShimBaseDir)
 		require.NoError(t, err, `failed to list directory "%s"`, cfg.ShimBaseDir)
 		require.Len(t, varRunFCContents, 0, "expect %s to be empty", cfg.ShimBaseDir)
 	case err = <-exitEventErrCh:
@@ -1953,7 +1953,7 @@ func TestExec_Isolated(t *testing.T) {
 	_, err = task.Exec(ctx, execID, &specs.Process{
 		Args: []string{"/bin/date"},
 		Cwd:  "/",
-	}, cio.NewCreator(cio.WithStreams(os.Stdin, ioutil.Discard, ioutil.Discard)))
+	}, cio.NewCreator(cio.WithStreams(os.Stdin, io.Discard, io.Discard)))
 	assert.Error(t, err)
 	assert.Truef(t, errdefs.IsAlreadyExists(err), "%q's cause must be %q", err, errdefs.ErrAlreadyExists)
 

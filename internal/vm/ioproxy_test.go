@@ -15,7 +15,6 @@ package vm
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -46,7 +45,7 @@ func TestProxy(t *testing.T) {
 	ctx := context.Background()
 	content := "hello world"
 
-	err := ioutil.WriteFile(filepath.Join(dir, "input"), []byte(content), 0600)
+	err := os.WriteFile(filepath.Join(dir, "input"), []byte(content), 0600)
 	require.NoError(t, err)
 
 	pair := &IOConnectorPair{
@@ -58,7 +57,7 @@ func TestProxy(t *testing.T) {
 	assert.Nil(t, <-initCh)
 	assert.Nil(t, <-copyCh)
 
-	bytes, err := ioutil.ReadFile(filepath.Join(dir, "output"))
+	bytes, err := os.ReadFile(filepath.Join(dir, "output"))
 	require.NoError(t, err)
 	assert.Equal(t, content, string(bytes))
 }

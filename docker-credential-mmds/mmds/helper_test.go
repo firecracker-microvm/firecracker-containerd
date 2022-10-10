@@ -16,7 +16,7 @@ package mmds
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"testing"
 
@@ -63,14 +63,14 @@ const (
 func validMetadataResponse() (*http.Response, error) {
 	return &http.Response{
 		StatusCode: http.StatusOK,
-		Body:       ioutil.NopCloser(bytes.NewBufferString(validDockerCredentials)),
+		Body:       io.NopCloser(bytes.NewBufferString(validDockerCredentials)),
 	}, nil
 }
 
 func metadataResponse() (*http.Response, error) {
 	return &http.Response{
 		StatusCode: http.StatusOK,
-		Body:       ioutil.NopCloser(bytes.NewBufferString(dockerCredentials)),
+		Body:       io.NopCloser(bytes.NewBufferString(dockerCredentials)),
 	}, nil
 }
 

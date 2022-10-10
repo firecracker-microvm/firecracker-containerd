@@ -15,7 +15,6 @@ package main
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -74,7 +73,7 @@ func TestContainerStubs(t *testing.T) {
 
 	stubDriveHandler, err := CreateContainerStubs(machineCfg, noopJailer, containerCount, logger)
 	require.NoError(t, err, "failed to create stub drive handler")
-	dirents, err := ioutil.ReadDir(stubDir)
+	dirents, err := os.ReadDir(stubDir)
 	require.NoError(t, err, "failed to read stub drive dir")
 	assert.Len(t, dirents, containerCount)
 
@@ -219,7 +218,7 @@ func TestDriveMountStubs(t *testing.T) {
 	mountableStubDrives, err := CreateDriveMountStubs(machineCfg, noopJailer, inputDriveMounts, logger)
 	require.NoError(t, err, "failed to create stub drive handler")
 
-	dirents, err := ioutil.ReadDir(stubDir)
+	dirents, err := os.ReadDir(stubDir)
 	require.NoError(t, err, "failed to read stub drive dir")
 	assert.Len(t, dirents, len(inputDriveMounts))
 

@@ -27,6 +27,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/firecracker-microvm/firecracker-containerd/config"
+	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/debug"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
@@ -225,6 +226,9 @@ func TestBuildVMConfiguration(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
+		if cpuTemp, err := internal.SupportCPUTemplate(); !cpuTemp && err == nil {
+			tc.expectedCfg.MachineCfg.CPUTemplate = ""
+		}
 		tc := tc // see https://github.com/kyoh86/scopelint/issues/4
 		t.Run(tc.name, func(t *testing.T) {
 			svc := &service{

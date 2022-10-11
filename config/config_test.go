@@ -18,6 +18,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -31,14 +32,16 @@ func TestLoadConfigDefaults(t *testing.T) {
 	assert.Equal(t, defaultKernelArgs, cfg.KernelArgs, "expected default kernel args")
 	assert.Equal(t, defaultKernelPath, cfg.KernelImagePath, "expected default kernel path")
 	assert.Equal(t, defaultRootfsPath, cfg.RootDrive, "expected default rootfs path")
-	assert.Equal(t, string(defaultCPUTemplate), cfg.CPUTemplate, "expected default CPU template")
 }
 
 func TestLoadConfigOverrides(t *testing.T) {
 	overrideKernelArgs := "OVERRIDE KERNEL ARGS"
 	overrideKernelPath := "OVERRIDE KERNEL PATH"
 	overrideRootfsPath := "OVERRIDE ROOTFS PATH"
-	overrideCPUTemplate := "OVERRIDE CPU TEMPLATE"
+	overrideCPUTemplate := ""
+	if cpuTemp, err := internal.SupportCPUTemplate(); cpuTemp && err == nil {
+		overrideCPUTemplate = "OVERRIDE CPU TEMPLATE"
+	}
 	configContent := fmt.Sprintf(
 		`{
 			"kernel_args":"%s",

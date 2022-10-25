@@ -37,7 +37,7 @@ jobs:
           # So, we will fetch 30 commits just in case to have
           # 20 actual commits with associated merged commits.
           fetch-depth: 30
-      - uses: actions/setup-go@v1
+      - uses: actions/setup-go@v3
         with:
           go-version: ${{ matrix.go }}
       - run: make

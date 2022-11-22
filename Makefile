@@ -136,7 +136,7 @@ tidy:
 	./tools/tidy.sh
 
 $(BINPATH)/golangci-lint:
-	curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b $(BINPATH) v1.46.2
+	curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b $(BINPATH) v1.50.1
 	$(BINPATH)/golangci-lint --version
 
 $(BINPATH)/git-validation:

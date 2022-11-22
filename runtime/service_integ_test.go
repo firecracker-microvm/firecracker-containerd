@@ -1899,6 +1899,60 @@ func TestStopVM_Isolated(t *testing.T) {
 	}
 }
 
+func TestStopVMFailFast_Isolated(t *testing.T) {
+	integtest.Prepare(t)
+
+	client, err := containerd.New(integtest.ContainerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
+	defer client.Close()
+
+	name := testNameToVMID(t.Name())
+
+	ctx := namespaces.WithNamespace(context.Background(), "default")
+
+	image, err := alpineImage(ctx, client, defaultSnapshotterName)
+	require.NoError(t, err, "failed to get alpine image")
+
+	fcClient, err := integtest.NewFCControlClient(integtest.ContainerdSockPath)
+	require.NoError(t, err)
+
+	_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{VMID: name})
+	require.NoError(t, err)
+
+	c, err := client.NewContainer(ctx,
+		"container-"+name,
+		containerd.WithSnapshotter(defaultSnapshotterName),
+		containerd.WithNewSnapshot("snapshot-"+name, image),
+		containerd.WithNewSpec(oci.WithProcessArgs("/bin/echo", "-n", "hello"), firecrackeroci.WithVMID(name)),
+	)
+	require.NoError(t, err)
+
+	var stdout, stderr bytes.Buffer
+	task, err := c.NewTask(ctx, cio.NewCreator(cio.WithStreams(nil, &stdout, &stderr)))
+	require.NoError(t, err)
+
+	err = task.Start(ctx)
+	require.NoError(t, err)
+
+	processes, err := findProcess(ctx, findFirecracker)
+	require.NoError(t, err, "failed waiting for expected firecracker process %q to come up", firecrackerProcessName)
+	require.Len(t, processes, 1, "expected only one firecracker process to exist")
+	fc := processes[0]
+	err = fc.KillWithContext(ctx)
+	require.NoError(t, err)
+
+	// Unix signals are asynchronous.
+	// We have to wait for a moment to make sure that the process is died.
+	err = internal.WaitForPidToExit(ctx, time.Second, fc.Pid)
+	assert.NoError(t, err)
+
+	_, err = task.Delete(ctx)
+	assert.ErrorIs(t, err, errdefs.ErrNotFound)
+
+	err = c.Delete(ctx)
+	assert.NoError(t, err)
+}
+
 func TestExec_Isolated(t *testing.T) {
 	integtest.Prepare(t)
 

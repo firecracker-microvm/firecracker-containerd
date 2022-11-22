@@ -1230,7 +1230,11 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 		request.Rootfs = nil
 	}
 
-	resp, err := s.taskManager.CreateTask(requestCtx, request, s.agentClient, ioConnectorSet)
+	agent, err := s.agent()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := s.taskManager.CreateTask(requestCtx, request, agent, ioConnectorSet)
 	if err != nil {
 		err = fmt.Errorf("failed to create task: %w", err)
 		logger.WithError(err).Error()
@@ -1253,7 +1257,11 @@ func (s *service) Start(requestCtx context.Context, req *taskAPI.StartRequest) (
 	defer logPanicAndDie(log.G(requestCtx))
 
 	log.G(requestCtx).WithFields(logrus.Fields{"task_id": req.ID, "exec_id": req.ExecID}).Debug("start")
-	resp, err := s.agentClient.Start(requestCtx, req)
+	agent, err := s.agent()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := agent.Start(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -1267,7 +1275,11 @@ func (s *service) Delete(requestCtx context.Context, req *taskAPI.DeleteRequest)
 
 	logger.Debug("delete")
 
-	resp, err := s.taskManager.DeleteProcess(requestCtx, req, s.agentClient)
+	agent, err := s.agent()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := s.taskManager.DeleteProcess(requestCtx, req, agent)
 	if err != nil {
 		return nil, err
 	}
@@ -1316,6 +1328,11 @@ func (s *service) Exec(requestCtx context.Context, req *taskAPI.ExecProcessReque
 	logger := s.logger.WithField("task_id", req.ID).WithField("exec_id", req.ExecID)
 	logger.Debug("exec")
 
+	agent, err := s.agent()
+	if err != nil {
+		return nil, err
+	}
+
 	// no OCI config bytes to provide for Exec, just leave those fields empty
 	extraData, err := s.generateExtraData(nil, req.Spec)
 	if err != nil {
@@ -1336,7 +1353,7 @@ func (s *service) Exec(requestCtx context.Context, req *taskAPI.ExecProcessReque
 		return nil, err
 	}
 
-	resp, err := s.taskManager.ExecProcess(requestCtx, req, s.agentClient, ioConnectorSet)
+	resp, err := s.taskManager.ExecProcess(requestCtx, req, agent, ioConnectorSet)
 	if err != nil {
 		return nil, err
 	}
@@ -1359,7 +1376,11 @@ func (s *service) ResizePty(requestCtx context.Context, req *taskAPI.ResizePtyRe
 	defer logPanicAndDie(log.G(requestCtx))
 
 	log.G(requestCtx).WithFields(logrus.Fields{"task_id": req.ID, "exec_id": req.ExecID}).Debug("resize_pty")
-	resp, err := s.agentClient.ResizePty(requestCtx, req)
+	agent, err := s.agent()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := agent.ResizePty(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -1373,7 +1394,11 @@ func (s *service) State(requestCtx context.Context, req *taskAPI.StateRequest) (
 
 	logger := log.G(requestCtx).WithFields(logrus.Fields{"task_id": req.ID, "exec_id": req.ExecID})
 	logger.Debug("state")
-	resp, err := s.agentClient.State(requestCtx, req)
+	agent, err := s.agent()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := agent.State(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -1451,7 +1476,11 @@ func (s *service) Pause(requestCtx context.Context, req *taskAPI.PauseRequest) (
 	defer logPanicAndDie(log.G(requestCtx))
 
 	log.G(requestCtx).WithField("task_id", req.ID).Debug("pause")
-	resp, err := s.agentClient.Pause(requestCtx, req)
+	agent, err := s.agent()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := agent.Pause(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -1464,7 +1493,11 @@ func (s *service) Resume(requestCtx context.Context, req *taskAPI.ResumeRequest)
 	defer logPanicAndDie(log.G(requestCtx))
 
 	log.G(requestCtx).WithField("task_id", req.ID).Debug("resume")
-	resp, err := s.agentClient.Resume(requestCtx, req)
+	agent, err := s.agent()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := agent.Resume(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -1477,7 +1510,11 @@ func (s *service) Kill(requestCtx context.Context, req *taskAPI.KillRequest) (*t
 	defer logPanicAndDie(log.G(requestCtx))
 
 	log.G(requestCtx).WithFields(logrus.Fields{"task_id": req.ID, "exec_id": req.ExecID}).Debug("kill")
-	resp, err := s.agentClient.Kill(requestCtx, req)
+	agent, err := s.agent()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := agent.Kill(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -1489,7 +1526,11 @@ func (s *service) Pids(requestCtx context.Context, req *taskAPI.PidsRequest) (*t
 	defer logPanicAndDie(log.G(requestCtx))
 
 	log.G(requestCtx).WithField("task_id", req.ID).Debug("pids")
-	resp, err := s.agentClient.Pids(requestCtx, req)
+	agent, err := s.agent()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := agent.Pids(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -1502,7 +1543,11 @@ func (s *service) CloseIO(requestCtx context.Context, req *taskAPI.CloseIOReques
 	defer logPanicAndDie(log.G(requestCtx))
 
 	log.G(requestCtx).WithFields(logrus.Fields{"task_id": req.ID, "exec_id": req.ExecID}).Debug("close_io")
-	resp, err := s.agentClient.CloseIO(requestCtx, req)
+	agent, err := s.agent()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := agent.CloseIO(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -1515,7 +1560,11 @@ func (s *service) Checkpoint(requestCtx context.Context, req *taskAPI.Checkpoint
 	defer logPanicAndDie(log.G(requestCtx))
 
 	log.G(requestCtx).WithFields(logrus.Fields{"task_id": req.ID, "path": req.Path}).Info("checkpoint")
-	resp, err := s.agentClient.Checkpoint(requestCtx, req)
+	agent, err := s.agent()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := agent.Checkpoint(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -1528,7 +1577,11 @@ func (s *service) Connect(requestCtx context.Context, req *taskAPI.ConnectReques
 	defer logPanicAndDie(log.G(requestCtx))
 
 	log.G(requestCtx).WithField("id", req.ID).Debug("connect")
-	resp, err := s.agentClient.Connect(requestCtx, req)
+	agent, err := s.agent()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := agent.Connect(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -1614,7 +1667,11 @@ func (s *service) terminate(ctx context.Context) (retErr error) {
 	}
 
 	s.logger.Info("gracefully shutdown VM")
-	_, err = s.agentClient.Shutdown(ctx, &taskAPI.ShutdownRequest{ID: s.vmID, Now: true})
+	agent, err := s.agent()
+	if err != nil {
+		return err
+	}
+	_, err = agent.Shutdown(ctx, &taskAPI.ShutdownRequest{ID: s.vmID, Now: true})
 	if err != nil {
 		s.logger.WithError(err).Error("failed to call in-VM agent")
 		return
@@ -1634,7 +1691,11 @@ func (s *service) Stats(requestCtx context.Context, req *taskAPI.StatsRequest) (
 	defer logPanicAndDie(log.G(requestCtx))
 	log.G(requestCtx).WithField("task_id", req.ID).Debug("stats")
 
-	resp, err := s.agentClient.Stats(requestCtx, req)
+	agent, err := s.agent()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := agent.Stats(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -1647,7 +1708,11 @@ func (s *service) Update(requestCtx context.Context, req *taskAPI.UpdateTaskRequ
 	defer logPanicAndDie(log.G(requestCtx))
 	log.G(requestCtx).WithField("task_id", req.ID).Debug("update")
 
-	resp, err := s.agentClient.Update(requestCtx, req)
+	agent, err := s.agent()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := agent.Update(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -1660,7 +1725,11 @@ func (s *service) Wait(requestCtx context.Context, req *taskAPI.WaitRequest) (*t
 	defer logPanicAndDie(log.G(requestCtx))
 	log.G(requestCtx).WithFields(logrus.Fields{"task_id": req.ID, "exec_id": req.ExecID}).Debug("wait")
 
-	resp, err := s.agentClient.Wait(requestCtx, req)
+	agent, err := s.agent()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := agent.Wait(requestCtx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -1714,4 +1783,13 @@ func (s *service) monitorVMExit() {
 	if err := s.cleanup(); err != nil {
 		s.logger.WithError(err).Error("failed to clean up the VM")
 	}
+}
+
+// agent returns a client to talk to in-VM agent, only if the VM is not terminated.
+func (s *service) agent() (taskAPI.TaskService, error) {
+	pid, _ := s.machine.PID()
+	if pid == 0 {
+		return nil, status.Errorf(codes.NotFound, "failed to find VM %q", s.vmID)
+	}
+	return s.agentClient, nil
 }

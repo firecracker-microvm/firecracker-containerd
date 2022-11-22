@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/containerd/containerd/log"
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux/cache"
@@ -37,7 +38,8 @@ type ServiceDiscovery struct {
 func NewServiceDiscovery(host string, port int, c *cache.RemoteSnapshotterCache) *ServiceDiscovery {
 	return &ServiceDiscovery{
 		server: &http.Server{
-			Addr: host + ":" + strconv.Itoa(port),
+			Addr:              host + ":" + strconv.Itoa(port),
+			ReadHeaderTimeout: 2 * time.Second,
 		},
 		cache: c,
 	}

@@ -23,31 +23,32 @@ import (
 // cpuset.mems
 //
 // Example:
-//	cset := cpuset.Builder{}.
-//		AddCPU(0).
-//		AddMemRange(0).
-//		Build()
 //
-//	fcClient, err := fcclient.New(containerdTTRPCAddress)
-//	if err != nil {
-//		return err
-//	}
+//		cset := cpuset.Builder{}.
+//	     			AddCPU(0).
+//	     			AddMemRange(0).
+//	     			Build()
 //
-//	defer fcClient.Close()
+//		fcClient, err := fcclient.New(containerdTTRPCAddress)
+//		if err != nil {
+//		    return err
+//		}
 //
-//	vmID := "cpuset-builder-example"
-//	createVMRequest := &proto.CreateVMRequest{
-//		VMID: vmID,
-//		JailerConfig: proto.JailerConfig{
-//			CPUs: cset.CPUs(),
-//			Mems: cset.Mems(),
-//		},
-//	}
+//		defer fcClient.Close()
 //
-//	_, err = fcClient.CreateVM(ctx, createVMRequest)
-//	if err != nil {
-//      return fmt.Errorf("failed to create VM: %w", err)
-//	}
+//		vmID := "cpuset-builder-example"
+//		createVMRequest := &proto.CreateVMRequest{
+//		    VMID: vmID,
+//		    JailerConfig: proto.JailerConfig{
+//		        CPUs: cset.CPUs(),
+//		        Mems: cset.Mems(),
+//		    },
+//		}
+//
+//		_, err = fcClient.CreateVM(ctx, createVMRequest)
+//		if err != nil {
+//		    return fmt.Errorf("failed to create VM: %w", err)
+//		}
 type Builder struct {
 	cpus      []int
 	cpuRanges []_range

@@ -82,7 +82,8 @@ func updateUserInSpec(ctx context.Context, s *specs.Spec, rootfsMount mount.Moun
 
 // withUser sets the user to be used within the container.
 // It accepts a valid user string in OCI Image Spec v1.0.0:
-//   user, uid, user:group, uid:gid, uid:group, user:gid
+//
+// user, uid, user:group, uid:gid, uid:group, user:gid
 func withUser(ctx context.Context, s *specs.Spec, rootfsMount mount.Mount, userstr string) error {
 	parts := strings.Split(userstr, ":")
 	switch len(parts) {

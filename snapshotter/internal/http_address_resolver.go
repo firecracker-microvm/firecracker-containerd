@@ -23,6 +23,7 @@ import (
 	"os/signal"
 	"strconv"
 	"syscall"
+	"time"
 
 	"github.com/containerd/containerd/namespaces"
 	"github.com/sirupsen/logrus"
@@ -56,10 +57,11 @@ func init() {
 // curl -X GET "http://localhost:10001/address?namespace=ns-1"
 //
 // Response:
-// {
-//     "network": "unix",
-//     "address": "/var/lib/firecracker-containerd/shim-base/default#cbfad871-0862-4dd6-ae7a-52e9b1c16ede/firecracker.vsock"
-// }
+//
+//	{
+//	    "network": "unix",
+//	    "address": "/var/lib/firecracker-containerd/shim-base/default#cbfad871-0862-4dd6-ae7a-52e9b1c16ede/firecracker.vsock"
+//	}
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -77,7 +79,8 @@ func main() {
 
 	http.HandleFunc("/address", queryAddress)
 	httpServer := &http.Server{
-		Addr: fmt.Sprintf("127.0.0.1:%d", port),
+		Addr:              fmt.Sprintf("127.0.0.1:%d", port),
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	logger.Info(fmt.Sprintf("http resolver serving at port %d", port))

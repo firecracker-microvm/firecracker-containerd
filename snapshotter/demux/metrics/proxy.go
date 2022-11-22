@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/containerd/containerd/log"
 )
@@ -143,8 +144,9 @@ func (mp *Proxy) Serve(ctx context.Context) error {
 	mux.HandleFunc("/metrics", mp.metrics)
 
 	mp.server = &http.Server{
-		Addr:    mp.host + ":" + strconv.Itoa(mp.Port),
-		Handler: mux,
+		Addr:              mp.host + ":" + strconv.Itoa(mp.Port),
+		Handler:           mux,
+		ReadHeaderTimeout: 2 * time.Second,
 	}
 
 	err := mp.server.ListenAndServe()

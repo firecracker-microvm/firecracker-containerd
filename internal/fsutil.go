@@ -73,7 +73,7 @@ func createTestExtImg(ctx context.Context, t *testing.T, extName string, testFil
 }
 
 // CreateBlockDevice creates a block device, or block special file for testing
-func CreateBlockDevice(ctx context.Context, t *testing.T) (string, func()) {
+func CreateBlockDevice(ctx context.Context, t testing.TB) (string, func()) {
 	t.Helper()
 
 	f, err := os.CreateTemp("", "")

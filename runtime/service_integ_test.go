@@ -926,7 +926,7 @@ vdf  254:80   0        512B  0 |  214 244 216 245 215 177 177 177`
 	}
 }
 
-func startAndWaitTask(ctx context.Context, t *testing.T, c containerd.Container) string {
+func startAndWaitTask(ctx context.Context, t testing.TB, c containerd.Container) string {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
@@ -1051,8 +1051,6 @@ func TestCreateContainerWithSameName_Isolated(t *testing.T) {
 func TestStubDriveReserveAndReleaseByContainers_Isolated(t *testing.T) {
 	integtest.Prepare(t)
 
-	assert := assert.New(t)
-
 	ctx := namespaces.WithNamespace(context.Background(), "default")
 
 	client, err := containerd.New(integtest.ContainerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
@@ -1070,7 +1068,7 @@ func TestStubDriveReserveAndReleaseByContainers_Isolated(t *testing.T) {
 		containerd.WithNewSnapshot("c1", image),
 		runEchoHello,
 	)
-	assert.Equal("hello", startAndWaitTask(ctx, t, c1))
+	assert.Equal(t, "hello", startAndWaitTask(ctx, t, c1))
 	require.NoError(t, err, "failed to create a container")
 
 	defer func() {
@@ -1093,7 +1091,7 @@ func TestStubDriveReserveAndReleaseByContainers_Isolated(t *testing.T) {
 
 	// With the new behaviour, on previous task deletion, stub drive will be released
 	// and now can be reused by new container and task.
-	assert.Equal("hello", startAndWaitTask(ctx, t, c2))
+	assert.Equal(t, "hello", startAndWaitTask(ctx, t, c2))
 }
 
 func TestDriveMount_Isolated(t *testing.T) {
@@ -1677,24 +1675,22 @@ func pidExists(pid int) bool {
 
 func TestStopVM_Isolated(t *testing.T) {
 	integtest.Prepare(t)
-	require := require.New(t)
-	assert := assert.New(t)
 
 	client, err := containerd.New(integtest.ContainerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
-	require.NoError(err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
 	defer client.Close()
 
 	ctx := namespaces.WithNamespace(context.Background(), "default")
 
 	image, err := alpineImage(ctx, client, defaultSnapshotterName)
-	require.NoError(err, "failed to get alpine image")
+	require.NoError(t, err, "failed to get alpine image")
 
 	kernelArgs := integtest.DefaultRuntimeConfig.KernelArgs
 
 	tests := []struct {
 		name            string
 		createVMRequest proto.CreateVMRequest
-		stopFunc        func(ctx context.Context, fcClient fccontrol.FirecrackerService, req proto.CreateVMRequest)
+		stopFunc        func(ctx context.Context, tb testing.TB, fcClient fccontrol.FirecrackerService, req proto.CreateVMRequest)
 		withStopVM      bool
 	}{
 
@@ -1703,9 +1699,9 @@ func TestStopVM_Isolated(t *testing.T) {
 			withStopVM: true,
 
 			createVMRequest: proto.CreateVMRequest{},
-			stopFunc: func(ctx context.Context, fcClient fccontrol.FirecrackerService, req proto.CreateVMRequest) {
+			stopFunc: func(ctx context.Context, tb testing.TB, fcClient fccontrol.FirecrackerService, req proto.CreateVMRequest) {
 				_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: req.VMID})
-				require.Equal(status.Code(err), codes.OK)
+				require.Equal(tb, status.Code(err), codes.OK)
 			},
 		},
 
@@ -1721,11 +1717,11 @@ func TestStopVM_Isolated(t *testing.T) {
 					HostPath: "/var/lib/firecracker-containerd/runtime/rootfs-debug.img",
 				},
 			},
-			stopFunc: func(ctx context.Context, fcClient fccontrol.FirecrackerService, req proto.CreateVMRequest) {
+			stopFunc: func(ctx context.Context, tb testing.TB, fcClient fccontrol.FirecrackerService, req proto.CreateVMRequest) {
 				_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: req.VMID})
-				require.Error(err)
-				assert.Equal(codes.Internal, status.Code(err))
-				assert.Contains(err.Error(), "forcefully terminated")
+				require.Error(tb, err)
+				assert.Equal(tb, codes.Internal, status.Code(err))
+				assert.Contains(tb, err.Error(), "forcefully terminated")
 			},
 		},
 
@@ -1735,14 +1731,14 @@ func TestStopVM_Isolated(t *testing.T) {
 			withStopVM: false,
 
 			createVMRequest: proto.CreateVMRequest{},
-			stopFunc: func(ctx context.Context, _ fccontrol.FirecrackerService, _ proto.CreateVMRequest) {
+			stopFunc: func(ctx context.Context, tb testing.TB, _ fccontrol.FirecrackerService, _ proto.CreateVMRequest) {
 				firecrackerProcesses, err := findProcess(ctx, findFirecracker)
-				require.NoError(err, "failed waiting for expected firecracker process %q to come up", firecrackerProcessName)
-				require.Len(firecrackerProcesses, 1, "expected only one firecracker process to exist")
+				require.NoError(tb, err, "failed waiting for expected firecracker process %q to come up", firecrackerProcessName)
+				require.Len(tb, firecrackerProcesses, 1, "expected only one firecracker process to exist")
 				firecrackerProcess := firecrackerProcesses[0]
 
 				err = firecrackerProcess.KillWithContext(ctx)
-				require.NoError(err, "failed to kill firecracker process")
+				require.NoError(tb, err, "failed to kill firecracker process")
 			},
 		},
 
@@ -1758,16 +1754,16 @@ func TestStopVM_Isolated(t *testing.T) {
 					HostPath: "/var/lib/firecracker-containerd/runtime/rootfs-debug.img",
 				},
 			},
-			stopFunc: func(ctx context.Context, fcClient fccontrol.FirecrackerService, req proto.CreateVMRequest) {
+			stopFunc: func(ctx context.Context, tb testing.TB, fcClient fccontrol.FirecrackerService, req proto.CreateVMRequest) {
 				firecrackerProcesses, err := findProcess(ctx, findFirecracker)
-				require.NoError(err, "failed waiting for expected firecracker process %q to come up", firecrackerProcessName)
-				require.Len(firecrackerProcesses, 1, "expected only one firecracker process to exist")
+				require.NoError(tb, err, "failed waiting for expected firecracker process %q to come up", firecrackerProcessName)
+				require.Len(tb, firecrackerProcesses, 1, "expected only one firecracker process to exist")
 				firecrackerProcess := firecrackerProcesses[0]
 
 				go func() {
 					time.Sleep(5 * time.Second)
 					err := firecrackerProcess.KillWithContext(ctx)
-					require.NoError(err, "failed to kill firecracker process")
+					require.NoError(tb, err, "failed to kill firecracker process")
 				}()
 
 				_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{
@@ -1775,10 +1771,10 @@ func TestStopVM_Isolated(t *testing.T) {
 					TimeoutSeconds: 10,
 				})
 
-				require.Error(err)
-				assert.Equal(codes.Internal, status.Code(err))
+				require.Error(tb, err)
+				assert.Equal(tb, codes.Internal, status.Code(err))
 				// This is technically not accurate (the test is terminating the VM) though.
-				assert.Contains(err.Error(), "forcefully terminated")
+				assert.Contains(tb, err.Error(), "forcefully terminated")
 			},
 		},
 
@@ -1789,14 +1785,14 @@ func TestStopVM_Isolated(t *testing.T) {
 			withStopVM: true,
 
 			createVMRequest: proto.CreateVMRequest{},
-			stopFunc: func(ctx context.Context, fcClient fccontrol.FirecrackerService, req proto.CreateVMRequest) {
+			stopFunc: func(ctx context.Context, tb testing.TB, fcClient fccontrol.FirecrackerService, req proto.CreateVMRequest) {
 				_, err = fcClient.PauseVM(ctx, &proto.PauseVMRequest{VMID: req.VMID})
-				require.Equal(status.Code(err), codes.OK)
+				require.Equal(tb, status.Code(err), codes.OK)
 
 				_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: req.VMID})
-				require.Error(err)
-				assert.Equal(codes.Internal, status.Code(err))
-				assert.Contains(err.Error(), "forcefully terminated")
+				require.Error(tb, err)
+				assert.Equal(tb, codes.Internal, status.Code(err))
+				assert.Contains(tb, err.Error(), "forcefully terminated")
 			},
 		},
 
@@ -1805,37 +1801,37 @@ func TestStopVM_Isolated(t *testing.T) {
 			withStopVM: true,
 
 			createVMRequest: proto.CreateVMRequest{},
-			stopFunc: func(ctx context.Context, fcClient fccontrol.FirecrackerService, req proto.CreateVMRequest) {
+			stopFunc: func(ctx context.Context, tb testing.TB, fcClient fccontrol.FirecrackerService, req proto.CreateVMRequest) {
 				firecrackerProcesses, err := findProcess(ctx, findFirecracker)
-				require.NoError(err, "failed waiting for expected firecracker process %q to come up", firecrackerProcessName)
-				require.Len(firecrackerProcesses, 1, "expected only one firecracker process to exist")
+				require.NoError(tb, err, "failed waiting for expected firecracker process %q to come up", firecrackerProcessName)
+				require.Len(tb, firecrackerProcesses, 1, "expected only one firecracker process to exist")
 				firecrackerProcess := firecrackerProcesses[0]
 
 				err = firecrackerProcess.Suspend()
-				require.NoError(err, "failed to suspend Firecracker")
+				require.NoError(tb, err, "failed to suspend Firecracker")
 
 				_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: req.VMID})
-				require.Error(err)
-				assert.Equal(codes.Internal, status.Code(err))
-				assert.Contains(err.Error(), "forcefully terminated")
+				require.Error(tb, err)
+				assert.Equal(tb, codes.Internal, status.Code(err))
+				assert.Contains(tb, err.Error(), "forcefully terminated")
 			},
 		},
 	}
 
 	fcClient, err := integtest.NewFCControlClient(integtest.ContainerdSockPath)
-	require.NoError(err)
+	require.NoError(t, err)
 
 	for _, test := range tests {
 		test := test
 
-		testFunc := func(t *testing.T, createVMRequest proto.CreateVMRequest) {
+		testFunc := func(tb testing.TB, createVMRequest proto.CreateVMRequest) {
 			ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 			defer cancel()
 
 			vmID := createVMRequest.VMID
 
 			_, err = fcClient.CreateVM(ctx, &createVMRequest)
-			require.NoError(err)
+			require.NoError(tb, err)
 
 			c, err := client.NewContainer(ctx,
 				"container-"+vmID,
@@ -1843,37 +1839,37 @@ func TestStopVM_Isolated(t *testing.T) {
 				containerd.WithNewSnapshot("snapshot-"+vmID, image),
 				containerd.WithNewSpec(oci.WithProcessArgs("/bin/echo", "-n", "hello"), firecrackeroci.WithVMID(vmID)),
 			)
-			require.NoError(err)
+			require.NoError(tb, err)
 
-			stdout := startAndWaitTask(ctx, t, c)
-			require.Equal("hello", stdout)
+			stdout := startAndWaitTask(ctx, tb, c)
+			require.Equal(tb, "hello", stdout)
 
 			shimProcesses, err := findProcess(ctx, findShim)
-			require.NoError(err, "failed to find shim process %q", shimProcessName)
-			require.Len(shimProcesses, 1, "expected only one shim process to exist")
+			require.NoError(tb, err, "failed to find shim process %q", shimProcessName)
+			require.Len(tb, shimProcesses, 1, "expected only one shim process to exist")
 			shimProcess := shimProcesses[0]
 
 			fcProcesses, err := findProcess(ctx, findFirecracker)
-			require.NoError(err, "failed to find firecracker")
-			require.Len(fcProcesses, 1, "expected only one firecracker process to exist")
+			require.NoError(tb, err, "failed to find firecracker")
+			require.Len(tb, fcProcesses, 1, "expected only one firecracker process to exist")
 			fcProcess := fcProcesses[0]
 
-			test.stopFunc(ctx, fcClient, createVMRequest)
+			test.stopFunc(ctx, tb, fcClient, createVMRequest)
 
 			// If the function above uses StopVMRequest, all underlying processes must be dead
 			// (either gracefully or forcibly) at the end of the request.
 			if test.withStopVM {
 				fcExists := pidExists(int(fcProcess.Pid))
-				assert.NoError(err, "failed to find firecracker")
-				assert.False(fcExists, "firecracker %s (pid=%d) is still there", vmID, fcProcess.Pid)
+				assert.NoError(tb, err, "failed to find firecracker")
+				assert.False(tb, fcExists, "firecracker %s (pid=%d) is still there", vmID, fcProcess.Pid)
 
 				shimExists := pidExists(int(shimProcess.Pid))
-				assert.NoError(err, "failed to find shim")
-				assert.False(shimExists, "shim %s (pid=%d) is still there", vmID, shimProcess.Pid)
+				assert.NoError(tb, err, "failed to find shim")
+				assert.False(tb, shimExists, "shim %s (pid=%d) is still there", vmID, shimProcess.Pid)
 			}
 
 			err = internal.WaitForPidToExit(ctx, time.Second, shimProcess.Pid)
-			require.NoError(err, "shim hasn't been terminated")
+			require.NoError(tb, err, "shim hasn't been terminated")
 		}
 
 		t.Run(test.name, func(t *testing.T) {
@@ -1893,8 +1889,8 @@ func TestStopVM_Isolated(t *testing.T) {
 
 			runcClient := &runc.Runc{}
 			containers, err := runcClient.List(ctx)
-			require.NoError(err, "failed to run 'runc list'")
-			assert.Equal(0, len(containers))
+			require.NoError(t, err, "failed to run 'runc list'")
+			assert.Equal(t, 0, len(containers))
 		})
 	}
 }
@@ -2068,10 +2064,9 @@ func TestExec_Isolated(t *testing.T) {
 
 func TestEvents_Isolated(t *testing.T) {
 	integtest.Prepare(t)
-	require := require.New(t)
 
 	client, err := containerd.New(integtest.ContainerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
-	require.NoError(err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
 	defer client.Close()
 
 	ctx := namespaces.WithNamespace(context.Background(), "default")
@@ -2082,15 +2077,15 @@ func TestEvents_Isolated(t *testing.T) {
 	eventCh, errCh := client.Subscribe(subscribeCtx, "topic")
 
 	image, err := alpineImage(ctx, client, defaultSnapshotterName)
-	require.NoError(err, "failed to get alpine image")
+	require.NoError(t, err, "failed to get alpine image")
 
 	vmID := testNameToVMID(t.Name())
 
 	fcClient, err := integtest.NewFCControlClient(integtest.ContainerdSockPath)
-	require.NoError(err, "failed to create ttrpc client")
+	require.NoError(t, err, "failed to create ttrpc client")
 
 	_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{VMID: vmID})
-	require.NoError(err)
+	require.NoError(t, err)
 
 	c, err := client.NewContainer(ctx,
 		"container-"+vmID,
@@ -2098,13 +2093,13 @@ func TestEvents_Isolated(t *testing.T) {
 		containerd.WithNewSnapshot("snapshot-"+vmID, image),
 		containerd.WithNewSpec(oci.WithProcessArgs("/bin/echo", "-n", "hello"), firecrackeroci.WithVMID(vmID)),
 	)
-	require.NoError(err)
+	require.NoError(t, err)
 
 	stdout := startAndWaitTask(ctx, t, c)
-	require.Equal("hello", stdout)
+	require.Equal(t, "hello", stdout)
 
 	_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
-	require.Equal(status.Code(err), codes.OK)
+	require.Equal(t, status.Code(err), codes.OK)
 
 	expected := []string{
 		"/snapshot/prepare",
@@ -2130,7 +2125,7 @@ loop:
 			break loop
 		}
 	}
-	require.Equal(expected, actual)
+	require.Equal(t, expected, actual)
 }
 
 func findProcWithName(name string) func(context.Context, *process.Process) (bool, error) {

@@ -27,17 +27,14 @@ import (
 func TestDiskLimit_Isolated(t *testing.T) {
 	integtest.Prepare(t)
 
-	assert := assert.New(t)
-	require := require.New(t)
-
 	ctx := namespaces.WithNamespace(context.Background(), "default")
 
 	client, err := containerd.New(integtest.ContainerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
-	require.NoError(err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
 	defer client.Close()
 
 	image, err := alpineImage(ctx, client, defaultSnapshotterName)
-	require.NoError(err, "failed to get alpine image")
+	require.NoError(t, err, "failed to get alpine image")
 
 	// Right now, both naive snapshotter and devmapper snapshotter are configured to have 1024MB image size.
 	// The former is hard-coded since the snapshotter is not for production. The latter is configured in tools/docker/entrypoint.sh.
@@ -54,14 +51,14 @@ func TestDiskLimit_Isolated(t *testing.T) {
 	)
 	defer func() {
 		err = container.Delete(ctx, containerd.WithSnapshotCleanup)
-		require.NoError(err, "failed to delete a container")
+		require.NoError(t, err, "failed to delete a container")
 	}()
 
 	result, err := integtest.RunTask(ctx, container)
-	require.NoError(err, "failed to create a container")
+	require.NoError(t, err, "failed to create a container")
 
-	assert.Equal(uint32(1), result.ExitCode, "writing 2GB must fail")
-	assert.Equal(`952+0 records in
+	assert.Equal(t, uint32(1), result.ExitCode, "writing 2GB must fail")
+	assert.Equal(t, `952+0 records in
 951+0 records out
 `, result.Stderr, "but it must be able to write ~1024MB")
 }

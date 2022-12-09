@@ -91,16 +91,14 @@ func fsSafeTestName(tb testing.TB) string {
 }
 
 func testJailer(t *testing.T, jailerConfig *proto.JailerConfig) {
-	require := require.New(t)
-
 	client, err := containerd.New(integtest.ContainerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
-	require.NoError(err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
+	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
 	defer client.Close()
 
 	ctx := namespaces.WithNamespace(context.Background(), "default")
 
 	image, err := alpineImage(ctx, client, defaultSnapshotterName)
-	require.NoError(err, "failed to get alpine image")
+	require.NoError(t, err, "failed to get alpine image")
 
 	vmID := testNameToVMID(t.Name())
 
@@ -120,30 +118,30 @@ func testJailer(t *testing.T, jailerConfig *proto.JailerConfig) {
 	// If the drive files are bind-mounted, the files must be readable from the jailer's user.
 	if jailerConfig != nil && jailerConfig.DriveExposePolicy == proto.DriveExposePolicy_BIND {
 		f, err := os.CreateTemp("", fsSafeTestName(t)+"_rootfs")
-		require.NoError(err)
+		require.NoError(t, err)
 		defer f.Close()
 
 		dst := f.Name()
 
 		// Copy the root drive before chown, since the file is used by other tests.
 		err = copyFile(integtest.DefaultRuntimeConfig.RootDrive, dst, 0400)
-		require.NoErrorf(err, "failed to copy a rootfs as %q", dst)
+		require.NoErrorf(t, err, "failed to copy a rootfs as %q", dst)
 
 		err = os.Chown(dst, int(jailerConfig.UID), int(jailerConfig.GID))
-		require.NoError(err, "failed to chown %q", dst)
+		require.NoError(t, err, "failed to chown %q", dst)
 
 		request.RootDrive = &proto.FirecrackerRootDrive{HostPath: dst}
 
 		// The additional drive file is only used by this test.
 		err = os.Chown(additionalDrive, int(jailerConfig.UID), int(jailerConfig.GID))
-		require.NoError(err, "failed to chown %q", additionalDrive)
+		require.NoError(t, err, "failed to chown %q", additionalDrive)
 	}
 
 	fcClient, err := integtest.NewFCControlClient(integtest.ContainerdSockPath)
-	require.NoError(err)
+	require.NoError(t, err)
 
 	_, err = fcClient.CreateVM(ctx, &request)
-	require.NoError(err)
+	require.NoError(t, err)
 
 	c, err := client.NewContainer(ctx,
 		vmID+"-container",
@@ -161,27 +159,27 @@ func testJailer(t *testing.T, jailerConfig *proto.JailerConfig) {
 			}}),
 		),
 	)
-	require.NoError(err)
+	require.NoError(t, err)
 
 	stdout := startAndWaitTask(ctx, t, c)
-	require.Equal("hello\nadditional drive\n", stdout)
+	require.Equal(t, "hello\nadditional drive\n", stdout)
 
 	stat, err := os.Stat(filepath.Join(integtest.ShimBaseDir(), "default#"+vmID))
-	require.NoError(err)
+	require.NoError(t, err)
 	assert.True(t, stat.IsDir())
 
 	err = c.Delete(ctx, containerd.WithSnapshotCleanup)
-	require.NoError(err, "failed to delete a container")
+	require.NoError(t, err, "failed to delete a container")
 
 	_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
-	require.NoError(err)
+	require.NoError(t, err)
 
 	_, err = os.Stat(filepath.Join(integtest.ShimBaseDir(), "default#"+vmID))
 	assert.Error(t, err)
 	assert.True(t, os.IsNotExist(err))
 
 	shimContents, err := os.ReadDir(integtest.ShimBaseDir())
-	require.NoError(err)
+	require.NoError(t, err)
 	assert.Len(t, shimContents, 0)
 }
 
@@ -199,28 +197,27 @@ func TestJailerCPUSet_Isolated(t *testing.T) {
 	testJailer(t, config)
 }
 
-func testAttachBlockDevice(t *testing.T, jailerConfig *proto.JailerConfig) {
-	require := require.New(t)
+func testAttachBlockDevice(tb testing.TB, jailerConfig *proto.JailerConfig) {
 	client, err := containerd.New(integtest.ContainerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
-	require.NoError(err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
+	require.NoError(tb, err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
 	defer client.Close()
 
 	ctx := namespaces.WithNamespace(context.Background(), "default")
 
 	image, err := alpineImage(ctx, client, defaultSnapshotterName)
-	require.NoError(err, "failed to get alpine image")
+	require.NoError(tb, err, "failed to get alpine image")
 
 	fcClient, err := integtest.NewFCControlClient(integtest.ContainerdSockPath)
-	require.NoError(err)
+	require.NoError(tb, err)
 
-	vmID := testNameToVMID(t.Name())
+	vmID := testNameToVMID(tb.Name())
 
-	device, cleanup := internal.CreateBlockDevice(ctx, t)
+	device, cleanup := internal.CreateBlockDevice(ctx, tb)
 	defer cleanup()
 
 	if jailerConfig != nil {
 		err := os.Chown(device, int(jailerConfig.UID), int(jailerConfig.GID))
-		require.NoError(err)
+		require.NoError(tb, err)
 	}
 
 	request := proto.CreateVMRequest{
@@ -233,27 +230,27 @@ func testAttachBlockDevice(t *testing.T, jailerConfig *proto.JailerConfig) {
 
 	// If the drive files are bind-mounted, the files must be readable from the jailer's user.
 	if jailerConfig != nil && jailerConfig.DriveExposePolicy == proto.DriveExposePolicy_BIND {
-		f, err := os.CreateTemp("", fsSafeTestName(t)+"_rootfs")
-		require.NoError(err)
+		f, err := os.CreateTemp("", fsSafeTestName(tb)+"_rootfs")
+		require.NoError(tb, err)
 		defer f.Close()
 
 		dst := f.Name()
 
 		// Copy the root drive before chown, since the file is used by other tests.
 		err = copyFile(integtest.DefaultRuntimeConfig.RootDrive, dst, 0400)
-		require.NoErrorf(err, "failed to copy a rootfs as %q", dst)
+		require.NoErrorf(tb, err, "failed to copy a rootfs as %q", dst)
 
 		err = os.Chown(dst, int(jailerConfig.UID), int(jailerConfig.GID))
-		require.NoError(err, "failed to chown %q", dst)
+		require.NoError(tb, err, "failed to chown %q", dst)
 
 		request.RootDrive = &proto.FirecrackerRootDrive{HostPath: dst}
 
 		err = os.Chown(device, int(jailerConfig.UID), int(jailerConfig.GID))
-		require.NoError(err, "failed to chown %q", device)
+		require.NoError(tb, err, "failed to chown %q", device)
 	}
 
 	_, err = fcClient.CreateVM(ctx, &request)
-	require.NoError(err)
+	require.NoError(tb, err)
 
 	// create a container to test bind mount block device into the container
 	c, err := client.NewContainer(ctx,
@@ -272,26 +269,26 @@ func testAttachBlockDevice(t *testing.T, jailerConfig *proto.JailerConfig) {
 			}}),
 		),
 	)
-	require.NoError(err)
+	require.NoError(tb, err)
 
-	stdout := startAndWaitTask(ctx, t, c)
-	require.Equal("heyhey\n", stdout)
+	stdout := startAndWaitTask(ctx, tb, c)
+	require.Equal(tb, "heyhey\n", stdout)
 
 	stat, err := os.Stat(filepath.Join(integtest.ShimBaseDir(), "default#"+vmID))
-	require.NoError(err)
-	assert.True(t, stat.IsDir())
+	require.NoError(tb, err)
+	assert.True(tb, stat.IsDir())
 
 	err = c.Delete(ctx, containerd.WithSnapshotCleanup)
-	require.NoError(err, "failed to delete a container-block-device")
+	require.NoError(tb, err, "failed to delete a container-block-device")
 
 	_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
-	require.NoError(err)
+	require.NoError(tb, err)
 
 	_, err = os.Stat(filepath.Join(integtest.ShimBaseDir(), "default#"+vmID))
-	assert.Error(t, err)
-	assert.True(t, os.IsNotExist(err))
+	assert.Error(tb, err)
+	assert.True(tb, os.IsNotExist(err))
 
 	shimContents, err := os.ReadDir(integtest.ShimBaseDir())
-	require.NoError(err)
-	assert.Len(t, shimContents, 0)
+	require.NoError(tb, err)
+	assert.Len(tb, shimContents, 0)
 }

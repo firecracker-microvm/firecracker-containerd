@@ -6,7 +6,7 @@ require (
 	github.com/StackExchange/wmi v0.0.0-20181212234831-e0a55b97c705 // indirect
 	github.com/awslabs/tc-redirect-tap v0.0.0-20211025175357-e30dfca224c2
 	github.com/containerd/cgroups v1.0.4 // indirect
-	github.com/containerd/containerd v1.6.9
+	github.com/containerd/containerd v1.6.13
 	github.com/containerd/continuity v0.3.0
 	github.com/containerd/fifo v1.0.0
 	github.com/containerd/go-runc v1.0.0

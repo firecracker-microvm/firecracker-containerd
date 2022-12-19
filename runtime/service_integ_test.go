@@ -612,9 +612,8 @@ func testMultipleExecs(
 		if err != nil {
 			return err
 		}
-		_, err = os.Stat(filepath.Join("/sys/fs/cgroup/cpu", cgroupPath))
-		if err != nil {
-			return err
+		if !cgroupExists(cgroupPath) {
+			return fmt.Errorf("failed to find %q", cgroupPath)
 		}
 
 		ok, err := regexp.Match(".+/"+vmIDStr, []byte(cgroupPath))

@@ -13,6 +13,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
@@ -37,4 +39,16 @@ var testNameToVMIDReplacer = strings.NewReplacer("/", "-", "_", "-")
 
 func testNameToVMID(s string) string {
 	return testNameToVMIDReplacer.Replace(s)
+}
+
+func cgroupExists(name string) bool {
+	// cgroups v1
+	_, err := os.Stat(filepath.Join("/sys/fs/cgroup/cpu", name))
+	if err == nil {
+		return true
+	}
+
+	// cgroups v2
+	_, err = os.Stat(filepath.Join("/sys/fs/cgroup", name))
+	return err == nil
 }

@@ -140,8 +140,12 @@ func testJailer(t *testing.T, jailerConfig *proto.JailerConfig) {
 	fcClient, err := integtest.NewFCControlClient(integtest.ContainerdSockPath)
 	require.NoError(t, err)
 
-	_, err = fcClient.CreateVM(ctx, &request)
+	resp, err := fcClient.CreateVM(ctx, &request)
 	require.NoError(t, err)
+
+	if jailerConfig != nil {
+		assert.True(t, cgroupExists(resp.CgroupPath))
+	}
 
 	c, err := client.NewContainer(ctx,
 		vmID+"-container",

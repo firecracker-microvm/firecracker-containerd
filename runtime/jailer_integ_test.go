@@ -40,21 +40,28 @@ const (
 	jailerGID = 300001
 )
 
+func assertEmptyShimDir(tb testing.TB, ns, vmID string) {
+	_, err := os.Stat(filepath.Join(integtest.ShimBaseDir(), ns+"#"+vmID))
+	assert.Error(tb, err)
+	assert.True(tb, os.IsNotExist(err))
+
+	shimContents, err := os.ReadDir(integtest.ShimBaseDir())
+	require.NoError(tb, err)
+	assert.Len(tb, shimContents, 0)
+}
+
 func TestJailer_Isolated(t *testing.T) {
 	integtest.Prepare(t)
 	t.Run("Without Jailer", func(t *testing.T) {
-		t.Parallel()
 		testJailer(t, nil)
 	})
 	t.Run("With Jailer", func(t *testing.T) {
-		t.Parallel()
 		testJailer(t, &proto.JailerConfig{
 			UID: jailerUID,
 			GID: jailerGID,
 		})
 	})
 	t.Run("With Jailer and bind-mount", func(t *testing.T) {
-		t.Parallel()
 		testJailer(t, &proto.JailerConfig{
 			UID:               jailerUID,
 			GID:               jailerGID,
@@ -66,18 +73,15 @@ func TestJailer_Isolated(t *testing.T) {
 func TestAttachBlockDevice_Isolated(t *testing.T) {
 	integtest.Prepare(t)
 	t.Run("Without Jailer", func(t *testing.T) {
-		t.Parallel()
 		testAttachBlockDevice(t, nil)
 	})
 	t.Run("With Jailer", func(t *testing.T) {
-		t.Parallel()
 		testAttachBlockDevice(t, &proto.JailerConfig{
 			UID: jailerUID,
 			GID: jailerGID,
 		})
 	})
 	t.Run("With Jailer and bind-mount", func(t *testing.T) {
-		t.Parallel()
 		testAttachBlockDevice(t, &proto.JailerConfig{
 			UID:               jailerUID,
 			GID:               jailerGID,
@@ -178,13 +182,7 @@ func testJailer(t *testing.T, jailerConfig *proto.JailerConfig) {
 	_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
 	require.NoError(t, err)
 
-	_, err = os.Stat(filepath.Join(integtest.ShimBaseDir(), "default#"+vmID))
-	assert.Error(t, err)
-	assert.True(t, os.IsNotExist(err))
-
-	shimContents, err := os.ReadDir(integtest.ShimBaseDir())
-	require.NoError(t, err)
-	assert.Len(t, shimContents, 0)
+	assertEmptyShimDir(t, "default", vmID)
 }
 
 func TestJailerCPUSet_Isolated(t *testing.T) {
@@ -288,11 +286,5 @@ func testAttachBlockDevice(tb testing.TB, jailerConfig *proto.JailerConfig) {
 	_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
 	require.NoError(tb, err)
 
-	_, err = os.Stat(filepath.Join(integtest.ShimBaseDir(), "default#"+vmID))
-	assert.Error(tb, err)
-	assert.True(tb, os.IsNotExist(err))
-
-	shimContents, err := os.ReadDir(integtest.ShimBaseDir())
-	require.NoError(tb, err)
-	assert.Len(tb, shimContents, 0)
+	assertEmptyShimDir(tb, "default", vmID)
 }

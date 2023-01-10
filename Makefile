@@ -431,8 +431,8 @@ DEFAULT_BASE_IMAGE=public.ecr.aws/amazonlinux/amazonlinux:latest
 DEFAULT_ESGZ_IMAGE=ghcr.io/firecracker-microvm/firecracker-containerd/amazonlinux:latest-esgz
 .PHONY: esgz-test-image push-esgz-test-image
 esgz-test-image: stargz-snapshotter
-	$(CTR_REMOTE_BIN) image pull $(DEFAULT_BASE_IMAGE)
-	$(CTR_REMOTE_BIN) image optimize --oci $(DEFAULT_BASE_IMAGE) $(DEFAULT_ESGZ_IMAGE)
+	$(CTR_REMOTE_BIN) image pull --all-platforms $(DEFAULT_BASE_IMAGE)
+	$(CTR_REMOTE_BIN) image optimize --all-platforms --oci $(DEFAULT_BASE_IMAGE) $(DEFAULT_ESGZ_IMAGE)
 
 push-esgz-test-image:
 	$(CTR_REMOTE_BIN) image push -u $(GH_USER):$(GH_PERSONAL_ACCESS_TOKEN) $(DEFAULT_ESGZ_IMAGE) $(DEFAULT_ESGZ_IMAGE)

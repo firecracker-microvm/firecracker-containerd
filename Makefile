@@ -16,7 +16,7 @@ TEST_SUBDIRS:=$(addprefix test-,$(SUBDIRS))
 INTEG_TEST_SUBDIRS:=$(addprefix integ-test-,$(SUBDIRS))
 
 export INSTALLROOT?=/usr/local
-export STATIC_AGENT
+export STATIC_AGENT=on
 
 export DOCKER_IMAGE_TAG?=latest
 

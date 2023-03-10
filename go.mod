@@ -1,6 +1,6 @@
 module github.com/firecracker-microvm/firecracker-containerd
 
-go 1.16
+go 1.17
 
 require (
 	github.com/StackExchange/wmi v0.0.0-20181212234831-e0a55b97c705 // indirect

@@ -1,6 +1,6 @@
 module github.com/firecracker-microvm/firecracker-containerd/example/remote-snapshotter
 
-go 1.16
+go 1.17
 
 require (
 	github.com/containerd/containerd v1.6.9

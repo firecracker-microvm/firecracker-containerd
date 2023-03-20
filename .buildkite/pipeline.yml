@@ -22,6 +22,8 @@ steps:
       DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
       EXTRAGOARGS: "-race"
     command:
+      - uname -a
+      - docker build -t localhost/runc-builder:80 -f tools/docker/Dockerfile.runc-builder tools/
       - make test-images
       - docker run --rm -v $PWD:/mnt debian:bullseye-slim rm -rf /mnt/tools/image-builder/rootfs
       - sudo install -d -o root -g buildkite-agent -m 775 "/local/artifacts/$BUILDKITE_BUILD_NUMBER"

@@ -12,7 +12,15 @@
 # permissions and limitations under the License.
 
 steps:
-
+  # Add the step to better know the environment running on
+  - label: ':ec2: show environment'
+    command:
+      - uname -a
+    agents:
+      queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
+      distro: "${BUILDKITE_AGENT_META_DATA_DISTRO}"
+      hostname: "${BUILDKITE_AGENT_META_DATA_HOSTNAME}"
+      
   - label: ":docker: Build"
     agents:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"

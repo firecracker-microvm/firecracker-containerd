@@ -23,11 +23,11 @@ steps:
       EXTRAGOARGS: "-race"
     command:
       - uname -a
+      - pwd
+      - whoami
       - docker build -t localhost/runc-builder:80 -f tools/docker/Dockerfile.runc-builder tools/
-      - make test-images
-      - docker run --rm -v $PWD:/mnt debian:bullseye-slim rm -rf /mnt/tools/image-builder/rootfs
-      - sudo install -d -o root -g buildkite-agent -m 775 "/local/artifacts/$BUILDKITE_BUILD_NUMBER"
-      - cp tools/image-builder/rootfs.img "/local/artifacts/$BUILDKITE_BUILD_NUMBER/"
+      - stop_command
+
 
   # Just in case, list loopback devices to make sure there are no leaks.
   # We probably should move that to metrics later.

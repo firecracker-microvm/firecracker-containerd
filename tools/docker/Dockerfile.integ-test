@@ -31,14 +31,16 @@ RUN mkdir -p \
   /etc/cni/net.d
 
 # Install containerd to have runc shim.
-ENV CTRD_VERSION="1.6.4"
-RUN wget --quiet -O- https://github.com/containerd/containerd/releases/download/v$CTRD_VERSION/containerd-$CTRD_VERSION-linux-amd64.tar.gz | tar zxf - -C /tmp/ && \
+ENV CTRD_VERSION="1.6.8"
+RUN ARCH=`go env GOARCH` && \
+	wget --quiet -O- https://github.com/containerd/containerd/releases/download/v$CTRD_VERSION/containerd-$CTRD_VERSION-linux-${ARCH}.tar.gz | tar zxf - -C /tmp/ && \
   install -D -o root -g root -m755 -t /usr/local/bin /tmp/bin/containerd-shim-runc-v2 && \
   rm -rf /tmp/bin
 
 # Install critest.
 ENV CRITEST_VERSION="1.23.0"
-RUN wget --quiet -O- https://github.com/kubernetes-sigs/cri-tools/releases/download/v$CRITEST_VERSION/critest-v$CRITEST_VERSION-linux-amd64.tar.gz | tar zxf - -C /tmp/ && \
+RUN ARCH=`go env GOARCH` && \
+  wget --quiet -O- https://github.com/kubernetes-sigs/cri-tools/releases/download/v$CRITEST_VERSION/critest-v$CRITEST_VERSION-linux-${ARCH}.tar.gz | tar zxf - -C /tmp/ && \
   install -D -o root -g root -m755 -t /usr/local/bin /tmp/critest && \
   rm -f /tmp/critest
 

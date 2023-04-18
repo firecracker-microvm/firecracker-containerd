@@ -105,10 +105,14 @@ func (connectorPair *IOConnectorPair) proxy(
 			select {
 			case readerResult := <-readerResultCh:
 				readerResultCh = nil
-				reader, err = readerResult.ReadWriteCloser, readerResult.Err
+				if err = readerResult.Err; err == nil {
+					reader = readerResult.ReadWriteCloser
+				}
 			case writerResult := <-writerResultCh:
 				writerResultCh = nil
-				writer, err = writerResult.ReadWriteCloser, writerResult.Err
+				if err = writerResult.Err; err == nil {
+					writer = writerResult.ReadWriteCloser
+				}
 			}
 
 			if err != nil {

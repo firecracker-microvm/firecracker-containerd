@@ -11,7 +11,7 @@
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
-FROM golang:1.17-stretch
+FROM golang:1.17-bullseye
 
 RUN apt-get update && apt-get install --yes --no-install-recommends \
 	libprotobuf-dev \

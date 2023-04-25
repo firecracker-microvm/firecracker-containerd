@@ -46,7 +46,7 @@ Alternatively, to build outside a container, you'll need:
 * [`debootstrap`](https://salsa.debian.org/installer-team/debootstrap)
   (Install via the package of the same name on Debian and Ubuntu)
 * `mksquashfs`, available in the
-   [`squashfs-tools`](https://packages.debian.org/stretch/squashfs-tools)
+   [`squashfs-tools`](https://packages.debian.org/bullseye/squashfs-tools)
    package on Debian and Ubuntu.
 * To run the image build process as root.
 
@@ -79,7 +79,7 @@ A complete command line, settable via the `kernel_args` setting in `/etc/contain
 
 In order to ensure sufficient entropy is consistently available within 
 the VM, the rootfs is configured to start the 
-[`haveged`](https://manpages.debian.org/buster/haveged/haveged.8.en.html)
+[`haveged`](https://manpages.debian.org/bullseye/haveged/haveged.8.en.html)
 daemon during boot. [More information on its method of operation and other
 details can be found in its FAQ](https://issihosts.com/haveged/faq.html).
 Users of the image created by this utility are encouraged to evaluate 

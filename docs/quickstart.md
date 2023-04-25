@@ -15,9 +15,9 @@ files into `/usr/local/bin`.
 1. Get an AWS account (see
    [this article](https://aws.amazon.com/premiumsupport/knowledge-center/create-and-activate-aws-account/)
    if you need help creating one)
-2. Launch an i3.metal instance running Debian Buster (you can find it in the
-   [AWS marketplace](https://aws.amazon.com/marketplace/pp/B0859NK4HC) or
-   on [this page](https://wiki.debian.org/Cloud/AmazonEC2Image/Buster).
+2. Launch an i3.metal instance running Debian Bullseye (you can find it in the
+   [AWS marketplace](https://aws.amazon.com/marketplace/pp/prodview-l5gv52ndg5q6i) or
+   on [this page](https://wiki.debian.org/Cloud/AmazonEC2Image/Bullseye).
    If you need help launching an EC2 instance, see the
    [EC2 getting started guide](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/EC2_GetStarted.html).
 3. Run the script below to download and install all the required dependencies on a debian based instance.
@@ -30,8 +30,8 @@ cd ~
 
 # Install git, Go 1.16, make, curl
 sudo mkdir -p /etc/apt/sources.list.d
-echo "deb http://ftp.debian.org/debian buster-backports main" | \
-  sudo tee /etc/apt/sources.list.d/buster-backports.list
+echo "deb http://ftp.debian.org/debian bullseye-backports main" | \
+  sudo tee /etc/apt/sources.list.d/bullseye-backports.list
 sudo DEBIAN_FRONTEND=noninteractive apt-get update
 sudo DEBIAN_FRONTEND=noninteractive apt-get \
   install --yes \

@@ -14,7 +14,7 @@ jobs:
     strategy:
       matrix:
         os: ['ubuntu-20.04', 'ubuntu-22.04']
-        go: ['1.17', '1.18', '1.19']
+        go: ['1.17', '1.18', '1.19', '1.20']
       # Build all variants regardless of failures
       fail-fast: false
 

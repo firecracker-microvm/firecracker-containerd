@@ -28,14 +28,14 @@ files into `/usr/local/bin`.
 
 cd ~
 
-# Install git, Go 1.16, make, curl
+# Install git, Go 1.17, make, curl
 sudo mkdir -p /etc/apt/sources.list.d
 echo "deb http://ftp.debian.org/debian bullseye-backports main" | \
   sudo tee /etc/apt/sources.list.d/bullseye-backports.list
 sudo DEBIAN_FRONTEND=noninteractive apt-get update
 sudo DEBIAN_FRONTEND=noninteractive apt-get \
   install --yes \
-  golang-1.16 \
+  golang-1.17 \
   make \
   git \
   curl \
@@ -44,8 +44,8 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get \
   bc \
   gnupg
 
-# Debian's Go 1.16 package installs "go" command under /usr/lib/go-1.16/bin
-export PATH=/usr/lib/go-1.16/bin:$PATH
+# Debian's Go 1.17 package installs "go" command under /usr/lib/go-1.17/bin
+export PATH=/usr/lib/go-1.17/bin:$PATH
 
 cd ~
 
@@ -93,7 +93,7 @@ sudo yum -y install \
 # need to source environment variables afterwards for the existing shell session.
 curl -LO https://get.golang.org/$(uname)/go_installer && \
   chmod +x go_installer && \
-  ./go_installer -version 1.16 && \
+  ./go_installer -version 1.17 && \
   rm go_installer && \
   source .bash_profile
 

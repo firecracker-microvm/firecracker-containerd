@@ -37,9 +37,11 @@ jobs:
           # So, we will fetch 30 commits just in case to have
           # 20 actual commits with associated merged commits.
           fetch-depth: 30
-      - uses: actions/setup-go@v3
+      - uses: actions/setup-go@v4
         with:
           go-version: ${{ matrix.go }}
+          # Disable Go caching feature when compiling across Linux distributions due to collisions until https://github.com/actions/setup-go/issues/368 is resolved.
+          cache: false
       - run: make
       - run: make lint
       - name: make test

@@ -8,7 +8,7 @@ require (
 	github.com/containerd/continuity v0.3.0
 	github.com/containerd/fifo v1.1.0
 	github.com/containerd/go-runc v1.0.0
-	github.com/containerd/ttrpc v1.1.1
+	github.com/containerd/ttrpc v1.1.2
 	github.com/containerd/typeurl v1.0.2
 	github.com/containernetworking/cni v1.1.1
 	github.com/containernetworking/plugins v1.1.1

@@ -253,6 +253,9 @@ func (ts *TaskService) Create(requestCtx context.Context, req *taskAPI.CreateTas
 			logger.WithError(err).Error()
 			return nil, err
 		}
+		ts.addCleanup(taskExecID, func() error {
+			return fifoSet.Close()
+		})
 
 		var stdinConnectorPair *vm.IOConnectorPair
 		if req.Stdin != "" {
@@ -520,6 +523,9 @@ func (ts *TaskService) Exec(requestCtx context.Context, req *taskAPI.ExecProcess
 			logger.WithError(err).Error()
 			return nil, err
 		}
+		ts.addCleanup(taskExecID, func() error {
+			return fifoSet.Close()
+		})
 
 		var stdinConnectorPair *vm.IOConnectorPair
 		if req.Stdin != "" {
@@ -528,9 +534,6 @@ func (ts *TaskService) Exec(requestCtx context.Context, req *taskAPI.ExecProcess
 				ReadConnector:  vm.VSockAcceptConnector(extraData.StdinPort),
 				WriteConnector: vm.WriteFIFOConnector(fifoSet.Stdin),
 			}
-			ts.addCleanup(taskExecID, func() error {
-				return os.RemoveAll(req.Stdin)
-			})
 		}
 
 		var stdoutConnectorPair *vm.IOConnectorPair
@@ -540,9 +543,6 @@ func (ts *TaskService) Exec(requestCtx context.Context, req *taskAPI.ExecProcess
 				ReadConnector:  vm.ReadFIFOConnector(fifoSet.Stdout),
 				WriteConnector: vm.VSockAcceptConnector(extraData.StdoutPort),
 			}
-			ts.addCleanup(taskExecID, func() error {
-				return os.RemoveAll(req.Stdout)
-			})
 		}
 
 		var stderrConnectorPair *vm.IOConnectorPair
@@ -552,9 +552,6 @@ func (ts *TaskService) Exec(requestCtx context.Context, req *taskAPI.ExecProcess
 				ReadConnector:  vm.ReadFIFOConnector(fifoSet.Stderr),
 				WriteConnector: vm.VSockAcceptConnector(extraData.StderrPort),
 			}
-			ts.addCleanup(taskExecID, func() error {
-				return os.RemoveAll(req.Stderr)
-			})
 		}
 
 		ioConnectorSet = vm.NewIOConnectorProxy(stdinConnectorPair, stdoutConnectorPair, stderrConnectorPair)

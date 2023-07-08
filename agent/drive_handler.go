@@ -225,7 +225,7 @@ func (dh driveHandler) UnmountDrive(ctx context.Context, req *drivemount.Unmount
 		return &types.Empty{}, nil
 	}
 
-	return nil, fmt.Errorf("failed to unmount the drive %q", drive.Path())
+	return nil, fmt.Errorf("failed to unmount drive %q: %w", drive.Path(), err)
 }
 
 func isSystemDir(path string) error {

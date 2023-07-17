@@ -38,16 +38,6 @@ steps:
 
   - wait
 
-  # Git history validation happens after the 'wait' step so it happens
-  # in parallel with the subsequent tests and does not prevent them
-  # from running in the event of a validation failure.
-  - label: 'git log validation'
-    command: './.buildkite/logcheck.sh'
-    # This should run in the same queue, but we don't care whether it runs on
-    # the same host.
-    agents:
-      queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
-
   - label: ":protractor: verify proto"
     agents:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"

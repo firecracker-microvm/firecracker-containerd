@@ -16,6 +16,9 @@ service Firecracker {
     // Resumes a VM
     rpc ResumeVM(ResumeVMRequest) returns (google.protobuf.Empty);
 
+    // Creates a snapshot of a VM
+    rpc CreateSnapshot(CreateSnapshotRequest) returns (google.protobuf.Empty);
+
     // Stops existing Firecracker instance by VM ID
     rpc StopVM(StopVMRequest) returns (google.protobuf.Empty);
 

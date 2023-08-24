@@ -44,6 +44,15 @@ message CreateVMRequest {
 
     // The network namespace of the VM.
     string NetNS = 15;
+
+    // Whether the VM should be created by loading a snapshot.
+    bool LoadSnapshot = 16;
+    // Path to the file that contains the guest memory to be loaded.
+    string MemFilePath = 17;
+    // Path to the file that contains the VM state to be loaded.
+    string SnapshotPath = 18;
+    // Path to the disk device backing the container snapshot.
+    string ContainerSnapshotPath = 19;
 }
 
 message CreateVMResponse {
@@ -60,6 +69,12 @@ message PauseVMRequest {
 
 message ResumeVMRequest {
     string VMID = 1;
+}
+
+message CreateSnapshotRequest {
+    string VMID = 1;
+    string MemFilePath = 2;
+    string SnapshotPath = 3;
 }
 
 message StopVMRequest {

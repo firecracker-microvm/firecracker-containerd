@@ -589,6 +589,14 @@ func (s *service) createVM(requestCtx context.Context, request *proto.CreateVMRe
 
 	opts = append(opts, jailedOpts...)
 
+	if request.LoadSnapshot {
+		if request.SnapshotPath == "" || request.MemFilePath == "" || request.ContainerSnapshotPath == "" {
+			return errors.New("failed to load snapshot: one of the snapshot loading parameters was not provided")
+		}
+		opts = append(opts, firecracker.WithSnapshot(request.MemFilePath, request.SnapshotPath, request.ContainerSnapshotPath,
+			func(c *firecracker.SnapshotConfig) { c.ResumeVM = true }))
+	}
+
 	// In the event that a noop jailer is used, we will pass in the shim context
 	// and have the SDK construct a new machine using that context. Otherwise, a
 	// custom process runner will be provided via options which will stomp over
@@ -615,9 +623,11 @@ func (s *service) createVM(requestCtx context.Context, request *proto.CreateVMRe
 	s.ioProxyClient = ioproxy.NewIOProxyClient(rpcClient)
 	s.exitAfterAllTasksDeleted = request.ExitAfterAllTasksDeleted
 
-	err = s.mountDrives(requestCtx)
-	if err != nil {
-		return err
+	if !request.LoadSnapshot {
+		err = s.mountDrives(requestCtx)
+		if err != nil {
+			return err
+		}
 	}
 
 	s.logger.Info("successfully started the VM")
@@ -685,6 +695,24 @@ func (s *service) PauseVM(ctx context.Context, req *proto.PauseVMRequest) (*type
 	}
 
 	if err := s.machine.PauseVM(ctx); err != nil {
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	return &types.Empty{}, nil
+}
+
+// CreateSnapshot creates a snapshot of a VM
+func (s *service) CreateSnapshot(ctx context.Context, req *proto.CreateSnapshotRequest) (*types.Empty, error) {
+	defer logPanicAndDie(s.logger)
+
+	err := s.waitVMReady()
+	if err != nil {
+		s.logger.WithError(err).Error()
+		return nil, err
+	}
+
+	if err := s.machine.CreateSnapshot(ctx, req.MemFilePath, req.SnapshotPath); err != nil {
 		s.logger.WithError(err).Error()
 		return nil, err
 	}
@@ -1016,16 +1044,20 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 		containerCount = 1
 	}
 
-	s.containerStubHandler, err = CreateContainerStubs(
-		&cfg, s.jailer, containerCount, s.logger)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create container stub drives: %w", err)
+	if !req.LoadSnapshot {
+		s.containerStubHandler, err = CreateContainerStubs(
+			&cfg, s.jailer, containerCount, s.logger)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create container stub drives: %w", err)
+		}
 	}
 
-	s.driveMountStubs, err = CreateDriveMountStubs(
-		&cfg, s.jailer, req.DriveMounts, s.logger)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create drive mount stub drives: %w", err)
+	if !req.LoadSnapshot {
+		s.driveMountStubs, err = CreateDriveMountStubs(
+			&cfg, s.jailer, req.DriveMounts, s.logger)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create drive mount stub drives: %w", err)
+		}
 	}
 
 	// If no value for NetworkInterfaces was specified (not even an empty but non-nil list) and

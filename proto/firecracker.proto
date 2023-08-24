@@ -41,6 +41,9 @@ message CreateVMRequest {
     string MetricsFifoPath = 13;
 
     FirecrackerBalloonDevice BalloonDevice = 14;
+
+    // The network namespace of the VM.
+    string NetNS = 15;
 }
 
 message CreateVMResponse {

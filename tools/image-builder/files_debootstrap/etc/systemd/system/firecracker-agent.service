@@ -20,4 +20,4 @@ SuccessAction=reboot
 [Service]
 Type=simple
 WorkingDirectory=/container
-ExecStart=/usr/local/bin/agent
+ExecStart=/usr/local/bin/agent --debug

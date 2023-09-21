@@ -152,8 +152,8 @@ func (connectorPair *IOConnectorPair) proxy(
 			} else {
 				logger.WithError(err).Error("error copying io")
 			}
-			copyDone <- err
 		}
+		copyDone <- err
 		defer logClose(logger, reader, writer)
 	}()
 

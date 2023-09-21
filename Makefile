@@ -56,8 +56,7 @@ ifeq ($(filter $(KERNEL_VERSION),$(KERNEL_VERSIONS)),)
 $(error "Kernel version $(KERNEL_VERSION) is not supported. Supported versions are $(KERNEL_VERSIONS)")
 endif
 
-KERNEL_CONFIG_BASE=microvm-kernel-$(host_arch)-$(KERNEL_VERSION).config
-KERNEL_CONFIG=tools/kernel-configs/$(KERNEL_CONFIG_BASE)
+KERNEL_CONFIG=$(abspath ./tools/kernel-configs/microvm-kernel-$(host_arch)-$(KERNEL_VERSION).config)
 # Copied from https://github.com/firecracker-microvm/firecracker/blob/v1.1.0/tools/devtool#L2082
 # This allows us to specify a kernel without the patch version, but still get the correct build path to reference the kernel binary
 KERNEL_FULL_VERSION=$(shell cat "$(KERNEL_CONFIG)" | grep -Po "^\# Linux\/$(kernel_config_pattern) (([0-9]+.)[0-9]+)" | cut -d ' ' -f 3)
@@ -360,7 +359,7 @@ kernel: $(KERNEL_BIN)
 
 $(KERNEL_BIN): $(KERNEL_CONFIG)
 	cp $(KERNEL_CONFIG) $(FIRECRACKER_DIR)
-	$(FIRECRACKER_DIR)/tools/devtool -y build_kernel --config $(KERNEL_CONFIG_BASE)
+	$(FIRECRACKER_DIR)/tools/devtool -y build_kernel --config $(KERNEL_CONFIG)
 
 .PHONY: install-kernel
 install-kernel: $(KERNEL_BIN)

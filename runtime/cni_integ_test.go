@@ -53,11 +53,14 @@ func TestCNISupport_Isolated(t *testing.T) {
 	image, err := alpineImage(ctx, client, defaultSnapshotterName)
 	require.NoError(t, err, "failed to get alpine image")
 
+	gen, err := integtest.NewVMIDGen()
+	require.NoError(t, err, "failed to create a VMIDGen")
+
 	numVMs := 5
 	var vmIDs []string
 	webpages := make(map[string]string)
 	for i := 0; i < numVMs; i++ {
-		vmID := fmt.Sprintf("vm-%d", i)
+		vmID := gen.VMID(i)
 		vmIDs = append(vmIDs, vmID)
 		webpages[vmID] = fmt.Sprintf("Hello, my virtual machine %s\n", vmID)
 	}
@@ -247,9 +250,8 @@ func TestCNIPlugin_Performance(t *testing.T) {
 	runCommand(ctx, t, "ip", "addr", "add", ipCidr, "dev", testDevName)
 	runCommand(ctx, t, "ip", "link", "set", "dev", testDevName, "up")
 
-	vmID := func(vmIndex int) string {
-		return fmt.Sprintf("vm-%d", vmIndex)
-	}
+	gen, err := integtest.NewVMIDGen()
+	require.NoError(t, err, "Failed to create a VMIDGen")
 
 	var vmGroup sync.WaitGroup
 	containers := make(chan containerd.Container, numVMs)
@@ -272,7 +274,7 @@ func TestCNIPlugin_Performance(t *testing.T) {
 			}()
 
 			_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
-				VMID: vmID(vmIndex),
+				VMID: gen.VMID(vmIndex),
 				MachineCfg: &proto.FirecrackerMachineConfiguration{
 					MemSizeMib: uint32(vmMemSizeMB),
 				},
@@ -285,8 +287,8 @@ func TestCNIPlugin_Performance(t *testing.T) {
 			})
 			require.NoError(t, err, "failed to create vm")
 
-			containerName := fmt.Sprintf("%s-container", vmID(vmIndex))
-			snapshotName := fmt.Sprintf("%s-snapshot", vmID(vmIndex))
+			containerName := fmt.Sprintf("%s-container", gen.VMID(vmIndex))
+			snapshotName := fmt.Sprintf("%s-snapshot", gen.VMID(vmIndex))
 
 			newContainer, err := client.NewContainer(ctx,
 				containerName,
@@ -300,7 +302,7 @@ func TestCNIPlugin_Performance(t *testing.T) {
 						"--interval", "60",
 						"--client", ipAddr,
 					),
-					firecrackeroci.WithVMID(vmID(vmIndex)),
+					firecrackeroci.WithVMID(gen.VMID(vmIndex)),
 					firecrackeroci.WithVMNetwork,
 				),
 			)

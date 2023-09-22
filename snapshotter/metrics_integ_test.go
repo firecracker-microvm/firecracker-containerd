@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"testing"
 
 	"github.com/containerd/containerd"
@@ -43,15 +42,17 @@ const (
 func TestSnapshotterMetrics_Isolated(t *testing.T) {
 	integtest.Prepare(t)
 
-	vmID := 0
+	gen, err := integtest.NewVMIDGen()
+	require.NoError(t, err, "Failed to create a VMIDGen")
+	vmID := gen.VMID(0)
 
-	ctx := namespaces.WithNamespace(context.Background(), strconv.Itoa(vmID))
+	ctx := namespaces.WithNamespace(context.Background(), vmID)
 
 	fcClient, err := integtest.NewFCControlClient(integtest.ContainerdSockPath)
-	defer fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: strconv.Itoa(vmID)})
+	defer fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
 	require.NoError(t, err, "Failed to create fccontrol client")
 
-	require.NoError(t, pullImageWithRemoteSnapshotterInVM(ctx, strconv.Itoa(vmID), fcClient))
+	require.NoError(t, pullImageWithRemoteSnapshotterInVM(ctx, vmID, fcClient))
 	verifyMetricsResponse(t, 1)
 }
 
@@ -63,15 +64,17 @@ func TestSnapshotterMetricsMultipleVMs_Isolated(t *testing.T) {
 	require.NoError(t, err, "Failed to create fccontrol client")
 
 	group, ctx := errgroup.WithContext(context.Background())
+	gen, err := integtest.NewVMIDGen()
+	require.NoError(t, err, "Failed to create a VMIDGen")
 
 	for vmID := 0; vmID < numberOfVms; vmID++ {
-		id := vmID
-		ctxNamespace := namespaces.WithNamespace(ctx, strconv.Itoa(id))
-		defer fcClient.StopVM(ctxNamespace, &proto.StopVMRequest{VMID: strconv.Itoa(id)})
+		id := gen.VMID(vmID)
+		ctxNamespace := namespaces.WithNamespace(ctx, id)
+		defer fcClient.StopVM(ctxNamespace, &proto.StopVMRequest{VMID: id})
 
 		group.Go(
 			func() error {
-				return pullImageWithRemoteSnapshotterInVM(ctxNamespace, strconv.Itoa(id), fcClient)
+				return pullImageWithRemoteSnapshotterInVM(ctxNamespace, id, fcClient)
 			},
 		)
 

@@ -56,12 +56,11 @@ ifeq ($(filter $(KERNEL_VERSION),$(KERNEL_VERSIONS)),)
 $(error "Kernel version $(KERNEL_VERSION) is not supported. Supported versions are $(KERNEL_VERSIONS)")
 endif
 
-KERNEL_CONFIG_BASE=microvm-kernel-$(host_arch)-$(KERNEL_VERSION).config
-KERNEL_CONFIG=tools/kernel-configs/$(KERNEL_CONFIG_BASE)
-# Copied from https://github.com/firecracker-microvm/firecracker/blob/v1.1.0/tools/devtool#L2082
-# This allows us to specify a kernel without the patch version, but still get the correct build path to reference the kernel binary
-KERNEL_FULL_VERSION=$(shell cat "$(KERNEL_CONFIG)" | grep -Po "^\# Linux\/$(kernel_config_pattern) (([0-9]+.)[0-9]+)" | cut -d ' ' -f 3)
-KERNEL_BIN=$(FIRECRACKER_DIR)/build/kernel/linux-$(KERNEL_FULL_VERSION)/vmlinux-$(KERNEL_FULL_VERSION)-$(host_arch).bin
+KERNEL_BUILDER_DIR=tools/kernel-builder
+KERNEL_CONFIG_BASE=kernel-configs/microvm-kernel-$(host_arch)-$(KERNEL_VERSION).config
+KERNEL_CONFIG=$(KERNEL_BUILDER_DIR)/$(KERNEL_CONFIG_BASE)
+KERNEL_BIN=$(KERNEL_BUILDER_DIR)/vmlinux-$(KERNEL_VERSION)-$(host_arch).bin
+KERNEL_BUILDER_NAME?=kernel-builder
 
 RUNC_DIR=$(SUBMODULES)/runc
 RUNC_BIN=$(RUNC_DIR)/runc
@@ -355,12 +354,28 @@ firecracker-clean:
 	- rm $(FIRECRACKER_BIN)
 	- rm $(KERNEL_BIN)
 
+##########################
+# Kernel submodule
+##########################
 .PHONY: kernel
 kernel: $(KERNEL_BIN)
 
-$(KERNEL_BIN): $(KERNEL_CONFIG)
-	cp $(KERNEL_CONFIG) $(FIRECRACKER_DIR)
-	$(FIRECRACKER_DIR)/tools/devtool -y build_kernel --config $(KERNEL_CONFIG_BASE)
+$(KERNEL_BUILDER_DIR)/builder_stamp: $(KERNEL_BUILDER_DIR)/Dockerfile.kernel-builder
+	docker build \
+		-t localhost/$(KERNEL_BUILDER_NAME):$(DOCKER_IMAGE_TAG) \
+		-f $(KERNEL_BUILDER_DIR)/Dockerfile.kernel-builder \
+		tools/
+	touch $@
+
+$(KERNEL_BIN): $(KERNEL_CONFIG) $(KERNEL_BUILDER_DIR)/builder_stamp
+	exit 0
+	docker run --rm --user $(UID) \
+		--volume $(CURDIR)/$(KERNEL_BUILDER_DIR):/kernel-builder \
+		-e HOME=/tmp \
+		--workdir /kernel-builder \
+		--entrypoint ./build.sh \
+		localhost/$(KERNEL_BUILDER_NAME):$(DOCKER_IMAGE_TAG) \
+		/kernel-builder/$(KERNEL_CONFIG_BASE) # this is the arg to entrypoint
 
 .PHONY: install-kernel
 install-kernel: $(KERNEL_BIN)

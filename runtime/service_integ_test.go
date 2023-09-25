@@ -1628,7 +1628,7 @@ func TestRandomness_Isolated(t *testing.T) {
 		// regression.
 		exitErr, ok := err.(*exec.ExitError)
 		require.True(t, ok, "the error is not ExitError")
-		require.EqualValues(t, 1, exitCode(exitErr))
+		require.EqualValues(t, 1, exitCode(exitErr), "exec error did not exit 1: %v", err)
 
 		const failureTolerance = 4
 		for _, outputLine := range strings.Split(rngtestStderr.String(), "\n") {

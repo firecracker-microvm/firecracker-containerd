@@ -1596,6 +1596,10 @@ func TestRandomness_Isolated(t *testing.T) {
 	err = rngtestCmd.Start()
 	require.NoError(t, err, "failed to start rngtest")
 
+	rngErr := rngtestCmd.Wait()
+	t.Logf("stdout output from rngtest:\n %s", rngtestStdout.String())
+	t.Logf("stderr output from rngtest:\n %s", rngtestStderr.String())
+
 	select {
 	case exitStatus := <-exitCh:
 		assert.NoError(t, exitStatus.Error(), "failed to retrieve exitStatus")
@@ -1613,10 +1617,7 @@ func TestRandomness_Isolated(t *testing.T) {
 			"context cancelled while waiting for dd container to exit (is it blocked on reading /dev/random?), err: %v", ctx.Err())
 	}
 
-	err = rngtestCmd.Wait()
-	t.Logf("stdout output from rngtest:\n %s", rngtestStdout.String())
-	t.Logf("stderr output from rngtest:\n %s", rngtestStderr.String())
-	if err != nil {
+	if rngErr != nil {
 		// rngtest will exit non-zero if any blocks fail its randomness tests.
 		// Trials showed an approximate false-negative rate of 27/32863 blocks,
 		// so testing on 1023 blocks gives a ~36% chance of there being a single
@@ -1626,7 +1627,7 @@ func TestRandomness_Isolated(t *testing.T) {
 		// Even though we have a failure tolerance, the test still provides some
 		// value in that we can be aware if a change to the rootfs results in a
 		// regression.
-		exitErr, ok := err.(*exec.ExitError)
+		exitErr, ok := rngErr.(*exec.ExitError)
 		require.True(t, ok, "the error is not ExitError")
 		require.EqualValues(t, 1, exitCode(exitErr), "exec error did not exit 1: %v", err)
 

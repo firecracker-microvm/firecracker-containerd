@@ -27,7 +27,7 @@ REVISION=$(shell git rev-parse HEAD)
 
 INTEG_TEST_SUFFIX := _Isolated
 INTEG_TESTNAMES=$(shell docker run --rm \
-	--network=none \
+	--network=host \
 	--volume $(CURDIR)/..:/src \
 	--volume $(GO_CACHE_VOLUME_NAME):/go \
 	--entrypoint=/bin/bash \
@@ -52,11 +52,12 @@ integ-test:
 	$(MAKE) $(addprefix integ-test-,$(INTEG_TESTNAMES))
 
 integ-test-%: logs
+	echo "Running $@"
 	$(CURDIR)/../tools/thinpool.sh reset "$(FICD_DM_POOL)"
 	docker run --rm -it \
 		--privileged \
 		--ipc=host \
-		--network=none \
+		--network=host \
 		--volume /dev:/dev \
 		--volume /run/udev/control:/run/udev/control \
 		--volume $(CURDIR)/logs:/var/log/firecracker-containerd-test \

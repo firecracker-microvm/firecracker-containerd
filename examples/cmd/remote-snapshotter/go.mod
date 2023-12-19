@@ -3,26 +3,27 @@ module github.com/firecracker-microvm/firecracker-containerd/example/remote-snap
 go 1.17
 
 require (
-	github.com/containerd/containerd v1.6.20
+	github.com/containerd/containerd v1.6.26
 	github.com/containerd/stargz-snapshotter v0.11.3
 	github.com/firecracker-microvm/firecracker-containerd v0.0.0-20220430002346-5f6efb9fdce8
 )
 
 require (
 	github.com/Microsoft/go-winio v0.5.2 // indirect
-	github.com/Microsoft/hcsshim v0.9.8 // indirect
+	github.com/Microsoft/hcsshim v0.9.10 // indirect
 	github.com/containerd/cgroups v1.0.4 // indirect
 	github.com/containerd/continuity v0.3.0 // indirect
 	github.com/containerd/fifo v1.1.0 // indirect
+	github.com/containerd/log v0.1.0 // indirect
 	github.com/containerd/ttrpc v1.1.2 // indirect
 	github.com/containerd/typeurl v1.0.2 // indirect
 	github.com/docker/go-events v0.0.0-20190806004212-e31b211e4f1c // indirect
 	github.com/gogo/googleapis v1.4.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
-	github.com/golang/protobuf v1.5.2 // indirect
+	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/google/uuid v1.3.0 // indirect
-	github.com/klauspost/compress v1.15.6 // indirect
+	github.com/klauspost/compress v1.15.9 // indirect
 	github.com/moby/locker v1.0.1 // indirect
 	github.com/moby/sys/mountinfo v0.6.2 // indirect
 	github.com/moby/sys/signal v0.7.0 // indirect
@@ -32,15 +33,15 @@ require (
 	github.com/opencontainers/runtime-spec v1.0.3-0.20210910115017-0d6cc581aeea // indirect
 	github.com/opencontainers/selinux v1.10.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/sirupsen/logrus v1.8.1 // indirect
-	go.opencensus.io v0.23.0 // indirect
-	golang.org/x/net v0.8.0 // indirect
-	golang.org/x/sync v0.1.0 // indirect
-	golang.org/x/sys v0.6.0 // indirect
-	golang.org/x/text v0.8.0 // indirect
-	google.golang.org/genproto v0.0.0-20220617124728-180714bec0ad // indirect
-	google.golang.org/grpc v1.47.0 // indirect
-	google.golang.org/protobuf v1.28.0 // indirect
+	github.com/sirupsen/logrus v1.9.3 // indirect
+	go.opencensus.io v0.24.0 // indirect
+	golang.org/x/net v0.17.0 // indirect
+	golang.org/x/sync v0.3.0 // indirect
+	golang.org/x/sys v0.13.0 // indirect
+	golang.org/x/text v0.13.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20230711160842-782d3b101e98 // indirect
+	google.golang.org/grpc v1.58.3 // indirect
+	google.golang.org/protobuf v1.31.0 // indirect
 )
 
 replace github.com/firecracker-microvm/firecracker-containerd => ../../..

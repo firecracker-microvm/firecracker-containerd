@@ -1146,12 +1146,10 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 		return nil, err
 	}
 
+	// We don't log request.Stdin, request.Stdout, or request.Stderr as they may contain sensitive information.
 	logger.WithFields(logrus.Fields{
 		"bundle":     request.Bundle,
 		"terminal":   request.Terminal,
-		"stdin":      request.Stdin,
-		"stdout":     request.Stdout,
-		"stderr":     request.Stderr,
 		"checkpoint": request.Checkpoint,
 	}).Debug("creating task")
 

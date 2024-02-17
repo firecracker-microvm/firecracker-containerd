@@ -18,11 +18,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/containerd/containerd/namespaces"
+	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/firecracker-microvm/firecracker-go-sdk"
 	models "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 	"github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -321,5 +325,48 @@ func TestDebugConfig(t *testing.T) {
 		cfg, err := c.service.buildVMConfiguration(&req)
 		assert.NoError(t, err, "failed to build firecracker configuration")
 		assert.Equal(t, c.service.config.DebugHelper.GetFirecrackerLogLevel(), cfg.LogLevel)
+	}
+}
+
+// TestTaskCreateDoesNotLogStdoutOrStderrFields validates the firecracker-containerd runtime service implementation
+// does not log the Stdout/Stderr request fields because they may contain sensitive information for the shim logger binary use case.
+func TestTaskCreateDoesNotLogStdoutOrStderrFields(t *testing.T) {
+	testLogger, hook := test.NewNullLogger()
+	testLogger.Level = logrus.DebugLevel
+
+	vmIsReady := make(chan struct{})
+	close(vmIsReady)
+
+	uut := service{
+		logger:  logrus.NewEntry(testLogger),
+		vmReady: vmIsReady,
+	}
+
+	ctx := namespaces.WithNamespace(context.Background(), defaultNamespace)
+	createTaskRequest := &task.CreateTaskRequest{
+		ID:     t.Name(),
+		Stdout: "/sbin/shim-loggers-for-containerd --env USERNAME=admin --env PASSWORD=admin",
+		Stderr: "/sbin/shim-loggers-for-containerd --env TOKEN=tolkien",
+	}
+
+	// (*service).Create will fail on (Dir).CreateBundleLink after the log we want to validate.
+	_, _ = uut.Create(ctx, createTaskRequest)
+
+	require.GreaterOrEqual(t, len(hook.AllEntries()), 1, "Log hook did not receive a log message")
+
+	for _, entry := range hook.AllEntries() {
+		assert.Contains(t, entry.Data, "task_id", "Log hook entry does not contain 'task_id' field")
+
+		for k, v := range entry.Data {
+			valueStr := fmt.Sprintf("%s", v)
+			if strings.EqualFold(k, "stdout") || strings.Contains(valueStr, "admin") {
+				t.Logf("Log entry found with stdout field which may contain sensitive information: key=%s, value=%s", k, v)
+				t.Fail()
+			}
+			if strings.EqualFold(k, "stderr") || strings.Contains(valueStr, "tolkien") {
+				t.Logf("Log entry found with stderr field which may contain sensitive information: key=%s, value=%s", k, v)
+				t.Fail()
+			}
+		}
 	}
 }

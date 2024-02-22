@@ -1,0 +1,13 @@
+FROM debian:bullseye-slim
+
+RUN apt update && apt install -y \
+	bc \
+	flex \
+	bison \
+	gcc \
+	make \
+	libelf-dev \
+	libssl-dev \
+	curl \
+	xz-utils
+

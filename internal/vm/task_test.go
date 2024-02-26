@@ -23,7 +23,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/containerd/containerd/runtime/v2/task"
 	taskAPI "github.com/containerd/containerd/runtime/v2/task"
 	"github.com/gogo/protobuf/types"
 	"github.com/sirupsen/logrus"
@@ -32,7 +31,7 @@ import (
 )
 
 type mockTaskService struct {
-	task.TaskService
+	taskAPI.TaskService
 
 	// map of taskID to chan *taskAPI.CreateTaskRequest holding each Create request for that taskID
 	createRequests sync.Map

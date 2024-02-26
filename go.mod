@@ -2,6 +2,8 @@ module github.com/firecracker-microvm/firecracker-containerd
 
 go 1.17
 
+replace github.com/firecracker-microvm/firecracker-go-sdk => github.com/vhive-serverless/firecracker-go-sdk v0.0.0-20230910093528-55ab6c76ad40
+
 require (
 	github.com/awslabs/tc-redirect-tap v0.0.0-20211025175357-e30dfca224c2
 	github.com/containerd/containerd v1.6.20
@@ -10,7 +12,7 @@ require (
 	github.com/containerd/go-runc v1.0.0
 	github.com/containerd/ttrpc v1.1.2
 	github.com/containerd/typeurl v1.0.2
-	github.com/containernetworking/cni v1.1.1
+	github.com/containernetworking/cni v1.1.2
 	github.com/containernetworking/plugins v1.1.1
 	github.com/firecracker-microvm/firecracker-go-sdk v0.22.1-0.20220427214706-47505a9cf951
 	github.com/gofrs/uuid v3.3.0+incompatible
@@ -24,12 +26,12 @@ require (
 	github.com/opencontainers/runtime-spec v1.0.3-0.20210910115017-0d6cc581aeea
 	github.com/pelletier/go-toml v1.9.5
 	github.com/shirou/gopsutil v2.18.12+incompatible
-	github.com/sirupsen/logrus v1.8.1
+	github.com/sirupsen/logrus v1.9.0
 	github.com/stretchr/testify v1.8.1
 	github.com/vishvananda/netlink v1.1.1-0.20210330154013-f5de75959ad5
 	go.uber.org/goleak v1.1.12
 	golang.org/x/sync v0.1.0
-	golang.org/x/sys v0.6.0
+	golang.org/x/sys v0.10.0
 	google.golang.org/genproto v0.0.0-20220617124728-180714bec0ad // indirect
 	google.golang.org/grpc v1.47.0
 )
@@ -64,16 +66,15 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.2.4 // indirect
 	github.com/go-openapi/analysis v0.21.2 // indirect
-	github.com/go-openapi/errors v0.20.2 // indirect
+	github.com/go-openapi/errors v0.20.3 // indirect
 	github.com/go-openapi/jsonpointer v0.19.5 // indirect
 	github.com/go-openapi/jsonreference v0.19.6 // indirect
 	github.com/go-openapi/loads v0.21.1 // indirect
-	github.com/go-openapi/runtime v0.23.3 // indirect
+	github.com/go-openapi/runtime v0.24.0 // indirect
 	github.com/go-openapi/spec v0.20.4 // indirect
-	github.com/go-openapi/strfmt v0.21.2 // indirect
+	github.com/go-openapi/strfmt v0.21.3 // indirect
 	github.com/go-openapi/swag v0.21.1 // indirect
-	github.com/go-openapi/validate v0.21.0 // indirect
-	github.com/go-stack/stack v1.8.1 // indirect
+	github.com/go-openapi/validate v0.22.0 // indirect
 	github.com/godbus/dbus/v5 v5.0.6 // indirect
 	github.com/gogo/googleapis v1.4.1 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
@@ -119,17 +120,17 @@ require (
 	github.com/urfave/cli v1.22.2 // indirect
 	github.com/vishvananda/netns v0.0.0-20210104183010-2eb08e3e575f // indirect
 	go.etcd.io/bbolt v1.3.6 // indirect
-	go.mongodb.org/mongo-driver v1.8.3 // indirect
+	go.mongodb.org/mongo-driver v1.10.0 // indirect
 	go.mozilla.org/pkcs7 v0.0.0-20200128120323-432b2356ecb1 // indirect
 	go.opencensus.io v0.23.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.28.0 // indirect
 	go.opentelemetry.io/otel v1.3.0 // indirect
 	go.opentelemetry.io/otel/trace v1.3.0 // indirect
-	golang.org/x/crypto v0.0.0-20220315160706-3147a52a75dd // indirect
-	golang.org/x/net v0.8.0 // indirect
+	golang.org/x/crypto v0.11.0 // indirect
+	golang.org/x/net v0.12.0 // indirect
 	golang.org/x/oauth2 v0.0.0-20210819190943-2bc19b11175f // indirect
-	golang.org/x/term v0.6.0 // indirect
-	golang.org/x/text v0.8.0 // indirect
+	golang.org/x/term v0.10.0 // indirect
+	golang.org/x/text v0.11.0 // indirect
 	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/protobuf v1.28.0 // indirect

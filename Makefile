@@ -56,7 +56,7 @@ ifeq ($(filter $(KERNEL_VERSION),$(KERNEL_VERSIONS)),)
 $(error "Kernel version $(KERNEL_VERSION) is not supported. Supported versions are $(KERNEL_VERSIONS)")
 endif
 
-KERNEL_CONFIG=tools/kernel-configs/microvm-kernel-$(host_arch)-$(KERNEL_VERSION).config
+KERNEL_CONFIG=$(abspath ./tools/kernel-configs/microvm-kernel-$(host_arch)-$(KERNEL_VERSION).config)
 # Copied from https://github.com/firecracker-microvm/firecracker/blob/v1.1.0/tools/devtool#L2082
 # This allows us to specify a kernel without the patch version, but still get the correct build path to reference the kernel binary
 KERNEL_FULL_VERSION=$(shell cat "$(KERNEL_CONFIG)" | grep -Po "^\# Linux\/$(kernel_config_pattern) (([0-9]+.)[0-9]+)" | cut -d ' ' -f 3)
@@ -345,8 +345,7 @@ $(FIRECRACKER_DIR)/Cargo.toml:
 	git submodule update --init --recursive $(FIRECRACKER_DIR)
 
 $(FIRECRACKER_BIN): $(FIRECRACKER_DIR)/Cargo.toml
-	$(FIRECRACKER_DIR)/tools/devtool -y build --release && \
-		$(FIRECRACKER_DIR)/tools/devtool -y strip
+	$(FIRECRACKER_DIR)/tools/devtool -y build --release
 	cp $(FIRECRACKER_DIR)/build/cargo_target/$(FIRECRACKER_TARGET)/release/firecracker $@
 
 .PHONY: firecracker-clean
@@ -359,6 +358,7 @@ firecracker-clean:
 kernel: $(KERNEL_BIN)
 
 $(KERNEL_BIN): $(KERNEL_CONFIG)
+	cp $(KERNEL_CONFIG) $(FIRECRACKER_DIR)
 	$(FIRECRACKER_DIR)/tools/devtool -y build_kernel --config $(KERNEL_CONFIG)
 
 .PHONY: install-kernel

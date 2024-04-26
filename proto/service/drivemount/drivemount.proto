@@ -2,7 +2,7 @@ syntax = "proto3";
 
 import "google/protobuf/empty.proto";
 
-option go_package = "drivemount";
+option go_package = ".;drivemount";
 
 service DriveMounter {
     rpc MountDrive(MountDriveRequest) returns (google.protobuf.Empty);

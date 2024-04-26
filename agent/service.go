@@ -22,14 +22,14 @@ import (
 	"strconv"
 	"sync"
 
+	taskAPI "github.com/containerd/containerd/api/runtime/task/v2"
 	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/identifiers"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/mount"
+	"github.com/containerd/containerd/protobuf/types"
 	runc "github.com/containerd/containerd/runtime/v2/runc/v2"
 	"github.com/containerd/containerd/runtime/v2/shim"
-	taskAPI "github.com/containerd/containerd/runtime/v2/task"
-	"github.com/gogo/protobuf/types"
 	"github.com/hashicorp/go-multierror"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
@@ -121,7 +121,7 @@ func logPanicAndDie(logger *logrus.Entry) {
 func unmarshalExtraData(marshalled *types.Any) (*proto.ExtraData, error) {
 	// get json bytes from task request
 	extraData := &proto.ExtraData{}
-	err := types.UnmarshalAny(marshalled, extraData)
+	err := marshalled.UnmarshalTo(extraData)
 	if err != nil {
 		return nil, err
 	}

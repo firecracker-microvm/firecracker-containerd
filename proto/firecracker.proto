@@ -2,7 +2,7 @@ syntax = "proto3";
 
 import "types.proto";
 
-option go_package = "proto";
+option go_package = ".;proto";
 
 // CreateVMRequest specifies creation parameters for a new FC instance
 message CreateVMRequest {

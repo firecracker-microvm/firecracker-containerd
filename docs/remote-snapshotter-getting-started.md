@@ -16,7 +16,7 @@ You will need the following to use firecracker-containerd with support for remot
 
 * git
 
-* Go 1.17 or later
+* Go 1.21 or later
 
 * This repository cloned onto your local machine
 

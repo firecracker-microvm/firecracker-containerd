@@ -1,6 +1,6 @@
 module github.com/firecracker-microvm/firecracker-containerd/docker-credential-mmds
 
-go 1.17
+go 1.21
 
 require (
 	github.com/docker/docker-credential-helpers v0.6.4

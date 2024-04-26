@@ -2,7 +2,7 @@ syntax = "proto3";
 
 import "google/protobuf/empty.proto";
 
-option go_package = "ioproxy";
+option go_package = ".;ioproxy";
 
 service IOProxy {
      rpc State(StateRequest) returns (StateResponse);

@@ -33,21 +33,22 @@ import (
 	// secure randomness
 	"math/rand" // #nosec
 
+	taskAPI "github.com/containerd/containerd/api/runtime/task/v2"
 	"github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/events/exchange"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/pkg/ttrpcutil"
+	"github.com/containerd/containerd/protobuf"
+	"github.com/containerd/containerd/protobuf/types"
 	"github.com/containerd/containerd/runtime/v2/shim"
-	taskAPI "github.com/containerd/containerd/runtime/v2/task"
 	"github.com/containerd/fifo"
 	"github.com/containerd/ttrpc"
 	"github.com/firecracker-microvm/firecracker-go-sdk"
 	"github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 	"github.com/firecracker-microvm/firecracker-go-sdk/vsock"
 	"github.com/gofrs/uuid"
-	"github.com/gogo/protobuf/types"
 	"github.com/hashicorp/go-multierror"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
@@ -1204,7 +1205,7 @@ func (s *service) Create(requestCtx context.Context, request *taskAPI.CreateTask
 		return nil, err
 	}
 
-	request.Options, err = types.MarshalAny(extraData)
+	request.Options, err = protobuf.MarshalAnyToProto(extraData)
 	if err != nil {
 		err = fmt.Errorf("failed to marshal extra data: %w", err)
 		logger.WithError(err).Error()
@@ -1339,7 +1340,7 @@ func (s *service) Exec(requestCtx context.Context, req *taskAPI.ExecProcessReque
 		return nil, err
 	}
 
-	req.Spec, err = types.MarshalAny(extraData)
+	req.Spec, err = protobuf.MarshalAnyToProto(extraData)
 	if err != nil {
 		err = fmt.Errorf("failed to marshal extra data: %w", err)
 		logger.WithError(err).Error()
@@ -1407,7 +1408,7 @@ func (s *service) State(requestCtx context.Context, req *taskAPI.StateRequest) (
 	host := s.fifos[req.ID][req.ExecID]
 	defer s.fifosMu.Unlock()
 
-	if resp.Status != task.StatusRunning {
+	if resp.Status != task.Status_RUNNING {
 		logger.Debug("task is no longer running")
 		return resp, nil
 	}
@@ -1742,7 +1743,7 @@ func (s *service) Cleanup(requestCtx context.Context) (*taskAPI.DeleteResponse, 
 	// Destroy VM/etc here?
 	// copied from runcs impl, nothing to cleanup atm
 	return &taskAPI.DeleteResponse{
-		ExitedAt:   time.Now(),
+		ExitedAt:   protobuf.ToTimestamp(time.Now()),
 		ExitStatus: 128 + uint32(unix.SIGKILL),
 	}, nil
 }

@@ -25,7 +25,15 @@ import (
 	_ "github.com/containerd/containerd/diff/walking/plugin"
 	_ "github.com/containerd/containerd/events/plugin"
 	_ "github.com/containerd/containerd/gc/scheduler"
+	_ "github.com/containerd/containerd/leases/plugin"
+	_ "github.com/containerd/containerd/metadata/plugin"
+	_ "github.com/containerd/containerd/pkg/hasher"
+	_ "github.com/containerd/containerd/pkg/nri/plugin"
+	_ "github.com/containerd/containerd/plugins/sandbox"
+	_ "github.com/containerd/containerd/plugins/streaming"
+	_ "github.com/containerd/containerd/plugins/transfer"
 	_ "github.com/containerd/containerd/runtime/restart/monitor"
+	_ "github.com/containerd/containerd/runtime/v2"
 	_ "github.com/containerd/containerd/services/containers"
 	_ "github.com/containerd/containerd/services/content"
 	_ "github.com/containerd/containerd/services/diff"
@@ -36,15 +44,19 @@ import (
 	_ "github.com/containerd/containerd/services/leases"
 	_ "github.com/containerd/containerd/services/namespaces"
 	_ "github.com/containerd/containerd/services/opt"
+	_ "github.com/containerd/containerd/services/sandbox"
 	_ "github.com/containerd/containerd/services/snapshots"
+	_ "github.com/containerd/containerd/services/streaming"
 	_ "github.com/containerd/containerd/services/tasks"
+	_ "github.com/containerd/containerd/services/transfer"
 	_ "github.com/containerd/containerd/services/version"
+	_ "github.com/containerd/containerd/services/warning"
 
 	// Linux specific builtins
 	// See https://github.com/containerd/containerd/blob/main/cmd/containerd/builtins_linux.go
 	_ "github.com/containerd/containerd/metrics/cgroups"
+	_ "github.com/containerd/containerd/metrics/cgroups/v2"
 	_ "github.com/containerd/containerd/runtime/v1/linux"
-	_ "github.com/containerd/containerd/runtime/v2"
 	_ "github.com/containerd/containerd/runtime/v2/runc/options"
 
 	// Snapshotters

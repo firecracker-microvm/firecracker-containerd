@@ -40,7 +40,7 @@ import (
 	"github.com/containerd/containerd/oci"
 	"github.com/containerd/containerd/runtime"
 	"github.com/containerd/go-runc"
-	"github.com/containerd/typeurl"
+	"github.com/containerd/typeurl/v2"
 	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/shirou/gopsutil/process"

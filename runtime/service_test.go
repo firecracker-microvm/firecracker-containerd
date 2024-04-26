@@ -21,8 +21,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/containerd/containerd/api/runtime/task/v2"
 	"github.com/containerd/containerd/namespaces"
-	"github.com/containerd/containerd/runtime/v2/task"
 	"github.com/firecracker-microvm/firecracker-go-sdk"
 	models "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 	"github.com/sirupsen/logrus"

@@ -23,7 +23,8 @@ import (
 	eventtypes "github.com/containerd/containerd/events"
 	"github.com/containerd/containerd/events/exchange"
 	"github.com/containerd/containerd/namespaces"
-	"github.com/containerd/typeurl"
+	"github.com/containerd/containerd/protobuf"
+	"github.com/containerd/typeurl/v2"
 	"github.com/stretchr/testify/require"
 )
 
@@ -84,7 +85,7 @@ func verifyPublishAndReceive(ctx context.Context, t *testing.T, source eventtype
 			ID:          fmt.Sprintf("id-%d", i),
 			Pid:         uint32(i),
 			ExitStatus:  uint32(i + 1),
-			ExitedAt:    time.Now().UTC(),
+			ExitedAt:    protobuf.ToTimestamp(time.Now().UTC()),
 		}
 
 		err := source.Publish(ctx, topic, taskExitEvent)
@@ -108,7 +109,7 @@ func verifyPublishAndReceive(ctx context.Context, t *testing.T, source eventtype
 				require.Equal(t, taskExitEvent.ID, receivedTaskExitEvent.ID, "received expected ID")
 				require.Equal(t, taskExitEvent.Pid, receivedTaskExitEvent.Pid, "received expected Pid")
 				require.Equal(t, taskExitEvent.ExitStatus, receivedTaskExitEvent.ExitStatus, "received expected ExitStatus")
-				require.Equal(t, taskExitEvent.ExitedAt, receivedTaskExitEvent.ExitedAt, "received expected ExitedAt")
+				require.Equal(t, taskExitEvent.ExitedAt.AsTime(), receivedTaskExitEvent.ExitedAt.AsTime(), "received expected ExitedAt")
 			default:
 				require.Fail(t, "unexpected event", "received unexpected event type on topic %s", envelope.Topic)
 			}

@@ -4,7 +4,7 @@ import "google/protobuf/empty.proto";
 
 import "firecracker.proto";
 
-option go_package = "fccontrol";
+option go_package = ".;fccontrol";
 
 service Firecracker {
     // Runs new Firecracker VM instance

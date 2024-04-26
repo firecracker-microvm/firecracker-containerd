@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:experimental
 # Test image that starts up containerd and the devmapper snapshotter. The default CMD will drop to a bash shell. Overrides
 # to CMD will be provided appended to /bin/bash -c
-FROM golang:1.17-bullseye
+FROM golang:1.21-bullseye
 ENV PATH="/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin:/usr/local/sbin:/usr/local/go/bin"
 ENV INSTALLROOT="/usr/local"
 ENV DEBIAN_FRONTEND="noninteractive"
@@ -31,7 +31,7 @@ RUN mkdir -p \
   /etc/cni/net.d
 
 # Install containerd to have runc shim.
-ENV CTRD_VERSION="1.6.8"
+ENV CTRD_VERSION="1.7.16"
 RUN ARCH=`go env GOARCH` && \
 	wget --quiet -O- https://github.com/containerd/containerd/releases/download/v$CTRD_VERSION/containerd-$CTRD_VERSION-linux-${ARCH}.tar.gz | tar zxf - -C /tmp/ && \
   install -D -o root -g root -m755 -t /usr/local/bin /tmp/bin/containerd-shim-runc-v2 && \

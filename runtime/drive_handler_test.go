@@ -21,13 +21,13 @@ import (
 	"testing"
 
 	"github.com/containerd/containerd/log"
+	"github.com/containerd/containerd/protobuf/types"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	drivemount "github.com/firecracker-microvm/firecracker-containerd/proto/service/drivemount/ttrpc"
 	firecracker "github.com/firecracker-microvm/firecracker-go-sdk"
 	ops "github.com/firecracker-microvm/firecracker-go-sdk/client/operations"
 	"github.com/firecracker-microvm/firecracker-go-sdk/fctesting"
-	"github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

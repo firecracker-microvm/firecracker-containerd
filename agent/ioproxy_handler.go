@@ -16,11 +16,11 @@ package main
 import (
 	"context"
 
+	task "github.com/containerd/containerd/api/runtime/task/v2"
 	"github.com/containerd/containerd/log"
-	"github.com/containerd/containerd/runtime/v2/task"
+	"github.com/containerd/containerd/protobuf/types"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
 	ioproxy "github.com/firecracker-microvm/firecracker-containerd/proto/service/ioproxy/ttrpc"
-	"github.com/gogo/protobuf/types"
 )
 
 // ioProxyHandler implements IOProxyService that exposes the state of

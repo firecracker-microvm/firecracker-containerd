@@ -23,7 +23,7 @@ import (
 	"testing"
 	"time"
 
-	args "github.com/awslabs/tc-redirect-tap/cmd/tc-redirect-tap/args"
+	"github.com/awslabs/tc-redirect-tap/cmd/tc-redirect-tap/args"
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/oci"
@@ -139,6 +139,9 @@ func TestCNISupport_Isolated(t *testing.T) {
 			stdout := startAndWaitTask(ctx, t, newContainer)
 			t.Logf("stdout output from task %q: %s", containerName, stdout)
 			assert.Equalf(t, webpages[vmID], stdout, "container %q did not emit expected stdout", containerName)
+
+			_ = newContainer.Delete(ctx)
+			_, _ = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID, TimeoutSeconds: 5})
 		}(vmID)
 	}
 
@@ -205,6 +208,8 @@ func TestAutomaticCNISupport_Isolated(t *testing.T) {
 			stdout := startAndWaitTask(ctx, t, newContainer)
 			t.Logf("stdout output from task %q: %s", taskID, stdout)
 			assert.Equalf(t, webpages[taskID], stdout, "container %q did not emit expected stdout", taskID)
+
+			_ = newContainer.Delete(ctx)
 		}(taskID)
 	}
 

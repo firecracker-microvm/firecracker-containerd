@@ -28,7 +28,7 @@ SUBMODULES=_submodules
 UID:=$(shell id -u)
 GID:=$(shell id -g)
 
-FIRECRACKER_CONTAINERD_BUILDER_IMAGE?=golang:1.17-bullseye
+FIRECRACKER_CONTAINERD_BUILDER_IMAGE?=golang:1.21-bullseye
 export FIRECRACKER_CONTAINERD_TEST_IMAGE?=localhost/firecracker-containerd-test
 export GO_CACHE_VOLUME_NAME?=gocache
 
@@ -136,14 +136,14 @@ tidy:
 	./tools/tidy.sh
 
 $(BINPATH)/golangci-lint:
-	curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b $(BINPATH) v1.48.0
+	GOBIN=$(BINPATH) go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.57.2
 	$(BINPATH)/golangci-lint --version
 
 $(BINPATH)/git-validation:
-	GOBIN=$(BINPATH) GO111MODULE=off go get -u github.com/vbatts/git-validation
+	GOBIN=$(BINPATH) go install github.com/vbatts/git-validation@v1.2.0
 
 $(BINPATH)/ltag:
-	GOBIN=$(BINPATH) GO111MODULE=off go get -u github.com/kunalkushwaha/ltag
+	GOBIN=$(BINPATH) go install github.com/kunalkushwaha/ltag@v0.2.5
 
 install:
 	for d in $(SUBDIRS); do $(MAKE) -C $$d install; done
@@ -273,23 +273,23 @@ $(CNI_BIN_ROOT):
 
 BRIDGE_BIN?=$(BINPATH)/bridge
 $(BRIDGE_BIN):
-	GOBIN=$(dir $@) GO111MODULE=off go get -u github.com/containernetworking/plugins/plugins/main/bridge
+	GOBIN=$(dir $@) go install github.com/containernetworking/plugins/plugins/main/bridge@v1.1.0
 
 PTP_BIN?=$(BINPATH)/ptp
 $(PTP_BIN):
-	GOBIN=$(dir $@) GO111MODULE=off go get -u github.com/containernetworking/plugins/plugins/main/ptp
+	GOBIN=$(dir $@) go install github.com/containernetworking/plugins/plugins/main/ptp@v1.1.0
 
 HOSTLOCAL_BIN?=$(BINPATH)/host-local
 $(HOSTLOCAL_BIN):
-	GOBIN=$(dir $@) GO111MODULE=off go get -u github.com/containernetworking/plugins/plugins/ipam/host-local
+	GOBIN=$(dir $@) go install github.com/containernetworking/plugins/plugins/ipam/host-local@v1.1.0
 
 FIREWALL_BIN?=$(BINPATH)/firewall
 $(FIREWALL_BIN):
-	GOBIN=$(dir $@) GO111MODULE=off go get -u github.com/containernetworking/plugins/plugins/meta/firewall
+	GOBIN=$(dir $@) go install github.com/containernetworking/plugins/plugins/meta/firewall@v1.1.0
 
 TC_REDIRECT_TAP_BIN?=$(BINPATH)/tc-redirect-tap
 $(TC_REDIRECT_TAP_BIN):
-	GOBIN=$(dir $@) go install github.com/awslabs/tc-redirect-tap/cmd/tc-redirect-tap
+	GOBIN=$(dir $@) go install github.com/awslabs/tc-redirect-tap/cmd/tc-redirect-tap@v0.0.0-20211025175357-e30dfca224c2
 
 TEST_BRIDGED_TAP_BIN?=$(BINPATH)/test-bridged-tap
 $(TEST_BRIDGED_TAP_BIN): $(shell find internal/cmd/test-bridged-tap -name *.go) $(GOMOD) $(GOSUM)
@@ -297,7 +297,7 @@ $(TEST_BRIDGED_TAP_BIN): $(shell find internal/cmd/test-bridged-tap -name *.go) 
 
 LOOPBACK_BIN?=$(BINPATH)/loopback
 $(LOOPBACK_BIN):
-	GOBIN=$(dir $@) GO111MODULE=off go get -u github.com/containernetworking/plugins/plugins/main/loopback
+	GOBIN=$(dir $@) go install github.com/containernetworking/plugins/plugins/main/loopback@v1.1.0
 
 .PHONY: cni-bins
 cni-bins: $(BRIDGE_BIN) $(PTP_BIN) $(HOSTLOCAL_BIN) $(FIREWALL_BIN) $(TC_REDIRECT_TAP_BIN) $(LOOPBACK_BIN)

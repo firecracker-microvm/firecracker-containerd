@@ -19,8 +19,8 @@ import (
 	"sync"
 	"time"
 
-	taskAPI "github.com/containerd/containerd/runtime/v2/task"
-	"github.com/gogo/protobuf/types"
+	taskAPI "github.com/containerd/containerd/api/runtime/task/v2"
+	"github.com/containerd/containerd/protobuf/types"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

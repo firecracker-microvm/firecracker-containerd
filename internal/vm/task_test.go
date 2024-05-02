@@ -23,16 +23,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/containerd/containerd/runtime/v2/task"
-	taskAPI "github.com/containerd/containerd/runtime/v2/task"
-	"github.com/gogo/protobuf/types"
+	taskAPI "github.com/containerd/containerd/api/runtime/task/v2"
+	"github.com/containerd/containerd/protobuf"
+	"github.com/containerd/containerd/protobuf/types"
 	"github.com/sirupsen/logrus"
 	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/require"
 )
 
 type mockTaskService struct {
-	task.TaskService
+	taskAPI.TaskService
 
 	// map of taskID to chan *taskAPI.CreateTaskRequest holding each Create request for that taskID
 	createRequests sync.Map
@@ -133,7 +133,7 @@ func (s *mockTaskService) Wait(reqCtx context.Context, req *taskAPI.WaitRequest)
 
 	return &taskAPI.WaitResponse{
 		ExitStatus: 0,
-		ExitedAt:   time.Now(),
+		ExitedAt:   protobuf.ToTimestamp(time.Now()),
 	}, nil
 }
 

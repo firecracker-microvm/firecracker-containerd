@@ -1,9 +1,8 @@
 syntax = "proto3";
 
 import "google/protobuf/any.proto";
-//import weak "gogoproto/gogo.proto";
 
-option go_package = "proto";
+option go_package = ".;proto";
 // Message to store bundle/config.json bytes
 message ExtraData {
 	bytes JsonSpec = 1;

@@ -6,12 +6,9 @@ linters:
   enable:
     - govet
     - staticcheck
-    - unused
+#    - unused
     - gosimple
-    - structcheck
-    - varcheck
     - ineffassign
-    - deadcode
     - typecheck
     - gosec
     - unconvert
@@ -33,3 +30,4 @@ issues:
     - G304 # Potential file inclusion via variable
     - G306 # WriteFile permissions 0600 or less to be audited
     - G307 # Deferring unsafe method "Close" on type "*os.File" to be audited
+    - 

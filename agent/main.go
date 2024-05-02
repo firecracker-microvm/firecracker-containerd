@@ -21,10 +21,10 @@ import (
 	"os/signal"
 	"syscall"
 
+	taskAPI "github.com/containerd/containerd/api/runtime/task/v2"
 	"github.com/containerd/containerd/events/exchange"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/namespaces"
-	taskAPI "github.com/containerd/containerd/runtime/v2/task"
 	"github.com/containerd/containerd/sys/reaper"
 	"github.com/containerd/ttrpc"
 	"github.com/firecracker-microvm/firecracker-go-sdk/vsock"

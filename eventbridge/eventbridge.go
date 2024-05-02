@@ -18,15 +18,16 @@ import (
 	// We need the typeurl register calls that occur in the init of this package in order to be able to unmarshal events
 	// in the Republish func below
 	_ "github.com/containerd/containerd/api/events"
+	"github.com/containerd/containerd/protobuf"
 
 	// Even though we are following the v2 runtime model, we are currently re-using a struct definition (Envelope) from
 	// the v1 event API
 	eventapi "github.com/containerd/containerd/api/services/events/v1"
 
 	"github.com/containerd/containerd/events"
+	"github.com/containerd/containerd/protobuf/types"
 	"github.com/containerd/ttrpc"
-	"github.com/containerd/typeurl"
-	"github.com/gogo/protobuf/types"
+	"github.com/containerd/typeurl/v2"
 )
 
 const (
@@ -67,10 +68,10 @@ func (s *getterService) GetEvent(ctx context.Context) (*eventapi.Envelope, error
 	select {
 	case receivedEnvelope := <-s.eventChan:
 		return &eventapi.Envelope{
-			Timestamp: receivedEnvelope.Timestamp,
+			Timestamp: protobuf.ToTimestamp(receivedEnvelope.Timestamp),
 			Namespace: receivedEnvelope.Namespace,
 			Topic:     receivedEnvelope.Topic,
-			Event:     receivedEnvelope.Event,
+			Event:     protobuf.FromAny(receivedEnvelope.Event),
 		}, nil
 	case err := <-s.errChan:
 		// containerd's eventExchange will return a nil error if context is canceled, so if context is canceled and
@@ -141,7 +142,7 @@ func Attach(ctx context.Context, source Getter, sink events.Forwarder) <-chan er
 				}
 
 				err = sink.Forward(ctx, &events.Envelope{
-					Timestamp: envelope.Timestamp,
+					Timestamp: protobuf.FromTimestamp(envelope.Timestamp),
 					Namespace: envelope.Namespace,
 					Topic:     envelope.Topic,
 					Event:     envelope.Event,

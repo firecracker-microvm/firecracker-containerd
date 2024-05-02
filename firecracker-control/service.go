@@ -19,8 +19,8 @@ import (
 
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/plugin"
+	"github.com/containerd/containerd/protobuf/types"
 	"github.com/containerd/ttrpc"
-	"github.com/gogo/protobuf/types"
 
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	fccontrol "github.com/firecracker-microvm/firecracker-containerd/proto/service/fccontrol/ttrpc"

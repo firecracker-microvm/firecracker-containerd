@@ -1,5 +1,7 @@
 syntax = "proto3";
 
+option go_package = ".;proto";
+
 message VMStart {
     string VMID = 1;
 }

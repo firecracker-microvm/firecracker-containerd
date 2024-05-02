@@ -17,7 +17,10 @@ PROTO_GEN_SRC_TTRPC := $(addprefix ttrpc/,$(PROTO_GEN_SRC))
 
 $(PROTO_GEN_SRC_TTRPC): $(PROTO_SRC)
 	protoc -I. -I$(PROTOPATH)\
-		--gogottrpc_out=plugins=ttrpc,Mgoogle/protobuf/empty.proto=github.com/gogo/protobuf/types:ttrpc \
+		--go_out=:ttrpc \
+		$^
+	protoc -I. -I$(PROTOPATH)\
+		--go-ttrpc_out=:ttrpc \
 		$^
 
 

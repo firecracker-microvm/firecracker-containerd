@@ -18,8 +18,8 @@ import (
 )
 
 // isRetryableMountError will check to see if the error passed in is an
-// syscall.EINVAL
+// syscall.EINVAL or syscall.ENOMEM
 func isRetryableMountError(err error) bool {
 	errno, ok := err.(syscall.Errno)
-	return ok && errno == syscall.EINVAL
+	return ok && (errno == syscall.EINVAL || errno == syscall.ENOMEM)
 }

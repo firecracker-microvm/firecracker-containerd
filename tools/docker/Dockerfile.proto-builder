@@ -14,8 +14,8 @@
 FROM golang:1.21-bullseye
 
 RUN apt-get update && apt-get install --yes --no-install-recommends \
-	libprotobuf-dev \
-	protobuf-compiler \
+	libprotobuf-dev=3.12.4-1+deb11u1 \
+	protobuf-compiler=3.12.4-1+deb11u1 \
 	&& go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.33 \
 	&& go install github.com/containerd/ttrpc/cmd/protoc-gen-go-ttrpc@v1.2.3 \
 	&& mkdir /protobuf

@@ -38,6 +38,11 @@ func TestIsRetryableMountError(t *testing.T) {
 			Expected: true,
 		},
 		{
+			Name:     "syscall.Errno ENOMEM case",
+			Error:    syscall.ENOMEM,
+			Expected: true,
+		},
+		{
 			Name:     "syscall.Errno ENOENT case",
 			Error:    syscall.ENOENT,
 			Expected: false,

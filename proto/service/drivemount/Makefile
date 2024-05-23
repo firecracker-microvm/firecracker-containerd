@@ -17,7 +17,7 @@ PROTO_GEN_SRC_TTRPC := $(addprefix ttrpc/,$(PROTO_GEN_SRC))
 
 $(PROTO_GEN_SRC_TTRPC): $(PROTO_SRC)
 	protoc -I. -I$(PROTOPATH)\
-		--go-out=:ttrpc \
+		--go_out=:ttrpc \
 		$^
 	protoc -I. -I$(PROTOPATH)\
 		--go-ttrpc_out=:ttrpc \

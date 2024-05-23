@@ -5,12 +5,12 @@ package drivemount
 import (
 	context "context"
 	ttrpc "github.com/containerd/ttrpc"
-	emptypb "google.golang.org/protobuf/types/known/emptypb"
+	empty "github.com/golang/protobuf/ptypes/empty"
 )
 
 type DriveMounterService interface {
-	MountDrive(context.Context, *MountDriveRequest) (*emptypb.Empty, error)
-	UnmountDrive(context.Context, *UnmountDriveRequest) (*emptypb.Empty, error)
+	MountDrive(context.Context, *MountDriveRequest) (*empty.Empty, error)
+	UnmountDrive(context.Context, *UnmountDriveRequest) (*empty.Empty, error)
 }
 
 func RegisterDriveMounterService(srv *ttrpc.Server, svc DriveMounterService) {
@@ -44,16 +44,16 @@ func NewDriveMounterClient(client *ttrpc.Client) DriveMounterService {
 	}
 }
 
-func (c *drivemounterClient) MountDrive(ctx context.Context, req *MountDriveRequest) (*emptypb.Empty, error) {
-	var resp emptypb.Empty
+func (c *drivemounterClient) MountDrive(ctx context.Context, req *MountDriveRequest) (*empty.Empty, error) {
+	var resp empty.Empty
 	if err := c.client.Call(ctx, "DriveMounter", "MountDrive", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
 }
 
-func (c *drivemounterClient) UnmountDrive(ctx context.Context, req *UnmountDriveRequest) (*emptypb.Empty, error) {
-	var resp emptypb.Empty
+func (c *drivemounterClient) UnmountDrive(ctx context.Context, req *UnmountDriveRequest) (*empty.Empty, error) {
+	var resp empty.Empty
 	if err := c.client.Call(ctx, "DriveMounter", "UnmountDrive", req, &resp); err != nil {
 		return nil, err
 	}

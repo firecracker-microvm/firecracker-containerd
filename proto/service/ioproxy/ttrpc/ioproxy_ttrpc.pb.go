@@ -5,12 +5,12 @@ package ioproxy
 import (
 	context "context"
 	ttrpc "github.com/containerd/ttrpc"
-	emptypb "google.golang.org/protobuf/types/known/emptypb"
+	empty "github.com/golang/protobuf/ptypes/empty"
 )
 
 type IOProxyService interface {
 	State(context.Context, *StateRequest) (*StateResponse, error)
-	Attach(context.Context, *AttachRequest) (*emptypb.Empty, error)
+	Attach(context.Context, *AttachRequest) (*empty.Empty, error)
 }
 
 func RegisterIOProxyService(srv *ttrpc.Server, svc IOProxyService) {
@@ -52,8 +52,8 @@ func (c *ioproxyClient) State(ctx context.Context, req *StateRequest) (*StateRes
 	return &resp, nil
 }
 
-func (c *ioproxyClient) Attach(ctx context.Context, req *AttachRequest) (*emptypb.Empty, error) {
-	var resp emptypb.Empty
+func (c *ioproxyClient) Attach(ctx context.Context, req *AttachRequest) (*empty.Empty, error) {
+	var resp empty.Empty
 	if err := c.client.Call(ctx, "IOProxy", "Attach", req, &resp); err != nil {
 		return nil, err
 	}

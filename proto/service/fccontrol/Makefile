@@ -17,10 +17,10 @@ PROTO_GEN_SRC_TTRPC := $(addprefix ttrpc/,$(PROTO_GEN_SRC))
 
 $(PROTO_GEN_SRC_TTRPC): $(PROTO_SRC)
 	protoc -I. -I$(PROTOPATH)\
-		--go_out=Mfirecracker.proto=github.com/firecracker-microvm/firecracker-containerd/proto:ttrpc \
+		--go_out=Mfirecracker.proto=github.com/firecracker-microvm/firecracker-containerd/proto,Mtypes.proto=github.com/firecracker-microvm/firecracker-containerd/proto:ttrpc \
 		$^
 	protoc -I. -I$(PROTOPATH)\
-		--go-ttrpc_out=Mfirecracker.proto=github.com/firecracker-microvm/firecracker-containerd/proto:ttrpc \
+		--go-ttrpc_out=Mfirecracker.proto=github.com/firecracker-microvm/firecracker-containerd/proto,Mtypes.proto=github.com/firecracker-microvm/firecracker-containerd/proto:ttrpc \
 		$^
 
 proto: $(PROTO_GEN_SRC_TTRPC)

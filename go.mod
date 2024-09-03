@@ -18,7 +18,7 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/miekg/dns v1.1.25
 	github.com/opencontainers/image-spec v1.1.0-rc3
-	github.com/opencontainers/runc v1.1.12
+	github.com/opencontainers/runc v1.1.14
 	github.com/opencontainers/runtime-spec v1.1.0
 	github.com/pelletier/go-toml v1.9.5
 	github.com/shirou/gopsutil v2.18.12+incompatible

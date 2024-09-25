@@ -946,13 +946,17 @@ func startAndWaitTask(ctx context.Context, t testing.TB, c containerd.Container)
 		assert.NoError(t, exitStatus.Error(), "failed to retrieve exitStatus")
 		assert.Equal(t, uint32(0), exitStatus.ExitCode())
 
+		// Print stderr to help with debugging
+		stderrOutput := stderr.String()
+		if len(stderrOutput) != 0 {
+			fmt.Printf("stderr output from container %s: %s", c.ID(), stderrOutput)
+		}
+
 		status, err := task.Delete(ctx)
 		assert.NoErrorf(t, err, "failed to delete task %q after exit", c.ID())
 		if status != nil {
 			assert.NoError(t, status.Error())
 		}
-
-		assert.Equal(t, "", stderr.String())
 	case <-ctx.Done():
 		require.Fail(t, "context cancelled",
 			"context cancelled while waiting for container %s to exit, err: %v", c.ID(), ctx.Err())

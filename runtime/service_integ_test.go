@@ -946,6 +946,9 @@ func startAndWaitTask(ctx context.Context, t testing.TB, c containerd.Container)
 		assert.NoError(t, exitStatus.Error(), "failed to retrieve exitStatus")
 		assert.Equal(t, uint32(0), exitStatus.ExitCode())
 
+		// Introduce some wait before deleting the task to allow for the data to be streamed
+		time.Sleep(5 * time.Second)
+
 		status, err := task.Delete(ctx)
 		assert.NoErrorf(t, err, "failed to delete task %q after exit", c.ID())
 		if status != nil {
@@ -2578,6 +2581,9 @@ func TestAttach_Isolated(t *testing.T) {
 			assert.NoError(t, err)
 
 			<-ch
+
+			// Introduce some wait before deleting the task
+			time.Sleep(5 * time.Second)
 
 			_, err = t2.Delete(ctx)
 			require.NoError(t, err)

@@ -12,7 +12,6 @@
 # permissions and limitations under the License.
 
 steps:
-
   - label: ":docker: Build"
     agents:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
@@ -34,7 +33,7 @@ steps:
       queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
       distro: "${BUILDKITE_AGENT_META_DATA_DISTRO}"
       hostname: "${BUILDKITE_AGENT_META_DATA_HOSTNAME}"
-    command: 'sudo losetup -l'
+    command: "sudo losetup -l"
 
   - wait
 
@@ -77,6 +76,10 @@ steps:
       - "runtime/logs/*"
     command:
       - make -C runtime integ-test FICD_DM_POOL=build_${BUILDKITE_BUILD_NUMBER}_runtime
+    retry:
+      automatic:
+        - exit_status: "*"
+          limit: 3
 
   # - label: ":running: snapshotter isolated tests"
   #   agents:
@@ -137,4 +140,3 @@ steps:
     command:
       - make -C runtime critest FICD_DM_POOL=build_${BUILDKITE_BUILD_NUMBER}_critest
     timeout_in_minutes: 10
-

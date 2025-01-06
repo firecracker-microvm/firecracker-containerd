@@ -16,7 +16,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"testing"
 
 	"github.com/containerd/containerd"
@@ -51,25 +50,28 @@ const (
 func TestLaunchContainerWithRemoteSnapshotter_Isolated(t *testing.T) {
 	integtest.Prepare(t, integtest.WithDefaultNetwork())
 
-	vmID := 0
-	err := launchContainerWithRemoteSnapshotterInVM(context.Background(), strconv.Itoa(vmID))
+	gen, err := integtest.NewVMIDGen()
+	require.NoError(t, err, "Failed to create a VMIDGen")
+	err = launchContainerWithRemoteSnapshotterInVM(context.Background(), gen.VMID(0))
 	require.NoError(t, err)
 }
 
 func TestLaunchMultipleContainersWithRemoteSnapshotter_Isolated(t *testing.T) {
 	integtest.Prepare(t, integtest.WithDefaultNetwork())
+	gen, err := integtest.NewVMIDGen()
+	require.NoError(t, err, "Failed to create a VMIDGen")
 
 	eg, ctx := errgroup.WithContext(context.Background())
 
 	numberOfVms := integtest.NumberOfVms
 	for vmID := 0; vmID < numberOfVms; vmID++ {
 		ctx := ctx
-		id := vmID
+		id := gen.VMID(vmID)
 		eg.Go(func() error {
-			return launchContainerWithRemoteSnapshotterInVM(ctx, strconv.Itoa(id))
+			return launchContainerWithRemoteSnapshotterInVM(ctx, id)
 		})
 	}
-	err := eg.Wait()
+	err = eg.Wait()
 	require.NoError(t, err)
 }
 

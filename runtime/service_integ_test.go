@@ -355,6 +355,9 @@ func testMultipleVMs(ctx context.Context, t *testing.T, count int) {
 		stopped int64
 	)
 
+	gen, err := integtest.NewVMIDGen()
+	require.NoError(t, err, "Failed to create a VMIDGen")
+
 	// This test spawns separate VMs in parallel and ensures containers are spawned within each expected VM. It asserts each
 	// container ends up in the right VM by assigning each VM a network device with a unique mac address and having each container
 	// print the mac address it sees inside its VM.
@@ -371,7 +374,7 @@ func testMultipleVMs(ctx context.Context, t *testing.T, count int) {
 
 			rootfsPath := cfg.RootDrive
 
-			vmIDStr := strconv.Itoa(vmID)
+			vmIDStr := gen.VMID(vmID)
 			req := &proto.CreateVMRequest{
 				KernelArgs: kernelArgs,
 				VMID:       vmIDStr,
@@ -426,6 +429,7 @@ func testMultipleVMs(ctx context.Context, t *testing.T, count int) {
 					return testMultipleExecs(
 						containerCtx,
 						vmID,
+						gen,
 						containerID,
 						client, image,
 						jailerConfig,
@@ -435,21 +439,21 @@ func testMultipleVMs(ctx context.Context, t *testing.T, count int) {
 			}
 
 			// verify duplicate CreateVM call fails with right error
-			_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{VMID: strconv.Itoa(vmID)})
+			_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{VMID: vmIDStr})
 			if err == nil {
 				return fmt.Errorf("creating the same VM must return an error")
 			}
 
 			// verify GetVMInfo returns expected data
-			vmInfoResp, err := fcClient.GetVMInfo(ctx, &proto.GetVMInfoRequest{VMID: strconv.Itoa(vmID)})
+			vmInfoResp, err := fcClient.GetVMInfo(ctx, &proto.GetVMInfoRequest{VMID: vmIDStr})
 			if err != nil {
 				return err
 			}
-			if vmInfoResp.VMID != strconv.Itoa(vmID) {
-				return fmt.Errorf("%q must be %q", vmInfoResp.VMID, strconv.Itoa(vmID))
+			if vmInfoResp.VMID != vmIDStr {
+				return fmt.Errorf("%q must be %q", vmInfoResp.VMID, vmIDStr)
 			}
 
-			nspVMid := defaultNamespace + "#" + strconv.Itoa(vmID)
+			nspVMid := defaultNamespace + "#" + vmIDStr
 			cfg, err := config.LoadConfig("")
 			if err != nil {
 				return err
@@ -465,7 +469,7 @@ func testMultipleVMs(ctx context.Context, t *testing.T, count int) {
 			// just verify that updating the metadata doesn't return an error, a separate test case is needed
 			// to very the MMDS update propagates to the container correctly
 			_, err = fcClient.SetVMMetadata(ctx, &proto.SetVMMetadataRequest{
-				VMID:     strconv.Itoa(vmID),
+				VMID:     vmIDStr,
 				Metadata: "{}",
 			})
 			if err != nil {
@@ -477,7 +481,7 @@ func testMultipleVMs(ctx context.Context, t *testing.T, count int) {
 				return fmt.Errorf("unexpected error from the containers in VM %d: %w", vmID, err)
 			}
 
-			_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: strconv.Itoa(vmID), TimeoutSeconds: 5})
+			_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmIDStr, TimeoutSeconds: 5})
 			atomic.AddInt64(&stopped, 1)
 			return err
 		}
@@ -515,13 +519,14 @@ loop:
 func testMultipleExecs(
 	ctx context.Context,
 	vmID int,
+	gen *integtest.VMIDGen,
 	containerID int,
 	client *containerd.Client,
 	image containerd.Image,
 	jailerConfig *proto.JailerConfig,
 	cgroupPath string,
 ) error {
-	vmIDStr := strconv.Itoa(vmID)
+	vmIDStr := gen.VMID(vmID)
 	testTimeout := 600 * time.Second
 
 	containerName := fmt.Sprintf("container-%d-%d", vmID, containerID)
@@ -826,6 +831,9 @@ func TestStubBlockDevices_Isolated(t *testing.T) {
 
 	const vmID = 0
 
+	gen, err := integtest.NewVMIDGen()
+	require.NoError(t, err, "failed to create VMIDGen")
+
 	ctx := namespaces.WithNamespace(context.Background(), "default")
 
 	client, err := containerd.New(integtest.ContainerdSockPath, containerd.WithDefaultRuntime(firecrackerRuntime))
@@ -846,7 +854,7 @@ func TestStubBlockDevices_Isolated(t *testing.T) {
 	require.NoError(t, err, "failed to create fccontrol client")
 
 	_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
-		VMID: strconv.Itoa(vmID),
+		VMID: gen.VMID(vmID),
 		NetworkInterfaces: []*proto.FirecrackerNetworkInterface{
 			{
 				AllowMMDS: true,
@@ -865,7 +873,7 @@ func TestStubBlockDevices_Isolated(t *testing.T) {
 		containerd.WithSnapshotter(defaultSnapshotterName),
 		containerd.WithNewSnapshot(snapshotName, image),
 		containerd.WithNewSpec(
-			firecrackeroci.WithVMID(strconv.Itoa(vmID)),
+			firecrackeroci.WithVMID(gen.VMID(vmID)),
 			oci.WithProcessArgs("/bin/sh", "/var/firecracker-containerd-test/scripts/lsblk.sh"),
 
 			oci.WithMounts([]specs.Mount{
@@ -1447,6 +1455,9 @@ func TestMemoryBalloon_Isolated(t *testing.T) {
 	}
 	t.Logf("TestMemoryBalloon_Isolated: will run %d vm's", numberOfVms)
 
+	gen, err := integtest.NewVMIDGen()
+	require.NoError(t, err, "Failed to create a VMIDGen")
+
 	var vmGroup sync.WaitGroup
 	for i := 0; i < numberOfVms; i++ {
 		vmGroup.Add(1)
@@ -1462,7 +1473,7 @@ func TestMemoryBalloon_Isolated(t *testing.T) {
 			require.NoError(t, err, "failed to create fccontrol client")
 
 			_, err = fcClient.CreateVM(ctx, &proto.CreateVMRequest{
-				VMID: strconv.Itoa(vmID),
+				VMID: gen.VMID(vmID),
 				MachineCfg: &proto.FirecrackerMachineConfiguration{
 					MemSizeMib: 512,
 				},
@@ -1484,7 +1495,7 @@ func TestMemoryBalloon_Isolated(t *testing.T) {
 			require.NoError(t, err, "failed to create vm")
 
 			// Test UpdateBalloon correctly updates amount of memory for the balloon device
-			vmIDStr := strconv.Itoa(vmID)
+			vmIDStr := gen.VMID(vmID)
 			newAmountMib := int64(50)
 			_, err = fcClient.UpdateBalloon(ctx, &proto.UpdateBalloonRequest{
 				VMID:      vmIDStr,

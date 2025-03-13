@@ -1,6 +1,6 @@
 module github.com/firecracker-microvm/firecracker-containerd
 
-go 1.21
+go 1.23.0
 
 require (
 	github.com/awslabs/tc-redirect-tap v0.0.0-20211025175357-e30dfca224c2

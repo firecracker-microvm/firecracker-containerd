@@ -28,7 +28,7 @@ SUBMODULES=_submodules
 UID:=$(shell id -u)
 GID:=$(shell id -g)
 
-FIRECRACKER_CONTAINERD_BUILDER_IMAGE?=golang:1.21-bullseye
+FIRECRACKER_CONTAINERD_BUILDER_IMAGE?=golang:1.23-bullseye
 export FIRECRACKER_CONTAINERD_TEST_IMAGE?=localhost/firecracker-containerd-test
 export GO_CACHE_VOLUME_NAME?=gocache
 
@@ -136,7 +136,7 @@ tidy:
 	./tools/tidy.sh
 
 $(BINPATH)/golangci-lint:
-	GOBIN=$(BINPATH) go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.57.2
+	GOBIN=$(BINPATH) go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.2
 	$(BINPATH)/golangci-lint --version
 
 $(BINPATH)/git-validation:

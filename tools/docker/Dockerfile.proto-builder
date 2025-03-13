@@ -11,7 +11,7 @@
 # express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
-FROM public.ecr.aws/docker/library/golang:1.21-bullseye
+FROM public.ecr.aws/docker/library/golang:1.23-bullseye
 
 RUN apt-get update && apt-get install --yes --no-install-recommends \
 	libprotobuf-dev=3.12.4-1+deb11u1 \

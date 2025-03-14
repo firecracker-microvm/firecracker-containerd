@@ -94,10 +94,10 @@ func (b Builder) AddCPU(cpu int) Builder {
 
 // AddCPURange adds a range of physical CPU numbers that the process is allowed
 // to run on
-func (b Builder) AddCPURange(min, max int) Builder {
+func (b Builder) AddCPURange(minimum, maximum int) Builder {
 	b.cpuRanges = append(b.cpuRanges, _range{
-		min: min,
-		max: max,
+		min: minimum,
+		max: maximum,
 	})
 
 	return b
@@ -110,10 +110,10 @@ func (b Builder) AddMem(mem int) Builder {
 }
 
 // AddMemRange adds a range of memory nodes to be used.
-func (b Builder) AddMemRange(min, max int) Builder {
+func (b Builder) AddMemRange(minimum, maximum int) Builder {
 	b.memRanges = append(b.memRanges, _range{
-		min: min,
-		max: max,
+		min: minimum,
+		max: maximum,
 	})
 
 	return b

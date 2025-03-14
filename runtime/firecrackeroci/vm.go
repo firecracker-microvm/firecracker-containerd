@@ -105,7 +105,7 @@ func WithVMLocalImageConfig(image containerd.Image) oci.SpecOpts {
 // username -> uid or group name -> gid. It passes the user to the
 // agent running inside the VM to do that mapping.
 func WithVMLocalUser(user string) oci.SpecOpts {
-	return func(ctx context.Context, client oci.Client, container *containers.Container, spec *oci.Spec) error {
+	return func(_ context.Context, _ oci.Client, _ *containers.Container, spec *oci.Spec) error {
 		// This is technically an LCOW specific field, but we piggy back
 		// to get the string user into the VM where will will do the uid/gid mapping
 		spec.Process.User.Username = user

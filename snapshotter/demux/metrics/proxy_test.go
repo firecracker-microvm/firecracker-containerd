@@ -218,7 +218,7 @@ type mockClient struct {
 	getError    error
 }
 
-func (c *mockClient) Get(url string) (*http.Response, error) {
+func (c *mockClient) Get(_ string) (*http.Response, error) {
 	if c.getError != nil {
 		return nil, c.getError
 	}

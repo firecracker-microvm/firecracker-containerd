@@ -20,8 +20,8 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/protobuf/types"
+	"github.com/containerd/log"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
 	"github.com/firecracker-microvm/firecracker-containerd/proto"
 	drivemount "github.com/firecracker-microvm/firecracker-containerd/proto/service/drivemount/ttrpc"
@@ -41,7 +41,7 @@ type MockDriveMounter struct {
 	expectedOptions         []string
 }
 
-func (m *MockDriveMounter) MountDrive(ctx context.Context, req *drivemount.MountDriveRequest) (*types.Empty, error) {
+func (m *MockDriveMounter) MountDrive(_ context.Context, req *drivemount.MountDriveRequest) (*types.Empty, error) {
 	assert.Equal(m.t, m.expectedDestinationPath, req.DestinationPath)
 	assert.Equal(m.t, m.expectedFilesystemType, req.FilesytemType)
 	assert.Equal(m.t, m.expectedOptions, req.Options)

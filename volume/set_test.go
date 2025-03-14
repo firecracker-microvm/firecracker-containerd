@@ -24,10 +24,10 @@ type testProvider struct {
 	name string
 }
 
-func (p *testProvider) CreateVolumesUnder(ctx context.Context, path string) ([]*Volume, error) {
+func (p *testProvider) CreateVolumesUnder(_ context.Context, _ string) ([]*Volume, error) {
 	return nil, nil
 }
-func (p *testProvider) Delete(ctx context.Context) error {
+func (p *testProvider) Delete(_ context.Context) error {
 	return nil
 }
 func (p *testProvider) Name() string {

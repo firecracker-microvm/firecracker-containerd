@@ -25,12 +25,12 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/identifiers"
-	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/plugin"
 	"github.com/containerd/containerd/protobuf/types"
 	"github.com/containerd/containerd/runtime/v2/shim"
 	"github.com/containerd/containerd/sys"
+	"github.com/containerd/log"
 	"github.com/hashicorp/go-multierror"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"

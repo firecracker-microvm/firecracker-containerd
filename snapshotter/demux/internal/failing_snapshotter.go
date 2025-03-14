@@ -26,47 +26,47 @@ import (
 type FailingSnapshotter struct{}
 
 // Stat mocks a failing remote call with a non-nil error.
-func (s *FailingSnapshotter) Stat(ctx context.Context, key string) (snapshots.Info, error) {
+func (s *FailingSnapshotter) Stat(_ context.Context, _ string) (snapshots.Info, error) {
 	return snapshots.Info{}, errors.New("mock Stat error from remote snapshotter")
 }
 
 // Update mocks a failing remote call with a non-nil error.
-func (s *FailingSnapshotter) Update(ctx context.Context, info snapshots.Info, fieldpaths ...string) (snapshots.Info, error) {
+func (s *FailingSnapshotter) Update(_ context.Context, _ snapshots.Info, _ ...string) (snapshots.Info, error) {
 	return snapshots.Info{}, errors.New("mock Update error from remote snapshotter")
 }
 
 // Usage mocks a failing remote call with a non-nil error.
-func (s *FailingSnapshotter) Usage(ctx context.Context, key string) (snapshots.Usage, error) {
+func (s *FailingSnapshotter) Usage(_ context.Context, _ string) (snapshots.Usage, error) {
 	return snapshots.Usage{}, errors.New("mock Usage error from remote snapshotter")
 }
 
 // Mounts mocks a failing remote call with a non-nil error.
-func (s *FailingSnapshotter) Mounts(ctx context.Context, key string) ([]mount.Mount, error) {
+func (s *FailingSnapshotter) Mounts(_ context.Context, _ string) ([]mount.Mount, error) {
 	return []mount.Mount{}, errors.New("mock Mounts error from remote snapshotter")
 }
 
 // Prepare mocks a failing remote call with a non-nil error.
-func (s *FailingSnapshotter) Prepare(ctx context.Context, key string, parent string, opts ...snapshots.Opt) ([]mount.Mount, error) {
+func (s *FailingSnapshotter) Prepare(_ context.Context, _ string, _ string, _ ...snapshots.Opt) ([]mount.Mount, error) {
 	return []mount.Mount{}, errors.New("mock Prepare error from remote snapshotter")
 }
 
 // View mocks a failing remote call with a non-nil error.
-func (s *FailingSnapshotter) View(ctx context.Context, key string, parent string, opts ...snapshots.Opt) ([]mount.Mount, error) {
+func (s *FailingSnapshotter) View(_ context.Context, _ string, _ string, _ ...snapshots.Opt) ([]mount.Mount, error) {
 	return []mount.Mount{}, errors.New("mock View error from remote snapshotter")
 }
 
 // Commit mocks a failing remote call with a non-nil error.
-func (s *FailingSnapshotter) Commit(ctx context.Context, name string, key string, opts ...snapshots.Opt) error {
+func (s *FailingSnapshotter) Commit(_ context.Context, _ string, _ string, _ ...snapshots.Opt) error {
 	return errors.New("mock Commit error from remote snapshotter")
 }
 
 // Remove mocks a failing remote call with a non-nil error.
-func (s *FailingSnapshotter) Remove(ctx context.Context, key string) error {
+func (s *FailingSnapshotter) Remove(_ context.Context, _ string) error {
 	return errors.New("mock Remove error from remote snapshotter")
 }
 
 // Walk mocks a failing remote call with a non-nil error.
-func (s *FailingSnapshotter) Walk(ctx context.Context, fn snapshots.WalkFunc, filters ...string) error {
+func (s *FailingSnapshotter) Walk(_ context.Context, _ snapshots.WalkFunc, _ ...string) error {
 	return errors.New("mock Walk error from remote snapshotter")
 }
 
@@ -76,6 +76,6 @@ func (s *FailingSnapshotter) Close() error {
 }
 
 // Cleanup mocks a failing remote call with a non-nil error.
-func (s *FailingSnapshotter) Cleanup(ctx context.Context) error {
+func (s *FailingSnapshotter) Cleanup(_ context.Context) error {
 	return errors.New("mock Cleanup error from remote snapshotter")
 }

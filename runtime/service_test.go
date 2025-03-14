@@ -233,7 +233,6 @@ func TestBuildVMConfiguration(t *testing.T) {
 		if cpuTemp, err := internal.SupportCPUTemplate(); !cpuTemp && err == nil {
 			tc.expectedCfg.MachineCfg.CPUTemplate = ""
 		}
-		tc := tc // see https://github.com/kyoh86/scopelint/issues/4
 		t.Run(tc.name, func(t *testing.T) {
 			svc := &service{
 				namespace: namespace,
@@ -312,7 +311,6 @@ func TestDebugConfig(t *testing.T) {
 	path := t.TempDir()
 
 	for i, c := range cases {
-		c := c
 		stubDrivePath := filepath.Join(path, fmt.Sprintf("%d", i))
 		err := os.MkdirAll(stubDrivePath, os.ModePerm)
 		assert.NoError(t, err, "failed to create stub drive path")

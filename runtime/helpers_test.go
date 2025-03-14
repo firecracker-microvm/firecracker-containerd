@@ -102,7 +102,6 @@ func TestMachineConfigurationFromProto(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc // see https://github.com/kyoh86/scopelint/issues/4
 		t.Run(tc.name, func(t *testing.T) {
 			machineConfig := machineConfigurationFromProto(tc.config, tc.proto)
 			assert.Equal(t, tc.expectedMachineConfig, machineConfig)

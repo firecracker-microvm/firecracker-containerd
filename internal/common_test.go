@@ -56,7 +56,6 @@ func TestIsStubDrive(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		c := c // see https://github.com/kyoh86/scopelint/issues/4
 		t.Run(c.name, func(t *testing.T) {
 			if e, a := c.expected, IsStubDrive(c.r); e != a {
 				t.Errorf("expected %t, but received %t", e, a)

@@ -79,12 +79,13 @@ func verifyPublishAndReceive(ctx context.Context, t *testing.T, source eventtype
 	topic := "/just/container/things"
 	sinkEventCh, sinkErrorCh := sink.Subscribe(ctx, fmt.Sprintf(`topic=="%s"`, topic))
 
-	for i := 0; i < 100; i++ {
+	const taskLimit uint32 = 100
+	for i := range taskLimit {
 		taskExitEvent := &events.TaskExit{
 			ContainerID: fmt.Sprintf("container-%d", i),
 			ID:          fmt.Sprintf("id-%d", i),
-			Pid:         uint32(i),
-			ExitStatus:  uint32(i + 1),
+			Pid:         i,
+			ExitStatus:  i + 1,
 			ExitedAt:    protobuf.ToTimestamp(time.Now().UTC()),
 		}
 

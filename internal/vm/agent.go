@@ -45,7 +45,7 @@ func NewNullIOProxy() IOProxy {
 	return &nullIOProxy{}
 }
 
-func (*nullIOProxy) start(proc *vmProc) (ioInitDone <-chan error, ioCopyDone <-chan error) {
+func (*nullIOProxy) start(_ *vmProc) (ioInitDone <-chan error, ioCopyDone <-chan error) {
 	initCh := make(chan error)
 	close(initCh)
 

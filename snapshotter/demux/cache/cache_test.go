@@ -26,15 +26,15 @@ import (
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux/proxy"
 )
 
-func getSnapshotterOkFunction(ctx context.Context, key string) (*proxy.RemoteSnapshotter, error) {
+func getSnapshotterOkFunction(_ context.Context, _ string) (*proxy.RemoteSnapshotter, error) {
 	return &proxy.RemoteSnapshotter{Snapshotter: &internal.SuccessfulSnapshotter{}}, nil
 }
 
-func getSnapshotterErrorFunction(ctx context.Context, key string) (*proxy.RemoteSnapshotter, error) {
+func getSnapshotterErrorFunction(_ context.Context, _ string) (*proxy.RemoteSnapshotter, error) {
 	return nil, errors.New("Mock retrieve snapshotter error")
 }
 
-func getFailingSnapshotterOkFunction(ctx context.Context, key string) (*proxy.RemoteSnapshotter, error) {
+func getFailingSnapshotterOkFunction(_ context.Context, _ string) (*proxy.RemoteSnapshotter, error) {
 	return &proxy.RemoteSnapshotter{Snapshotter: &internal.FailingSnapshotter{}}, nil
 }
 
@@ -67,7 +67,7 @@ func getSnapshotterPropagatesErrors() error {
 	return nil
 }
 
-func successfulWalk(ctx context.Context, info snapshots.Info) error {
+func successfulWalk(_ context.Context, _ snapshots.Info) error {
 	return nil
 }
 
@@ -101,7 +101,7 @@ func applyWalkFunctionPropagatesErrors() error {
 	// The failing snapshotter mock will fail all Walk calls before applying
 	// the snapshots.WalkFunc, but for the purposes of this test that is fine.
 	// In which case, any function will do.
-	walkFunc := func(ctx context.Context, info snapshots.Info) error {
+	walkFunc := func(_ context.Context, _ snapshots.Info) error {
 		return nil
 	}
 	if err := uut.WalkAll(context.Background(), walkFunc); err == nil {

@@ -18,6 +18,7 @@ import (
 	"os"
 
 	"github.com/containerd/containerd/cmd/containerd/command"
+
 	"github.com/containerd/containerd/pkg/seed"
 
 	// Register containerd builtins

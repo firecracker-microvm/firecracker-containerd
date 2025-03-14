@@ -26,11 +26,11 @@ import (
 	"go.uber.org/goleak"
 )
 
-func getSnapshotter(ctx context.Context, key string) (*proxy.RemoteSnapshotter, error) {
+func getSnapshotter(_ context.Context, _ string) (*proxy.RemoteSnapshotter, error) {
 	return &proxy.RemoteSnapshotter{Snapshotter: &internal.SuccessfulSnapshotter{}}, nil
 }
 
-func getErrorSnapshotter(ctx context.Context, key string) (*proxy.RemoteSnapshotter, error) {
+func getErrorSnapshotter(_ context.Context, _ string) (*proxy.RemoteSnapshotter, error) {
 	return &proxy.RemoteSnapshotter{Snapshotter: &internal.FailingSnapshotter{}}, nil
 }
 
@@ -43,7 +43,7 @@ func (c *RemoteSnapshotterCache) length() int {
 func TestCacheEvictionOnConnectionFailure(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
-	dial := func(ctx context.Context, namespace string) (net.Conn, error) {
+	dial := func(_ context.Context, _ string) (net.Conn, error) {
 		// Error on dial to simulate unhealthy connection
 		return nil, errors.New("mock dial error")
 	}
@@ -79,7 +79,7 @@ func TestCacheEvictionOnConnectionFailure(t *testing.T) {
 func TestCacheNotEvictedIfConnectionIsHealthy(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
-	dial := func(ctx context.Context, namespace string) (net.Conn, error) {
+	dial := func(_ context.Context, _ string) (net.Conn, error) {
 		// Return no error to simulate healthy connection
 		return &net.UnixConn{}, nil
 	}
@@ -113,7 +113,7 @@ func TestCacheNotEvictedIfConnectionIsHealthy(t *testing.T) {
 func TestBackgroundEnforcersCanBeStopped(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
-	dial := func(ctx context.Context, namespace string) (net.Conn, error) {
+	dial := func(_ context.Context, _ string) (net.Conn, error) {
 		// Return no error so the entry is not evicted via policy
 		return &net.UnixConn{}, nil
 	}
@@ -132,7 +132,7 @@ func TestBackgroundEnforcersCanBeStopped(t *testing.T) {
 func TestLogErrorOnEvictionFailure(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
-	dial := func(ctx context.Context, namespace string) (net.Conn, error) {
+	dial := func(_ context.Context, _ string) (net.Conn, error) {
 		return nil, errors.New("mock dial error")
 	}
 	frequency := 1 * time.Millisecond

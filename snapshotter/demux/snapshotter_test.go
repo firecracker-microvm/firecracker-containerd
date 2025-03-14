@@ -18,21 +18,21 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/containerd/containerd/log/logtest"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/snapshots"
+	"github.com/containerd/log/logtest"
 
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux/cache"
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux/proxy"
 )
 
-func fetchOkSnapshotter(ctx context.Context, key string) (*proxy.RemoteSnapshotter, error) {
+func fetchOkSnapshotter(_ context.Context, _ string) (*proxy.RemoteSnapshotter, error) {
 	var snapshotter internal.SuccessfulSnapshotter = internal.SuccessfulSnapshotter{}
 	return &proxy.RemoteSnapshotter{Snapshotter: &snapshotter}, nil
 }
 
-func fetchSnapshotterNotFound(ctx context.Context, key string) (*proxy.RemoteSnapshotter, error) {
+func fetchSnapshotterNotFound(_ context.Context, _ string) (*proxy.RemoteSnapshotter, error) {
 	return nil, errors.New("mock snapshotter not found")
 }
 
@@ -42,7 +42,7 @@ func createSnapshotterCacheWithSuccessfulSnapshotter(namespace string) *cache.Re
 	return cache
 }
 
-func fetchFailingSnapshotter(ctx context.Context, key string) (*proxy.RemoteSnapshotter, error) {
+func fetchFailingSnapshotter(_ context.Context, _ string) (*proxy.RemoteSnapshotter, error) {
 	var snapshotter internal.FailingSnapshotter = internal.FailingSnapshotter{}
 	return &proxy.RemoteSnapshotter{Snapshotter: &snapshotter}, nil
 }
@@ -96,7 +96,7 @@ func TestNoErrorWhenCalledWithoutNamespacedContext(t *testing.T) {
 		run  func() error
 	}{
 		{"Walk", func() error {
-			var callback = func(c context.Context, i snapshots.Info) error { return nil }
+			var callback = func(_ context.Context, _ snapshots.Info) error { return nil }
 			return uut.Walk(ctx, callback)
 		}},
 	}
@@ -131,7 +131,7 @@ func TestReturnErrorWhenSnapshotterNotFound(t *testing.T) {
 		{"Commit", func() error { return uut.Commit(ctx, "layer1", "layerKey") }},
 		{"Remove", func() error { return uut.Remove(ctx, "layerKey") }},
 		{"Walk", func() error {
-			var callback = func(c context.Context, i snapshots.Info) error { return nil }
+			var callback = func(_ context.Context, _ snapshots.Info) error { return nil }
 			return uut.Walk(ctx, callback)
 		}},
 		{"Cleanup", func() error { return uut.(snapshots.Cleaner).Cleanup(ctx) }},
@@ -167,7 +167,7 @@ func TestReturnErrorAfterProxyFunctionFailure(t *testing.T) {
 		{"Commit", func() error { return uut.Commit(ctx, "layer1", "layerKey") }},
 		{"Remove", func() error { return uut.Remove(ctx, "layerKey") }},
 		{"Walk", func() error {
-			var callback = func(c context.Context, i snapshots.Info) error { return nil }
+			var callback = func(_ context.Context, _ snapshots.Info) error { return nil }
 			return uut.Walk(ctx, callback)
 		}},
 		{"Cleanup", func() error { return uut.(snapshots.Cleaner).Cleanup(ctx) }},
@@ -206,7 +206,7 @@ func TestNoErrorIsReturnedOnSuccessfulProxyExecution(t *testing.T) {
 		{"Commit", func() error { return uut.Commit(ctx, "layer1", "layerKey") }},
 		{"Remove", func() error { return uut.Remove(ctx, "layerKey") }},
 		{"Walk", func() error {
-			var callback = func(c context.Context, i snapshots.Info) error { return nil }
+			var callback = func(_ context.Context, _ snapshots.Info) error { return nil }
 			return uut.Walk(ctx, callback)
 		}},
 		{"Cleanup", func() error { return uut.(snapshots.Cleaner).Cleanup(ctx) }},

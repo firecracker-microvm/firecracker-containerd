@@ -213,15 +213,14 @@ func (j *runcJailer) BuildJailedMachine(cfg *config.Config, machineConfig *firec
 
 // BuildJailedRootHandler will populate the jail with the necessary files, which may be
 // device nodes, hard links, and/or bind-mount targets
-func (j *runcJailer) BuildJailedRootHandler(cfg *config.Config, machineConfig *firecracker.Config, vmID string) firecracker.Handler {
+func (j *runcJailer) BuildJailedRootHandler(cfg *config.Config, machineConfig *firecracker.Config, _ string) firecracker.Handler {
 	ociBundlePath := j.OCIBundlePath()
 	rootPath := j.RootPath()
 	machineConfig.SocketPath = filepath.Join(rootfsFolder, "api.socket")
 
 	return firecracker.Handler{
 		Name: jailerHandlerName,
-		Fn: func(ctx context.Context, m *firecracker.Machine) error {
-
+		Fn: func(_ context.Context, m *firecracker.Machine) error {
 			rootPathToConfig := filepath.Join(ociBundlePath, "config.json")
 			j.logger.WithField("rootPathToConfig", rootPathToConfig).Debug("Copying config")
 			if err := copyFile(j.Config.RuncConfigPath, rootPathToConfig, 0400); err != nil {
@@ -332,7 +331,7 @@ func (j *runcJailer) makeLinkInJail(src, base string) (string, error) {
 func (j *runcJailer) BuildLinkFifoHandler() firecracker.Handler {
 	return firecracker.Handler{
 		Name: jailerFifoHandlerName,
-		Fn: func(ctx context.Context, m *firecracker.Machine) error {
+		Fn: func(_ context.Context, m *firecracker.Machine) error {
 			logFifo, err := j.makeLinkInJail(m.Cfg.LogPath, internal.FirecrackerLogFifoName)
 			if err != nil {
 				return err

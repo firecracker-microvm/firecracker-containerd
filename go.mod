@@ -8,6 +8,7 @@ require (
 	github.com/containerd/continuity v0.4.2
 	github.com/containerd/fifo v1.1.0
 	github.com/containerd/go-runc v1.0.0
+	github.com/containerd/log v0.1.0
 	github.com/containerd/ttrpc v1.2.3
 	github.com/containerd/typeurl/v2 v2.1.1
 	github.com/containernetworking/cni v1.2.0
@@ -27,7 +28,7 @@ require (
 	github.com/vishvananda/netlink v1.2.1-beta.2
 	go.uber.org/goleak v1.1.12
 	golang.org/x/sync v0.10.0
-	golang.org/x/sys v0.28.0
+	golang.org/x/sys v0.31.0
 	google.golang.org/grpc v1.64.1
 	google.golang.org/protobuf v1.34.1
 )
@@ -50,7 +51,6 @@ require (
 	github.com/containerd/console v1.0.3 // indirect
 	github.com/containerd/go-cni v1.1.9 // indirect
 	github.com/containerd/imgcrypt v1.1.7 // indirect
-	github.com/containerd/log v0.1.0 // indirect
 	github.com/containerd/nri v0.6.1 // indirect
 	github.com/containerd/typeurl v1.0.2 // indirect
 	github.com/containers/ocicrypt v1.1.6 // indirect

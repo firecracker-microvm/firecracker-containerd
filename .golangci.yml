@@ -5,8 +5,8 @@ linters:
   disable-all: true
   enable:
     - govet
+    - copyloopvar
     - staticcheck
-#    - unused
     - gosimple
     - ineffassign
     - typecheck
@@ -19,15 +19,29 @@ linters:
     - gocritic
     - gofmt
     - revive
-    - exportloopref
 
 issues:
   exclude-use-default: false
   exclude:
     - G104 # Errors unhandled
     - G103 # Use of unsafe calls should be audited
+    - G114 # Use of net/http serve function without timeouts.
+    - G115 # Integer overflow conversion should be audited
     - G204 # Subprocess launched with variable
+    - G301 # Expect directory permissions to be 0750 or less
     - G304 # Potential file inclusion via variable
     - G306 # WriteFile permissions 0600 or less to be audited
     - G307 # Deferring unsafe method "Close" on type "*os.File" to be audited
-    - 
+    - G404 # Use of weak random number generator
+  exclude-rules:
+    - linters:
+      - govet
+      text: "copylocks"
+    - linters:
+      - revive
+      text: package-comments
+    - linters:
+      - staticcheck
+      text: "Do not rely on the global seed"
+  exclude-dirs:
+    - snapshotter/internal/integtest/stargz # Code copied from upstream stargz

@@ -25,47 +25,47 @@ import (
 type SuccessfulSnapshotter struct{}
 
 // Stat mocks a successful remote call with a nil error.
-func (s *SuccessfulSnapshotter) Stat(ctx context.Context, key string) (snapshots.Info, error) {
+func (s *SuccessfulSnapshotter) Stat(_ context.Context, _ string) (snapshots.Info, error) {
 	return snapshots.Info{}, nil
 }
 
 // Update mocks a successful remote call with a nil error.
-func (s *SuccessfulSnapshotter) Update(ctx context.Context, info snapshots.Info, fieldpaths ...string) (snapshots.Info, error) {
+func (s *SuccessfulSnapshotter) Update(_ context.Context, _ snapshots.Info, _ ...string) (snapshots.Info, error) {
 	return snapshots.Info{}, nil
 }
 
 // Usage mocks a successful remote call with a nil error.
-func (s *SuccessfulSnapshotter) Usage(ctx context.Context, key string) (snapshots.Usage, error) {
+func (s *SuccessfulSnapshotter) Usage(_ context.Context, _ string) (snapshots.Usage, error) {
 	return snapshots.Usage{}, nil
 }
 
 // Mounts mocks a successful remote call with a nil error.
-func (s *SuccessfulSnapshotter) Mounts(ctx context.Context, key string) ([]mount.Mount, error) {
+func (s *SuccessfulSnapshotter) Mounts(_ context.Context, _ string) ([]mount.Mount, error) {
 	return []mount.Mount{}, nil
 }
 
 // Prepare mocks a successful remote call with a nil error.
-func (s *SuccessfulSnapshotter) Prepare(ctx context.Context, key string, parent string, opts ...snapshots.Opt) ([]mount.Mount, error) {
+func (s *SuccessfulSnapshotter) Prepare(_ context.Context, _ string, _ string, _ ...snapshots.Opt) ([]mount.Mount, error) {
 	return []mount.Mount{}, nil
 }
 
 // View mocks a successful remote call with a nil error.
-func (s *SuccessfulSnapshotter) View(ctx context.Context, key string, parent string, opts ...snapshots.Opt) ([]mount.Mount, error) {
+func (s *SuccessfulSnapshotter) View(_ context.Context, _ string, _ string, _ ...snapshots.Opt) ([]mount.Mount, error) {
 	return []mount.Mount{}, nil
 }
 
 // Commit mocks a successful remote call with a nil error.
-func (s *SuccessfulSnapshotter) Commit(ctx context.Context, name string, key string, opts ...snapshots.Opt) error {
+func (s *SuccessfulSnapshotter) Commit(_ context.Context, _ string, _ string, _ ...snapshots.Opt) error {
 	return nil
 }
 
 // Remove mocks a successful remote call with a nil error.
-func (s *SuccessfulSnapshotter) Remove(ctx context.Context, key string) error {
+func (s *SuccessfulSnapshotter) Remove(_ context.Context, _ string) error {
 	return nil
 }
 
 // Walk mocks a successful remote call with a nil error.
-func (s *SuccessfulSnapshotter) Walk(ctx context.Context, fn snapshots.WalkFunc, filters ...string) error {
+func (s *SuccessfulSnapshotter) Walk(_ context.Context, _ snapshots.WalkFunc, _ ...string) error {
 	return nil
 }
 
@@ -75,6 +75,6 @@ func (s *SuccessfulSnapshotter) Close() error {
 }
 
 // Cleanup mocks a successful remote call with a nil error.
-func (s *SuccessfulSnapshotter) Cleanup(ctx context.Context) error {
+func (s *SuccessfulSnapshotter) Cleanup(_ context.Context) error {
 	return nil
 }

@@ -26,7 +26,7 @@ import (
 
 	snapshotsapi "github.com/containerd/containerd/api/services/snapshots/v1"
 	"github.com/containerd/containerd/contrib/snapshotservice"
-	"github.com/containerd/containerd/log"
+	"github.com/containerd/log"
 	"github.com/firecracker-microvm/firecracker-go-sdk/vsock"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -201,7 +201,7 @@ func initCache(config config.Config, monitor *metrics.Monitor) (*cache.RemoteSna
 			return nil, err
 		}
 
-		dial := func(ctx context.Context, namespace string) (net.Conn, error) {
+		dial := func(ctx context.Context, _ string) (net.Conn, error) {
 			return vsockDial(ctx, host, port)
 		}
 

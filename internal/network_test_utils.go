@@ -127,7 +127,7 @@ func (l localNetworkServices) Serve(ctx context.Context) error {
 	errGroup.Go(func() error {
 		for path, contents := range l.webpages {
 			webpage := contents
-			http.HandleFunc("/"+path, func(w http.ResponseWriter, r *http.Request) {
+			http.HandleFunc("/"+path, func(w http.ResponseWriter, _ *http.Request) {
 				io.WriteString(w, webpage)
 			})
 		}

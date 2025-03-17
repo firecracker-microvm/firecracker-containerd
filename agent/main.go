@@ -23,9 +23,9 @@ import (
 
 	taskAPI "github.com/containerd/containerd/api/runtime/task/v2"
 	"github.com/containerd/containerd/events/exchange"
-	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/sys/reaper"
+	"github.com/containerd/log"
 	"github.com/containerd/ttrpc"
 	"github.com/firecracker-microvm/firecracker-go-sdk/vsock"
 	"github.com/opencontainers/runc/libcontainer/system"

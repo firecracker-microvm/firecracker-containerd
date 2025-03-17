@@ -67,7 +67,7 @@ func (j *noopJailer) BuildJailedMachine(cfg *config.Config, _ *firecracker.Confi
 
 	pidHandler := firecracker.Handler{
 		Name: "firecracker-containerd-jail-pid-handler",
-		Fn: func(ctx context.Context, m *firecracker.Machine) error {
+		Fn: func(_ context.Context, m *firecracker.Machine) error {
 			pid, err := m.PID()
 			if err != nil {
 				return err
@@ -91,7 +91,7 @@ func (j *noopJailer) JailPath() vm.Dir {
 	return j.shimDir
 }
 
-func (j *noopJailer) ExposeFileToJail(path string) error {
+func (j *noopJailer) ExposeFileToJail(_ string) error {
 	j.logger.Debug("noop operation for ExposeFileToJail")
 	return nil
 }

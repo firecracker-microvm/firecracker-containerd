@@ -64,9 +64,8 @@ func NewRemoteSnapshotter(ctx context.Context, address string,
 	opts := []grpc.DialOption{
 		grpc.WithContextDialer(dialer),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
 	}
-	gRPCConn, err := grpc.DialContext(ctx, address, opts...)
+	gRPCConn, err := grpc.NewClient(address, opts...)
 	if err != nil {
 		return nil, err
 	}

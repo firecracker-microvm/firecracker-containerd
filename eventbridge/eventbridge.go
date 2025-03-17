@@ -89,7 +89,7 @@ func (s *getterService) GetEvent(ctx context.Context) (*eventapi.Envelope, error
 // RegisterGetterService adds the Getter service as a method to the provided TTRPC server.
 func RegisterGetterService(srv *ttrpc.Server, svc Getter) {
 	srv.Register(getterServiceName, map[string]ttrpc.Method{
-		getEventMethodName: func(ctx context.Context, unmarshal func(interface{}) error) (interface{}, error) {
+		getEventMethodName: func(ctx context.Context, _ func(any) error) (any, error) {
 			return svc.GetEvent(ctx)
 		},
 	})

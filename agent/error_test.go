@@ -55,7 +55,6 @@ func TestIsRetryableMountError(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		c := c // see https://github.com/kyoh86/scopelint/issues/4
 		t.Run(c.Name, func(t *testing.T) {
 			assert.Equal(t, c.Expected, isRetryableMountError(c.Error))
 		})

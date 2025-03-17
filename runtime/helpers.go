@@ -61,7 +61,7 @@ func machineConfigurationFromProto(cfg *config.Config, req *proto.FirecrackerMac
 
 // networkConfigFromProto creates a firecracker NetworkInterface object from
 // the protobuf FirecrackerNetworkInterface message.
-func networkConfigFromProto(nwIface *proto.FirecrackerNetworkInterface, vmID string) (*firecracker.NetworkInterface, error) {
+func networkConfigFromProto(nwIface *proto.FirecrackerNetworkInterface, _ string) (*firecracker.NetworkInterface, error) {
 	result := &firecracker.NetworkInterface{
 		AllowMMDS: nwIface.AllowMMDS,
 	}
@@ -138,7 +138,7 @@ func rateLimiterFromProto(rl *proto.FirecrackerRateLimiter) *models.RateLimiter 
 
 func withRateLimiterFromProto(rl *proto.FirecrackerRateLimiter) firecracker.DriveOpt {
 	if rl == nil {
-		return func(d *models.Drive) {
+		return func(_ *models.Drive) {
 			// no-op
 		}
 	}
@@ -178,7 +178,7 @@ func withCacheTypeFromProto(cacheType string) firecracker.DriveOpt {
 	// protobuf 'string' type default to empty string if the encoded message
 	// does not contain a value for that field.
 	if cacheType == "" {
-		return func(d *models.Drive) {
+		return func(_ *models.Drive) {
 			// no-op
 		}
 	}

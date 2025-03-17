@@ -23,7 +23,7 @@ import (
 
 // fifoConnector adapts containerd's fifo package to the IOConnector interface
 func fifoConnector(path string, flag int) IOConnector {
-	return func(procCtx context.Context, logger *logrus.Entry) <-chan IOConnectorResult {
+	return func(procCtx context.Context, _ *logrus.Entry) <-chan IOConnectorResult {
 		returnCh := make(chan IOConnectorResult, 1)
 		defer close(returnCh)
 

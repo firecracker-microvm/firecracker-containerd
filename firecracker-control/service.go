@@ -17,9 +17,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/plugin"
 	"github.com/containerd/containerd/protobuf/types"
+	"github.com/containerd/log"
 	"github.com/containerd/ttrpc"
 
 	"github.com/firecracker-microvm/firecracker-containerd/proto"

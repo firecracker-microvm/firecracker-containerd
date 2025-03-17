@@ -38,8 +38,12 @@ import (
 )
 
 func main() {
-	skel.PluginMain(add, check, del,
-		// support CNI versions that support plugin chaining
+	skel.PluginMainFuncs(
+		skel.CNIFuncs{
+			Add:   add,
+			Check: check,
+			Del:   del,
+		},
 		version.PluginSupports("0.3.0", "0.3.1", version.Current()),
 		buildversion.BuildString("test-bridged-tap"),
 	)
@@ -188,10 +192,10 @@ func getCurrentResult(args *skel.CmdArgs) (*current.Result, error) {
 	return currentResult, nil
 }
 
-func del(args *skel.CmdArgs) error {
+func del(_ *skel.CmdArgs) error {
 	return nil
 }
 
-func check(args *skel.CmdArgs) error {
+func check(_ *skel.CmdArgs) error {
 	return nil
 }

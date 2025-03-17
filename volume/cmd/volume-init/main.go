@@ -23,7 +23,7 @@ import (
 	"github.com/firecracker-microvm/firecracker-containerd/volume"
 )
 
-func copy(in volume.GuestVolumeImageInput) error {
+func copyVolume(in volume.GuestVolumeImageInput) error {
 	for _, v := range in.Volumes {
 		to, err := fs.RootPath(in.To, v)
 		if err != nil {
@@ -60,7 +60,7 @@ func realMain() error {
 		return err
 	}
 
-	return copy(in)
+	return copyVolume(in)
 }
 
 func main() {

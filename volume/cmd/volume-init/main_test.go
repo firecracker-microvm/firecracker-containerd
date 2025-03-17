@@ -38,7 +38,7 @@ func TestCopy(t *testing.T) {
 	err := mkdirAndTouch(filepath.Join(from, "/etc/foobar/hello"), "helloworld")
 	require.NoError(t, err)
 
-	err = copy(volume.GuestVolumeImageInput{
+	err = copyVolume(volume.GuestVolumeImageInput{
 		From:    from,
 		To:      to,
 		Volumes: []string{"/etc/foobar"},

@@ -21,9 +21,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/protobuf/types"
+	"github.com/containerd/log"
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	drivemount "github.com/firecracker-microvm/firecracker-containerd/proto/service/drivemount/ttrpc"
 )
@@ -214,7 +214,7 @@ func (dh driveHandler) MountDrive(ctx context.Context, req *drivemount.MountDriv
 	return nil, fmt.Errorf("exhausted retries mounting drive from %q to %q", drive.Path(), req.DestinationPath)
 }
 
-func (dh driveHandler) UnmountDrive(ctx context.Context, req *drivemount.UnmountDriveRequest) (*types.Empty, error) {
+func (dh driveHandler) UnmountDrive(_ context.Context, req *drivemount.UnmountDriveRequest) (*types.Empty, error) {
 	drive, ok := dh.GetDrive(req.DriveID)
 	if !ok {
 		return nil, fmt.Errorf("drive %q could not be found", req.DriveID)

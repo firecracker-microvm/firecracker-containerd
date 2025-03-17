@@ -17,8 +17,8 @@ import (
 	"context"
 
 	task "github.com/containerd/containerd/api/runtime/task/v2"
-	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/protobuf/types"
+	"github.com/containerd/log"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
 	ioproxy "github.com/firecracker-microvm/firecracker-containerd/proto/service/ioproxy/ttrpc"
 )

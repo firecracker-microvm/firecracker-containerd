@@ -73,8 +73,8 @@ func benchmarkCreateAndStopVM(t *testing.T, vcpuCount uint32, kernelArgs string)
 		},
 	}
 
-	var samples []time.Duration
-	for i := 0; i < benchmarkCount; i++ {
+	samples := make([]time.Duration, benchmarkCount)
+	for range benchmarkCount {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 

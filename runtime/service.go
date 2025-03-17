@@ -37,13 +37,13 @@ import (
 	"github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/events/exchange"
-	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/pkg/ttrpcutil"
 	"github.com/containerd/containerd/protobuf"
 	"github.com/containerd/containerd/protobuf/types"
 	"github.com/containerd/containerd/runtime/v2/shim"
 	"github.com/containerd/fifo"
+	"github.com/containerd/log"
 	"github.com/containerd/ttrpc"
 	"github.com/firecracker-microvm/firecracker-go-sdk"
 	"github.com/firecracker-microvm/firecracker-go-sdk/client/models"
@@ -67,7 +67,7 @@ import (
 )
 
 func init() {
-	rand.Seed(time.Now().UnixNano())
+	rand.New(rand.NewSource(time.Now().UnixNano()))
 }
 
 const (
@@ -169,7 +169,7 @@ func shimOpts(shimCtx context.Context) (*shim.Opts, error) {
 }
 
 // NewService creates new runtime shim.
-func NewService(shimCtx context.Context, id string, remotePublisher shim.Publisher, shimCancel func()) (shim.Shim, error) {
+func NewService(shimCtx context.Context, _ string, remotePublisher shim.Publisher, shimCancel func()) (shim.Shim, error) {
 	cfg, err := config.LoadConfig("")
 	if err != nil {
 		return nil, err
@@ -658,7 +658,7 @@ func (s *service) StopVM(requestCtx context.Context, request *proto.StopVMReques
 }
 
 // ResumeVM resumes a VM
-func (s *service) ResumeVM(ctx context.Context, req *proto.ResumeVMRequest) (*types.Empty, error) {
+func (s *service) ResumeVM(ctx context.Context, _ *proto.ResumeVMRequest) (*types.Empty, error) {
 	defer logPanicAndDie(s.logger)
 
 	err := s.waitVMReady()
@@ -676,7 +676,7 @@ func (s *service) ResumeVM(ctx context.Context, req *proto.ResumeVMRequest) (*ty
 }
 
 // PauseVM pauses a VM
-func (s *service) PauseVM(ctx context.Context, req *proto.PauseVMRequest) (*types.Empty, error) {
+func (s *service) PauseVM(ctx context.Context, _ *proto.PauseVMRequest) (*types.Empty, error) {
 	defer logPanicAndDie(s.logger)
 
 	err := s.waitVMReady()
@@ -695,7 +695,7 @@ func (s *service) PauseVM(ctx context.Context, req *proto.PauseVMRequest) (*type
 
 // GetVMInfo returns metadata for the VM being managed by this shim. If the VM has not been created yet, this
 // method will wait for up to a hardcoded timeout for it to exist, returning an error if the timeout is reached.
-func (s *service) GetVMInfo(requestCtx context.Context, request *proto.GetVMInfoRequest) (*proto.GetVMInfoResponse, error) {
+func (s *service) GetVMInfo(_ context.Context, _ *proto.GetVMInfoRequest) (*proto.GetVMInfoResponse, error) {
 	defer logPanicAndDie(s.logger)
 
 	err := s.waitVMReady()
@@ -768,8 +768,7 @@ func (s *service) UpdateVMMetadata(requestCtx context.Context, request *proto.Up
 // GetVMMetadata returns the metadata for the vm managed by this shim..
 // If the vm has not been created yet, this method will wait for up to the hardcoded timeout for it
 // to exist, returning an error if the timeout is reached.
-func (s *service) GetVMMetadata(requestCtx context.Context, request *proto.GetVMMetadataRequest) (*proto.GetVMMetadataResponse, error) {
-
+func (s *service) GetVMMetadata(requestCtx context.Context, _ *proto.GetVMMetadataRequest) (*proto.GetVMMetadataResponse, error) {
 	defer logPanicAndDie(s.logger)
 
 	err := s.waitVMReady()
@@ -789,7 +788,7 @@ func (s *service) GetVMMetadata(requestCtx context.Context, request *proto.GetVM
 	return &proto.GetVMMetadataResponse{Metadata: string(metadata)}, nil
 }
 
-func (s *service) createBalloon(requestCtx context.Context, request *proto.CreateVMRequest) (models.Balloon, error) {
+func (s *service) createBalloon(_ context.Context, request *proto.CreateVMRequest) (models.Balloon, error) {
 	amountMiB := request.BalloonDevice.AmountMib
 	deflateOnOom := request.BalloonDevice.DeflateOnOom
 	statsPollingIntervals := request.BalloonDevice.StatsPollingIntervals
@@ -814,7 +813,7 @@ func (s *service) buildBalloonDeviceOpt(balloon models.Balloon) ([]firecracker.O
 }
 
 // GetBalloonConfig will get configuration for an existing balloon device, before or after machine startup
-func (s *service) GetBalloonConfig(requestCtx context.Context, req *proto.GetBalloonConfigRequest) (*proto.GetBalloonConfigResponse, error) {
+func (s *service) GetBalloonConfig(requestCtx context.Context, _ *proto.GetBalloonConfigRequest) (*proto.GetBalloonConfigResponse, error) {
 	defer logPanicAndDie(s.logger)
 
 	err := s.waitVMReady()
@@ -857,7 +856,7 @@ func (s *service) UpdateBalloon(requestCtx context.Context, req *proto.UpdateBal
 }
 
 // GetBalloonStats will return the latest balloon device statistics, only if enabled pre-boot.
-func (s *service) GetBalloonStats(requestCtx context.Context, req *proto.GetBalloonStatsRequest) (*proto.GetBalloonStatsResponse, error) {
+func (s *service) GetBalloonStats(requestCtx context.Context, _ *proto.GetBalloonStatsRequest) (*proto.GetBalloonStatsResponse, error) {
 	defer logPanicAndDie(s.logger)
 
 	err := s.waitVMReady()
@@ -1624,7 +1623,7 @@ func (s *service) isPaused(ctx context.Context) (bool, error) {
 	return *info.State == models.InstanceInfoStatePaused, nil
 }
 
-func (s *service) forceTerminate(ctx context.Context) error {
+func (s *service) forceTerminate(_ context.Context) error {
 	s.logger.Errorf("forcefully terminate VM %s", s.vmID)
 
 	err := s.jailer.Stop(true)

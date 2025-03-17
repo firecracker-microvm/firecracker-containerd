@@ -79,7 +79,7 @@ func (vs *Set) Add(v *Volume) {
 }
 
 // AddFrom adds volumes from the given provider.
-func (vs *Set) AddFrom(ctx context.Context, vp Provider) error {
+func (vs *Set) AddFrom(_ context.Context, vp Provider) error {
 	if _, exists := vs.providers[vp.Name()]; exists {
 		return fmt.Errorf("failed to add %q: %w", vp.Name(), errdefs.ErrAlreadyExists)
 	}
@@ -338,7 +338,7 @@ func (vs *Set) WithMounts(mountpoints []Mount) (oci.SpecOpts, error) {
 		})
 	}
 
-	return func(ctx context.Context, client oci.Client, container *containers.Container, s *oci.Spec) error {
+	return func(_ context.Context, _ oci.Client, _ *containers.Container, s *oci.Spec) error {
 		s.Mounts = append(s.Mounts, mounts...)
 		return nil
 	}, nil

@@ -362,7 +362,6 @@ func testMultipleVMs(ctx context.Context, t *testing.T, count int) {
 	for i, device := range devices {
 		caseTypeNumber := i % len(cases)
 		vmID := i
-		device := device
 		c := cases[caseTypeNumber]
 
 		f := func(ctx context.Context) error {
@@ -421,7 +420,6 @@ func testMultipleVMs(ctx context.Context, t *testing.T, count int) {
 
 			containerEg, containerCtx := errgroup.WithContext(vmEgCtx)
 			for containerID := 0; containerID < int(containerCount); containerID++ {
-				containerID := containerID
 				containerEg.Go(func() error {
 					return testMultipleExecs(
 						containerCtx,
@@ -580,7 +578,6 @@ func testMultipleExecs(
 	execStdouts := make(chan string, len(execIDs))
 	var eg, _ = errgroup.WithContext(ctx)
 	for _, execID := range execIDs {
-		execID := execID
 		eg.Go(func() error {
 			ns, err := getMountNamespace(ctx, client, containerName, newTask, execID)
 			if err != nil {
@@ -671,7 +668,7 @@ func testMultipleExecs(
 	return nil
 }
 
-func getMountNamespace(ctx context.Context, client *containerd.Client, containerName string, newTask containerd.Task, execID string) (string, error) {
+func getMountNamespace(ctx context.Context, _ *containerd.Client, _ string, newTask containerd.Task, execID string) (string, error) {
 	var execStdout bytes.Buffer
 	var execStderr bytes.Buffer
 
@@ -1821,8 +1818,6 @@ func TestStopVM_Isolated(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, test := range tests {
-		test := test
-
 		testFunc := func(tb testing.TB, createVMRequest proto.CreateVMRequest) {
 			ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 			defer cancel()
@@ -2352,8 +2347,7 @@ func TestCreateVM_Isolated(t *testing.T) {
 		}
 	}
 
-	for _, _s := range subtests {
-		s := _s
+	for _, s := range subtests {
 		request := s.request
 		t.Run(s.name, func(t *testing.T) {
 			runTest(t, request, s)
@@ -2525,7 +2519,7 @@ func TestAttach_Isolated(t *testing.T) {
 			name: "null io",
 
 			// firecracker-containerd doesn't create IO Proxy objects in this case.
-			newIO: func(ctx context.Context, id string) (cio.IO, error) {
+			newIO: func(_ context.Context, id string) (cio.IO, error) {
 				return cio.NullIO(id)
 			},
 
@@ -2536,7 +2530,6 @@ func TestAttach_Isolated(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			name := testNameToVMID(t.Name())
 
@@ -2551,7 +2544,7 @@ func TestAttach_Isolated(t *testing.T) {
 			io, err := tc.newIO(ctx, name)
 			require.NoError(t, err)
 
-			t1, err := c.NewTask(ctx, func(id string) (cio.IO, error) {
+			t1, err := c.NewTask(ctx, func(_ string) (cio.IO, error) {
 				return io, nil
 			})
 			require.NoError(t, err)

@@ -21,7 +21,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/containerd/containerd/log"
+	"github.com/containerd/log"
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/demux/cache"
 )
 

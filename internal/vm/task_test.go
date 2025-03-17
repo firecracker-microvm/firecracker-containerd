@@ -50,7 +50,7 @@ type mockTaskService struct {
 	waitCh sync.Map
 }
 
-func (s *mockTaskService) Create(reqCtx context.Context, req *taskAPI.CreateTaskRequest) (*taskAPI.CreateTaskResponse, error) {
+func (s *mockTaskService) Create(_ context.Context, req *taskAPI.CreateTaskRequest) (*taskAPI.CreateTaskResponse, error) {
 	reqCh, _ := s.createRequests.LoadOrStore(req.ID, make(chan *taskAPI.CreateTaskRequest, 128))
 	reqCh.(chan *taskAPI.CreateTaskRequest) <- req
 	return &taskAPI.CreateTaskResponse{
@@ -74,7 +74,7 @@ func (s *mockTaskService) PopCreateRequests(id string) (reqs []*taskAPI.CreateTa
 	}
 }
 
-func (s *mockTaskService) Exec(reqCtx context.Context, req *taskAPI.ExecProcessRequest) (*types.Empty, error) {
+func (s *mockTaskService) Exec(_ context.Context, req *taskAPI.ExecProcessRequest) (*types.Empty, error) {
 	reqCh, _ := s.execRequests.LoadOrStore(req.ID, make(chan *taskAPI.ExecProcessRequest, 128))
 	reqCh.(chan *taskAPI.ExecProcessRequest) <- req
 	return nil, nil
@@ -96,7 +96,7 @@ func (s *mockTaskService) PopExecRequests(id string) (reqs []*taskAPI.ExecProces
 	}
 }
 
-func (s *mockTaskService) Delete(reqCtx context.Context, req *taskAPI.DeleteRequest) (*taskAPI.DeleteResponse, error) {
+func (s *mockTaskService) Delete(_ context.Context, req *taskAPI.DeleteRequest) (*taskAPI.DeleteResponse, error) {
 	reqCh, _ := s.deleteRequests.LoadOrStore(req.ID, make(chan *taskAPI.DeleteRequest, 128))
 	reqCh.(chan *taskAPI.DeleteRequest) <- req
 	return nil, nil
@@ -122,7 +122,7 @@ func (s *mockTaskService) processID(taskID, execID string) string {
 	return taskID + "/" + execID
 }
 
-func (s *mockTaskService) Wait(reqCtx context.Context, req *taskAPI.WaitRequest) (*taskAPI.WaitResponse, error) {
+func (s *mockTaskService) Wait(_ context.Context, req *taskAPI.WaitRequest) (*taskAPI.WaitResponse, error) {
 	reqCh, _ := s.waitRequests.LoadOrStore(req.ID, make(chan *taskAPI.WaitRequest, 128))
 	reqCh.(chan *taskAPI.WaitRequest) <- req
 

@@ -25,7 +25,7 @@ import (
 )
 
 func fileConnector(path string, flag int) IOConnector {
-	return func(procCtx context.Context, logger *logrus.Entry) <-chan IOConnectorResult {
+	return func(_ context.Context, _ *logrus.Entry) <-chan IOConnectorResult {
 		returnCh := make(chan IOConnectorResult, 1)
 		defer close(returnCh)
 

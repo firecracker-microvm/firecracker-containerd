@@ -102,8 +102,8 @@ func (p *GuestVolumeImageProvider) pull(ctx context.Context) error {
 	return nil
 }
 
-func mountHostDirs(image string) oci.SpecOpts {
-	return func(ctx context.Context, client oci.Client, container *containers.Container, s *oci.Spec) error {
+func mountHostDirs(_ string) oci.SpecOpts {
+	return func(_ context.Context, _ oci.Client, _ *containers.Container, s *oci.Spec) error {
 		s.Mounts = append(s.Mounts,
 			specs.Mount{
 				Source:      vmBinDir,
@@ -202,7 +202,7 @@ func (p *GuestVolumeImageProvider) copy(ctx context.Context, containerName strin
 }
 
 // CreateVolumesUnder creates volumes under the given directory.
-func (p *GuestVolumeImageProvider) CreateVolumesUnder(ctx context.Context, tempDir string) ([]*Volume, error) {
+func (p *GuestVolumeImageProvider) CreateVolumesUnder(_ context.Context, _ string) ([]*Volume, error) {
 	if p.vmDir == "" {
 		return nil, errors.New("call Copy() beforehand")
 	}
@@ -218,6 +218,6 @@ func (p *GuestVolumeImageProvider) CreateVolumesUnder(ctx context.Context, tempD
 }
 
 // Delete all resources made by the provider.
-func (*GuestVolumeImageProvider) Delete(ctx context.Context) error {
+func (*GuestVolumeImageProvider) Delete(_ context.Context) error {
 	return nil
 }

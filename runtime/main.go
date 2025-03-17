@@ -16,8 +16,8 @@ package main
 import (
 	"os"
 
-	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/runtime/v2/shim"
+	"github.com/containerd/log"
 	"github.com/sirupsen/logrus"
 )
 

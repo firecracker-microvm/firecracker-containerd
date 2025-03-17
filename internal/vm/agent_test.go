@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"github.com/containerd/containerd/cio"
-	"github.com/containerd/containerd/log"
+	"github.com/containerd/log"
 	"github.com/stretchr/testify/assert"
 )
 

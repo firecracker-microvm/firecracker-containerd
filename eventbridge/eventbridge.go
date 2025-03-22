@@ -22,7 +22,7 @@ import (
 
 	// Even though we are following the v2 runtime model, we are currently re-using a struct definition (Envelope) from
 	// the v1 event API
-	eventapi "github.com/containerd/containerd/api/services/events/v1"
+	eventapi "github.com/containerd/containerd/api/types"
 
 	"github.com/containerd/containerd/events"
 	"github.com/containerd/containerd/protobuf/types"

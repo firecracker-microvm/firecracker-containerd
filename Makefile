@@ -17,6 +17,7 @@ INTEG_TEST_SUBDIRS:=$(addprefix integ-test-,$(SUBDIRS))
 
 export INSTALLROOT?=/usr/local
 export STATIC_AGENT
+export STATIC_DOCKER_CREDENTIAL_MMDS
 
 export DOCKER_IMAGE_TAG?=latest
 
@@ -89,6 +90,7 @@ $(SUBDIRS):
 		--env GOPATH=/go \
 		--env GO111MODULES=on \
 		--env STATIC_AGENT=on \
+		--env STATIC_DOCKER_CREDENTIAL_MMDS=on \
 		--env GOPROXY=$(shell go env GOPROXY) \
 		--workdir /src \
 		$(FIRECRACKER_CONTAINERD_BUILDER_IMAGE) \

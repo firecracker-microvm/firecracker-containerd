@@ -22,7 +22,11 @@ all: credential-helper
 credential-helper: docker-credential-mmds
 
 docker-credential-mmds: $(SOURCES) $(GOMOD) $(GOSUM)
+ifneq ($(STATIC_DOCKER_CREDENTIAL_MMDS),)
+	CGO_ENABLED=0 go build -o docker-credential-mmds $(EXTRAGOARGS) -ldflags "-X main.revision=$(REVISION)"
+else
 	go build -o docker-credential-mmds $(EXTRAGOARGS) -ldflags "-X main.revision=$(REVISION)"
+endif
 
 test:
 	go test ./... $(EXTRAGOARGS)

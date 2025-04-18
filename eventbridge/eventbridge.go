@@ -20,10 +20,7 @@ import (
 	_ "github.com/containerd/containerd/api/events"
 	"github.com/containerd/containerd/protobuf"
 
-	// Even though we are following the v2 runtime model, we are currently re-using a struct definition (Envelope) from
-	// the v1 event API
-	eventapi "github.com/containerd/containerd/api/services/events/v1"
-
+	apitypes "github.com/containerd/containerd/api/types"
 	"github.com/containerd/containerd/events"
 	"github.com/containerd/containerd/protobuf/types"
 	"github.com/containerd/ttrpc"
@@ -43,7 +40,7 @@ type Getter interface {
 	// GetEvent retrieves a single event from the source provided by the implementation. If no event is available at the
 	// time of the call, GetEvent is expected to block until an event is available, an error occurs or the context is
 	// canceled.
-	GetEvent(ctx context.Context) (*eventapi.Envelope, error)
+	GetEvent(ctx context.Context) (*apitypes.Envelope, error)
 }
 
 type getterService struct {
@@ -64,10 +61,10 @@ func NewGetterService(ctx context.Context, eventSource events.Subscriber) Getter
 
 // GetEvent pops and returns an event buffered in the service's subscription channel. If not events is in the channel
 // GetEvent blocks until one is available, an error is published on the error channel or the context is canceled.
-func (s *getterService) GetEvent(ctx context.Context) (*eventapi.Envelope, error) {
+func (s *getterService) GetEvent(ctx context.Context) (*apitypes.Envelope, error) {
 	select {
 	case receivedEnvelope := <-s.eventChan:
-		return &eventapi.Envelope{
+		return &apitypes.Envelope{
 			Timestamp: protobuf.ToTimestamp(receivedEnvelope.Timestamp),
 			Namespace: receivedEnvelope.Namespace,
 			Topic:     receivedEnvelope.Topic,
@@ -109,9 +106,9 @@ func NewGetterClient(rpcClient *ttrpc.Client) Getter {
 
 // GetEvent requests and returns an event from a Getter service. If no event is available at the time of the request it
 // will block until one is.
-func (c *getterClient) GetEvent(ctx context.Context) (*eventapi.Envelope, error) {
+func (c *getterClient) GetEvent(ctx context.Context) (*apitypes.Envelope, error) {
 	var req types.Empty
-	var resp eventapi.Envelope
+	var resp apitypes.Envelope
 	if err := c.rpcClient.Call(ctx, getterServiceName, getEventMethodName, &req, &resp); err != nil {
 		return nil, err
 	}

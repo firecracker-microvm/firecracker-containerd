@@ -11,6 +11,10 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// Package volume provides volumes like Docker and Amazon ECS.
+// Volumes are specicial directories that could be shared by multiple containers.
+//
+// https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_definition_parameters.html#volumes
 package volume
 
 import (

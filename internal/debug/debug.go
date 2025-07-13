@@ -11,6 +11,7 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// Package debug provides utilities for handling multi-level logging.
 package debug
 
 import (

@@ -38,9 +38,6 @@ issues:
       - govet
       text: "copylocks"
     - linters:
-      - revive
-      text: package-comments
-    - linters:
       - staticcheck
       text: "Do not rely on the global seed"
   exclude-dirs:

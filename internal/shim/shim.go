@@ -11,6 +11,7 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// Package shim provides firecracker-containerd specific shim utilities.
 package shim
 
 import (

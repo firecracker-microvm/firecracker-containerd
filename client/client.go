@@ -11,6 +11,7 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// Package client provides utilities for clients of firecracker-containerd.
 package client
 
 import "github.com/firecracker-microvm/firecracker-containerd/internal/bundle"

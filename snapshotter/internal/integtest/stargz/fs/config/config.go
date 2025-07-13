@@ -38,6 +38,7 @@
    license that can be found in the NOTICE.md file.
 */
 
+// Package config provides constants for stargz snapshotter integration tests.
 package config
 
 const (

@@ -109,7 +109,7 @@ clean:
 	$(MAKE) -C $(RUNC_DIR) clean
 	$(MAKE) firecracker-clean
 	rm -f tools/*stamp *stamp
-	$(MAKE) -C tools/image-builder clean-in-docker
+	$(MAKE) -C tools/image-builder clean
 	rm -f $(DEFAULT_VMLINUX_NAME)
 
 rmi-if-exists = $(if $(shell docker images -q $(1)),docker rmi $(1),true)

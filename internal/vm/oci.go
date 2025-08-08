@@ -24,6 +24,7 @@
    limitations under the License.
 */
 
+// Package vm provides utilities for managing the VM.
 package vm
 
 import (

@@ -11,6 +11,7 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// Package app provides the entrypoint for the demux snapshotter.
 package app
 
 import (

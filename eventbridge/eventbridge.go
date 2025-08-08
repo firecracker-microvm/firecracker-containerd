@@ -11,6 +11,7 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// Package eventbridge provides utilities for bridging containerd event streams.
 package eventbridge
 
 import (

@@ -11,6 +11,7 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// Package cpuset provides a builder for creating cpuset configurations.
 package cpuset
 
 import (

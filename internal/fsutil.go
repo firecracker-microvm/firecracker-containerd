@@ -82,7 +82,7 @@ func CreateBlockDevice(ctx context.Context, t testing.TB) (string, func()) {
 	err = f.Truncate(32 * mib)
 	require.NoError(t, err)
 
-	out, err := exec.CommandContext(ctx, "mkfs.ext4", "-v", f.Name()).CombinedOutput()
+	out, err := exec.CommandContext(ctx, "/usr/sbin/mkfs.ext4", "-v", f.Name()).CombinedOutput()
 	require.NoErrorf(t, err, "failed to create ext img, command out:%s \n", string(out))
 
 	err = f.Close()

@@ -66,7 +66,7 @@ EOF
 
 touch ${FICD_CONTAINERD_OUTFILE}
 chmod a+rw ${FICD_CONTAINERD_OUTFILE}
-/usr/local/bin/containerd --log-level debug &>> ${FICD_CONTAINERD_OUTFILE} &
+PATH="/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin:/usr/local/sbin:/usr/local/go/bin" /usr/local/bin/containerd --log-level debug &>> ${FICD_CONTAINERD_OUTFILE} &
 
 /usr/local/bin/http-address-resolver &>> ${FICD_LOG_DIR}/http-address-resolver.out &
 /usr/local/bin/demux-snapshotter &>> ${FICD_LOG_DIR}/demux-snapshotter.out &

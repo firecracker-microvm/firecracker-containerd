@@ -10,6 +10,8 @@ ARG FIRECRACKER_TARGET=x86_64-unknown-linux-musl
 ENV FICD_LOG_DIR="/var/log/firecracker-containerd-test"
 ENV FICD_CONTAINERD_OUTFILE="${FICD_LOG_DIR}/containerd.out"
 
+# rng-tools: for rngtest
+# e2fsprogs: for mkfs.ext4
 RUN apt-get update && apt-get install --yes --no-install-recommends \
   build-essential \
   ca-certificates \
@@ -21,8 +23,8 @@ RUN apt-get update && apt-get install --yes --no-install-recommends \
   libseccomp-dev \
   tcpdump \
   iproute2 \
-  rng-tools # used for rngtest \
-  e2fsprogs # for mkfs.ext4
+  rng-tools \
+  e2fsprogs
 
 RUN mkdir -p \
   /var/run/firecracker-containerd \

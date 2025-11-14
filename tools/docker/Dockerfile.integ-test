@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:experimental
 # Test image that starts up containerd and the devmapper snapshotter. The default CMD will drop to a bash shell. Overrides
 # to CMD will be provided appended to /bin/bash -c
-FROM public.ecr.aws/docker/library/golang:1.24-trixie
+FROM public.ecr.aws/docker/library/golang:1.24-bookworm
 ENV PATH="/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin:/usr/local/sbin:/usr/local/go/bin"
 ENV INSTALLROOT="/usr/local"
 ENV DEBIAN_FRONTEND="noninteractive"

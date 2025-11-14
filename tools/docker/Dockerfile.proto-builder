@@ -14,8 +14,8 @@
 FROM public.ecr.aws/docker/library/golang:1.24-bookworm
 
 RUN apt-get update && apt-get install --yes --no-install-recommends \
-	libprotobuf-dev=3.21.12-11 \
-	protobuf-compiler=3.21.12-11 \
+	libprotobuf-dev=3.21.12-3 \
+	protobuf-compiler=3.21.12-3 \
 	&& go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.33 \
 	&& go install github.com/containerd/ttrpc/cmd/protoc-gen-go-ttrpc@v1.2.3 \
 	&& mkdir /protobuf

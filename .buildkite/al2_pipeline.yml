@@ -24,7 +24,7 @@ steps:
       FICD_DM_VOLUME_GROUP: "fcci-vg"
     command:
       - ./.buildkite/setup_al2.sh
-      - docker run --rm -v $PWD:/mnt debian:trixie-slim rm -rf /mnt/tools/image-builder/rootfs
+      - docker run --rm -v $PWD:/mnt debian:bookworm-slim rm -rf /mnt/tools/image-builder/rootfs
 
   - wait
 

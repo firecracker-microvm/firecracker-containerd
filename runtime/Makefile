@@ -159,10 +159,9 @@ critest:
 		--env FICD_DM_POOL=$(FICD_DM_POOL) \
 		--env GOPROXY=direct \
 		--env GOSUMDB=off \
-      	--env ACK_GINKGO_DEPRECATIONS=2.25.0 \
 		--workdir="/src/runtime" \
 		$(FIRECRACKER_CONTAINERD_TEST_IMAGE):$(DOCKER_IMAGE_TAG) \
-		"sleep 1 && critest -ginkgo.noColor -runtime-endpoint unix:///run/firecracker-containerd/containerd.sock | \
+		"sleep 1 && critest -ginkgo.no-color -runtime-endpoint unix:///run/firecracker-containerd/containerd.sock | \
 		./critest/critest_diff.sh"
 
 clean:

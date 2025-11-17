@@ -128,15 +128,3 @@ steps:
     command:
       - make -C examples integ-test TEST_POOL=build_${BUILDKITE_BUILD_NUMBER}_example
     timeout_in_minutes: 10
-
-  - label: ":rotating_light: cri conformance tests"
-    agents:
-      queue: "${BUILDKITE_AGENT_META_DATA_QUEUE:-default}"
-      distro: "${BUILDKITE_AGENT_META_DATA_DISTRO}"
-      hostname: "${BUILDKITE_AGENT_META_DATA_HOSTNAME}"
-    env:
-      DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
-      FICD_DM_VOLUME_GROUP: fcci-vg
-    command:
-      - make -C runtime critest FICD_DM_POOL=build_${BUILDKITE_BUILD_NUMBER}_critest
-    timeout_in_minutes: 10

@@ -153,9 +153,11 @@ else
             if command -v ctr >/dev/null 2>&1; then
                 echo "Cleaning up containerd snapshots..."
                 # List and remove any active snapshots using containerd API
-                for snap in $(ctr --address /run/firecracker-containerd/containerd.sock snapshots list -q 2>/dev/null || true); do
-                    echo "Removing containerd snapshot: $snap"
-                    ctr --address /run/firecracker-containerd/containerd.sock snapshots remove "$snap" 2>/dev/null || true
+                for snap in $(ctr --address /run/firecracker-containerd/containerd.sock snapshots list 2>/dev/null | tail -n +2 | awk '{print $1}' || true); do
+                    if [ -n "$snap" ] && [ "$snap" != "KEY" ]; then
+                        echo "Removing containerd snapshot: $snap"
+                        ctr --address /run/firecracker-containerd/containerd.sock snapshots remove "$snap" 2>/dev/null || true
+                    fi
                 done
                 
                 # Give containerd time to release device references
@@ -164,7 +166,7 @@ else
             
             # Sync filesystem and drop caches to help release any remaining references
             sync
-            echo 1 > /proc/sys/vm/drop_caches 2>/dev/null || true
+            sudo bash -c 'echo 1 > /proc/sys/vm/drop_caches' 2>/dev/null || true
             
             pool_remove
         fi

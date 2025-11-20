@@ -97,7 +97,7 @@ else
         sudo dmsetup remove \
          "${dm_device}" \
          "${dm_device}_tdata" "${dm_device}_tmeta" || true
-        sudo lvremove -f "$dm_device" || true
+        sudo lvremove -f "$dm_device"
     }
 
     pool_reset() {

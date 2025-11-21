@@ -291,7 +291,7 @@ $(FIREWALL_BIN):
 
 TC_REDIRECT_TAP_BIN?=$(BINPATH)/tc-redirect-tap
 $(TC_REDIRECT_TAP_BIN):
-	GOBIN=$(dir $@) go install github.com/awslabs/tc-redirect-tap/cmd/tc-redirect-tap@v0.0.0-20211025175357-e30dfca224c2
+	GOBIN=$(dir $@) go install github.com/awslabs/tc-redirect-tap/cmd/tc-redirect-tap@v0.0.0-20250516183331-34bf829e9a5c
 
 TEST_BRIDGED_TAP_BIN?=$(BINPATH)/test-bridged-tap
 $(TEST_BRIDGED_TAP_BIN): $(shell find internal/cmd/test-bridged-tap -name *.go) $(GOMOD) $(GOSUM)

@@ -2469,6 +2469,8 @@ func TestPauseResume_Isolated(t *testing.T) {
 		_, err := fcClient.ResumeVM(ctx, &proto.ResumeVMRequest{VMID: vmID})
 		require.NoError(t, err)
 
+		time.Sleep(3 * time.Second)
+
 		_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
 		require.NoError(t, err)
 	}

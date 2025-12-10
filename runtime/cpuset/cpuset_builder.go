@@ -11,6 +11,8 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// Package cpuset provides helpers for constructing and managing cpusets
+// used by Firecracker VMs and container workloads.
 package cpuset
 
 import (

@@ -11,6 +11,8 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// Package integtest provides shared configuration and utilities for
+// integration tests across firecracker-containerd.
 package integtest
 
 import (

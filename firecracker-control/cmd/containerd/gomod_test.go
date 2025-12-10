@@ -11,6 +11,8 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// gomod_test keeps the firecracker-control containerd command and its
+// dependencies visible to Go's module tooling so they are not pruned.
 package main
 
 import "github.com/containerd/containerd/cmd/ctr/app"

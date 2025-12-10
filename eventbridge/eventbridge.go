@@ -11,6 +11,8 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// Package eventbridge implements an event forwarding bridge that translates
+// and relays containerd events to firecracker-containerd components.
 package eventbridge
 
 import (

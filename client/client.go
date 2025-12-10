@@ -11,6 +11,8 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// Package client contains helpers for working with containers managed by
+// firecracker-containerd, such as computing rootfs paths inside a microVM.
 package client
 
 import "github.com/firecracker-microvm/firecracker-containerd/internal/bundle"

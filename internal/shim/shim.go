@@ -11,6 +11,8 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// Package shim provides helpers for working with the containerd shim,
+// including construction of Firecracker control socket addresses.
 package shim
 
 import (

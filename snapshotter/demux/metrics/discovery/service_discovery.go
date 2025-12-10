@@ -11,6 +11,8 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// Package discovery provides metrics and helpers for discovering remote
+// snapshotter services used by the demux snapshotter.
 package discovery
 
 import (

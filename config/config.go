@@ -11,6 +11,8 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// Package config defines configuration structures and helpers used by
+// firecracker-containerd, including loading and validating config files.
 package config
 
 import (

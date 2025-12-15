@@ -11,6 +11,8 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// Package mount provides helpers for working with collections of
+// containerd mounts.
 package mount
 
 import "github.com/containerd/containerd/mount"

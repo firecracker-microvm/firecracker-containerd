@@ -11,6 +11,8 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// Package metrics exposes Prometheus metrics for the demux snapshotter's
+// proxy operations, providing visibility into request handling and failures.
 package metrics
 
 import (

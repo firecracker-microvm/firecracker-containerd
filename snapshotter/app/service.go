@@ -11,6 +11,8 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// Package app implements the application layer for the snapshotter,
+// including service initialization and GRPC wiring.
 package app
 
 import (

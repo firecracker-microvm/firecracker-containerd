@@ -11,6 +11,8 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// Package service defines common constants shared by the firecracker-control
+// service implementation, such as plugin identifiers.
 package service
 
 const (

@@ -11,6 +11,8 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// Package firecrackeroci defines OCI annotations and related helpers used by
+// the Firecracker runtime integration.
 package firecrackeroci
 
 import (

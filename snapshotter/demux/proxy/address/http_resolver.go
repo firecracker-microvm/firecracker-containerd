@@ -11,6 +11,8 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// Package address defines resolvers for locating proxy network addresses
+// used by the demux snapshotter's HTTP services.
 package address
 
 import (

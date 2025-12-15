@@ -11,6 +11,9 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// Package internal contains internal test and helper implementations for
+// the demux snapshotter, including a snapshotter that intentionally fails
+// for error-path validation.
 package internal
 
 import (

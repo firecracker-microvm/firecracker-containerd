@@ -32,6 +32,8 @@
    limitations under the License.
 */
 
+// Package source builds source information for stargz-based remote
+// snapshots in integration tests by annotating image descriptors.
 package source
 
 import (

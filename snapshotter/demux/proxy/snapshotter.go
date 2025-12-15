@@ -11,6 +11,8 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// Package proxy implements the proxy snapshotter used by the demux
+// snapshotter to route requests to remote snapshotter backends.
 package proxy
 
 import (

@@ -11,6 +11,8 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// Package vm contains Firecracker VM runtime helpers, including utilities
+// for preparing and managing container filesystem mounts inside VMs.
 package vm
 
 import (

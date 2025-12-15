@@ -11,6 +11,8 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// Package cache implements a cache of remote snapshotters used by the
+// demux snapshotter for routing requests and service discovery.
 package cache
 
 import (

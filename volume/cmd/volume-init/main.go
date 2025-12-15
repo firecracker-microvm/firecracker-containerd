@@ -11,6 +11,8 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// volume-init reads volume mapping configuration from stdin and copies
+// the requested directories into the guest volume image.
 package main
 
 import (

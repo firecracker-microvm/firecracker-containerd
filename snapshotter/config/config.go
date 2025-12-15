@@ -11,6 +11,8 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// Package config defines configuration structures and helpers for the
+// demux snapshotter, including loading configuration from TOML files.
 package config
 
 import (

@@ -11,6 +11,9 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// Package client implements a Go client for interacting with the
+// firecracker-control service, providing access to VM and lifecycle
+// management APIs.
 package client
 
 import (

@@ -38,6 +38,8 @@
    license that can be found in the NOTICE.md file.
 */
 
+// Package config defines labels used to configure the Stargz remote
+// snapshotter behavior in integration tests.
 package config
 
 const (

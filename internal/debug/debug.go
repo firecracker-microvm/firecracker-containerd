@@ -11,6 +11,8 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// Package debug provides helpers for configuring firecracker-containerd
+// logging and managing debug log levels across components.
 package debug
 
 import (

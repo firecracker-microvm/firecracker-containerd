@@ -11,6 +11,8 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// Package internal contains shared helpers and internal utilities used
+// across firecracker-containerd components.
 package internal
 
 import (

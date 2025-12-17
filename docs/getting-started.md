@@ -168,6 +168,10 @@ set -ex
 
 DIR=/var/lib/firecracker-containerd/snapshotter/devmapper
 POOL=fc-dev-thinpool
+	
+if [[ ! -d "${DIR}" ]]; then
+mkdir -p "${DIR}"
+fi
 
 if [[ ! -f "${DIR}/data" ]]; then
 touch "${DIR}/data"

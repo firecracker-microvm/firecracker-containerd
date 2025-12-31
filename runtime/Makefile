@@ -40,7 +40,7 @@ all: runtime
 runtime: containerd-shim-aws-firecracker
 
 containerd-shim-aws-firecracker: $(SOURCES) $(GOMOD) $(GOSUM)
-	go build -o containerd-shim-aws-firecracker $(EXTRAGOARGS) -ldflags "-X main.revision=$(REVISION)"
+	go build -o containerd-shim-aws-firecracker -ldflags "-X main.revision=$(REVISION)"
 
 install: containerd-shim-aws-firecracker
 	install -D -o root -g root -m755 -t $(INSTALLROOT)/bin containerd-shim-aws-firecracker

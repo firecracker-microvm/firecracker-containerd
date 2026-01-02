@@ -76,3 +76,43 @@ func createTempConfig(t *testing.T, contents string) (string, func()) {
 	}
 	return configFile.Name(), func() { os.Remove(configFile.Name()) }
 }
+
+func TestLoadConfigDefaultVcpuAndMem(t *testing.T) {
+	testcases := []struct {
+		name          string
+		configContent string
+		expectedVcpu  uint32
+		expectedMem   uint32
+	}{
+		{
+			name:          "DefaultsWhenNotSpecified",
+			configContent: `{}`,
+			expectedVcpu:  0, // 0 means use hardcoded default
+			expectedMem:   0, // 0 means use hardcoded default
+		},
+		{
+			name:          "CustomVcpuAndMem",
+			configContent: `{"default_vcpu_count": 4, "default_mem_size_mib": 512}`,
+			expectedVcpu:  4,
+			expectedMem:   512,
+		},
+		{
+			name:          "LargeVcpuCount",
+			configContent: `{"default_vcpu_count": 32}`,
+			expectedVcpu:  32,
+			expectedMem:   0,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			configFile, cleanup := createTempConfig(t, tc.configContent)
+			defer cleanup()
+
+			cfg, err := LoadConfig(configFile)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expectedVcpu, cfg.DefaultVcpuCount)
+			assert.Equal(t, tc.expectedMem, cfg.DefaultMemSizeMib)
+		})
+	}
+}

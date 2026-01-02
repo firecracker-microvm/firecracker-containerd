@@ -5,5 +5,7 @@
   "root_drive": "./vsock.img",
   "cpu_template": "T2",
   "log_levels": ["debug"],
-  "ht_enabled": false
+  "smt_enabled": false,
+  "default_vcpu_count": 1,
+  "default_mem_size_mib": 128
 }

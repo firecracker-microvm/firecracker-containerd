@@ -31,10 +31,21 @@ const (
 )
 
 func machineConfigurationFromProto(cfg *config.Config, req *proto.FirecrackerMachineConfiguration) models.MachineConfiguration {
+	// Use config values if provided, otherwise fall back to hardcoded defaults
+	vcpuCount := int64(defaultCPUCount)
+	if cfg.DefaultVcpuCount > 0 {
+		vcpuCount = int64(cfg.DefaultVcpuCount)
+	}
+
+	memSizeMib := int64(defaultMemSizeMb)
+	if cfg.DefaultMemSizeMib > 0 {
+		memSizeMib = int64(cfg.DefaultMemSizeMib)
+	}
+
 	config := models.MachineConfiguration{
 		CPUTemplate: models.CPUTemplate(cfg.CPUTemplate),
-		VcpuCount:   firecracker.Int64(defaultCPUCount),
-		MemSizeMib:  firecracker.Int64(defaultMemSizeMb),
+		VcpuCount:   firecracker.Int64(vcpuCount),
+		MemSizeMib:  firecracker.Int64(memSizeMib),
 		Smt:         firecracker.Bool(cfg.SmtEnabled),
 	}
 

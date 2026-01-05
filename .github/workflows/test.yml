@@ -1,0 +1,110 @@
+name: Firecracker Containerd CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+env:
+  AWS_REGION: us-west-2
+
+jobs:
+  setup:
+    name: Setup Build Matrix
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - use-codebuild: ${{ github.repository_owner == 'coderbirju' }}
+            runs-on-names-cb: [ubuntu-x86]
+            runs-on-names-gh: [ubuntu-latest]
+            runner-labels:
+              ubuntu-latest: ubuntu-latest
+              ubuntu-x86: "codebuild-fccd-codebuild-${{ github.run_id }}-${{ github.run_attempt }}-ubuntu-7.0-large"
+    outputs:
+      available-runners: ${{ matrix.use-codebuild && toJSON(matrix.runs-on-names-cb) || toJSON(matrix.runs-on-names-gh) }}
+      runner-labels: ${{ toJSON(matrix.runner-labels) }}
+    steps:
+      - name: Dump Config
+        run: echo '${{ toJSON(matrix) }}'
+
+  build-and-test:
+    name: Build and Test
+    needs: setup
+    strategy:
+      matrix:
+        runner: ${{ fromJSON(needs.setup.outputs.available-runners) }}
+    runs-on: ${{ fromJSON(needs.setup.outputs.runner-labels)[matrix.runner] }}
+    
+    env:
+      DOCKER_IMAGE_TAG: "${{ github.run_id }}"
+      EXTRAGOARGS: "-race"
+      DISABLE_ROOT_TESTS: 1
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          
+      - name: Set up environment
+        run: |
+          echo "Build started on $(date)"
+          echo "Runner: ${{ matrix.runner }}"
+          echo "Docker image tag: $DOCKER_IMAGE_TAG"
+          
+          # Create artifacts directory (equivalent to /local/artifacts in Buildkite)
+          mkdir -p /tmp/artifacts/$DOCKER_IMAGE_TAG
+          
+      - name: "Phase 1: Build test images"
+        run: |
+          echo "=== Building test images ==="
+          make test-images
+          
+          echo "Cleaning up rootfs directory..."
+          docker run --rm -v $PWD:/mnt debian:bookworm-slim rm -rf /mnt/tools/image-builder/rootfs
+          
+          echo "Copying rootfs image to artifacts..."
+          cp tools/image-builder/rootfs.img /tmp/artifacts/$DOCKER_IMAGE_TAG/
+          
+      - name: "Phase 2: Loop device cleanup check"
+        run: |
+          echo "=== Checking for loop device leaks ==="
+          sudo losetup -l || echo "No losetup available or no loop devices"
+          
+      - name: "Phase 3: Verify proto files"
+        timeout-minutes: 1
+        run: |
+          echo "=== Verifying protobuf files ==="
+          make proto
+          
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "❌ Generated protobuf code differs from committed files"
+            git status
+            echo ""
+            echo "Generated protobuf code differs from committed, please run 'make proto' and commit the updated files."
+            exit 1
+          else
+            echo "✅ Protobuf files are up to date"
+          fi
+          
+      - name: "Phase 4: Unit tests"
+        timeout-minutes: 10
+        run: |
+          echo "=== Running unit tests ==="
+          
+          echo "Restoring rootfs image for tests..."
+          cp /tmp/artifacts/$DOCKER_IMAGE_TAG/rootfs.img tools/image-builder/rootfs.img
+          
+          echo "Running unit tests in docker..."
+          export EXTRAGOARGS="-v -count=1 -race"
+          make test-in-docker
+          
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rootfs-image-${{ matrix.runner }}-${{ github.run_id }}
+          path: tools/image-builder/rootfs.img
+          retention-days: 7

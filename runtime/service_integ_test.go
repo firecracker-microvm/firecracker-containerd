@@ -786,7 +786,10 @@ func TestLongUnixSocketPath_Isolated(t *testing.T) {
 				}
 			}
 
-			_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
+			_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{
+				VMID:           vmID,
+				TimeoutSeconds: 30,
+			})
 			require.NoError(t, err)
 
 			matches, err := findProcess(ctx, findShim)
@@ -1696,7 +1699,10 @@ func TestStopVM_Isolated(t *testing.T) {
 
 			createVMRequest: proto.CreateVMRequest{},
 			stopFunc: func(ctx context.Context, tb testing.TB, fcClient fccontrol.FirecrackerService, req proto.CreateVMRequest) {
-				_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: req.VMID})
+				_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{
+					VMID:           req.VMID,
+					TimeoutSeconds: 30,
+				})
 				require.Equal(tb, status.Code(err), codes.OK)
 			},
 		},
@@ -2051,7 +2057,10 @@ func TestExec_Isolated(t *testing.T) {
 			"context cancelled while waiting for container %s to exit, err: %v", c.ID(), ctx.Err())
 	}
 
-	_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
+	_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{
+		VMID:           vmID,
+		TimeoutSeconds: 30,
+	})
 	assert.NoError(t, err)
 	require.Equal(t, status.Code(err), codes.OK)
 }
@@ -2092,7 +2101,10 @@ func TestEvents_Isolated(t *testing.T) {
 	stdout := startAndWaitTask(ctx, t, c)
 	require.Equal(t, "hello", stdout)
 
-	_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
+	_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{
+		VMID:           vmID,
+		TimeoutSeconds: 30,
+	})
 	require.Equal(t, status.Code(err), codes.OK)
 
 	expected := []string{
@@ -2342,7 +2354,10 @@ func TestCreateVM_Isolated(t *testing.T) {
 			// Ensure the response fields are populated correctly
 			assert.Equal(t, request.VMID, resp.VMID)
 
-			_, err := fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: request.VMID})
+			_, err := fcClient.StopVM(ctx, &proto.StopVMRequest{
+				VMID:           request.VMID,
+				TimeoutSeconds: 30,
+			})
 			require.Equal(t, status.Code(err), codes.OK)
 		}
 	}

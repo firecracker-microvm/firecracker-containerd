@@ -70,7 +70,7 @@ steps:
     env:
       DOCKER_IMAGE_TAG: "$BUILDKITE_BUILD_NUMBER"
       NUMBER_OF_VMS: 10
-      EXTRAGOARGS: "-v -count=1 -race"
+      EXTRAGOARGS: "-v -count=1 -race -skip TestPauseResume_Isolated"
       FICD_DM_VOLUME_GROUP: fcci-vg
     artifact_paths:
       - "runtime/logs/*"

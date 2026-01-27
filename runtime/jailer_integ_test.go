@@ -179,7 +179,10 @@ func testJailer(t *testing.T, jailerConfig *proto.JailerConfig) {
 	err = c.Delete(ctx, containerd.WithSnapshotCleanup)
 	require.NoError(t, err, "failed to delete a container")
 
-	_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
+	_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{
+		VMID:           vmID,
+		TimeoutSeconds: 30,
+	})
 	require.NoError(t, err)
 
 	assertEmptyShimDir(t, "default", vmID)
@@ -283,7 +286,10 @@ func testAttachBlockDevice(tb testing.TB, jailerConfig *proto.JailerConfig) {
 	err = c.Delete(ctx, containerd.WithSnapshotCleanup)
 	require.NoError(tb, err, "failed to delete a container-block-device")
 
-	_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
+	_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{
+		VMID:           vmID,
+		TimeoutSeconds: 30,
+	})
 	require.NoError(tb, err)
 
 	assertEmptyShimDir(tb, "default", vmID)

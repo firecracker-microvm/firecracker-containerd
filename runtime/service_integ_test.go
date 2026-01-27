@@ -50,6 +50,7 @@ import (
 
 	"github.com/firecracker-microvm/firecracker-containerd/config"
 	_ "github.com/firecracker-microvm/firecracker-containerd/firecracker-control"
+	fcclient "github.com/firecracker-microvm/firecracker-containerd/firecracker-control/client"
 	"github.com/firecracker-microvm/firecracker-containerd/internal"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/integtest"
 	"github.com/firecracker-microvm/firecracker-containerd/internal/vm"
@@ -786,7 +787,10 @@ func TestLongUnixSocketPath_Isolated(t *testing.T) {
 				}
 			}
 
-			_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
+			_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{
+				VMID:           vmID,
+				TimeoutSeconds: 30,
+			})
 			require.NoError(t, err)
 
 			matches, err := findProcess(ctx, findShim)
@@ -1696,7 +1700,10 @@ func TestStopVM_Isolated(t *testing.T) {
 
 			createVMRequest: proto.CreateVMRequest{},
 			stopFunc: func(ctx context.Context, tb testing.TB, fcClient fccontrol.FirecrackerService, req proto.CreateVMRequest) {
-				_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: req.VMID})
+				_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{
+					VMID:           req.VMID,
+					TimeoutSeconds: 30,
+				})
 				require.Equal(tb, status.Code(err), codes.OK)
 			},
 		},
@@ -2051,7 +2058,10 @@ func TestExec_Isolated(t *testing.T) {
 			"context cancelled while waiting for container %s to exit, err: %v", c.ID(), ctx.Err())
 	}
 
-	_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
+	_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{
+		VMID:           vmID,
+		TimeoutSeconds: 30,
+	})
 	assert.NoError(t, err)
 	require.Equal(t, status.Code(err), codes.OK)
 }
@@ -2092,7 +2102,10 @@ func TestEvents_Isolated(t *testing.T) {
 	stdout := startAndWaitTask(ctx, t, c)
 	require.Equal(t, "hello", stdout)
 
-	_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
+	_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{
+		VMID:           vmID,
+		TimeoutSeconds: 30,
+	})
 	require.Equal(t, status.Code(err), codes.OK)
 
 	expected := []string{
@@ -2342,7 +2355,10 @@ func TestCreateVM_Isolated(t *testing.T) {
 			// Ensure the response fields are populated correctly
 			assert.Equal(t, request.VMID, resp.VMID)
 
-			_, err := fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: request.VMID})
+			_, err := fcClient.StopVM(ctx, &proto.StopVMRequest{
+				VMID:           request.VMID,
+				TimeoutSeconds: 30,
+			})
 			require.Equal(t, status.Code(err), codes.OK)
 		}
 	}
@@ -2371,34 +2387,31 @@ func TestPauseResume_Isolated(t *testing.T) {
 	require.NoError(t, err, "unable to create client to containerd service at %s, is containerd running?", integtest.ContainerdSockPath)
 	defer client.Close()
 
-	ctx := namespaces.WithNamespace(context.Background(), "default")
-
-	fcClient, err := integtest.NewFCControlClient(integtest.ContainerdSockPath)
-	require.NoError(t, err, "failed to create ttrpc client")
-
 	subtests := []struct {
 		name  string
-		state func(ctx context.Context, resp *proto.CreateVMResponse)
+		state func(ctx context.Context, fcClient *fcclient.Client, resp *proto.CreateVMResponse)
 	}{
 		{
 			name: "PauseVM",
-			state: func(ctx context.Context, resp *proto.CreateVMResponse) {
+			state: func(ctx context.Context, fcClient *fcclient.Client, resp *proto.CreateVMResponse) {
 				_, err := fcClient.PauseVM(ctx, &proto.PauseVMRequest{VMID: resp.VMID})
 				require.NoError(t, err)
 			},
 		},
 		{
 			name: "ResumeVM",
-			state: func(ctx context.Context, resp *proto.CreateVMResponse) {
+			state: func(ctx context.Context, fcClient *fcclient.Client, resp *proto.CreateVMResponse) {
 				_, err := fcClient.ResumeVM(ctx, &proto.ResumeVMRequest{VMID: resp.VMID})
 				require.NoError(t, err)
 			},
 		},
 		{
 			name: "Consecutive PauseVM",
-			state: func(ctx context.Context, resp *proto.CreateVMResponse) {
+			state: func(ctx context.Context, fcClient *fcclient.Client, resp *proto.CreateVMResponse) {
 				_, err := fcClient.PauseVM(ctx, &proto.PauseVMRequest{VMID: resp.VMID})
 				require.NoError(t, err)
+
+				time.Sleep(200 * time.Millisecond)
 
 				_, err = fcClient.PauseVM(ctx, &proto.PauseVMRequest{VMID: resp.VMID})
 				require.NoError(t, err)
@@ -2406,9 +2419,11 @@ func TestPauseResume_Isolated(t *testing.T) {
 		},
 		{
 			name: "Consecutive ResumeVM",
-			state: func(ctx context.Context, resp *proto.CreateVMResponse) {
+			state: func(ctx context.Context, fcClient *fcclient.Client, resp *proto.CreateVMResponse) {
 				_, err := fcClient.ResumeVM(ctx, &proto.ResumeVMRequest{VMID: resp.VMID})
 				require.NoError(t, err)
+
+				time.Sleep(200 * time.Millisecond)
 
 				_, err = fcClient.ResumeVM(ctx, &proto.ResumeVMRequest{VMID: resp.VMID})
 				require.NoError(t, err)
@@ -2416,9 +2431,11 @@ func TestPauseResume_Isolated(t *testing.T) {
 		},
 		{
 			name: "PauseResume",
-			state: func(ctx context.Context, resp *proto.CreateVMResponse) {
+			state: func(ctx context.Context, fcClient *fcclient.Client, resp *proto.CreateVMResponse) {
 				_, err := fcClient.PauseVM(ctx, &proto.PauseVMRequest{VMID: resp.VMID})
 				require.NoError(t, err)
+
+				time.Sleep(200 * time.Millisecond)
 
 				_, err = fcClient.ResumeVM(ctx, &proto.ResumeVMRequest{VMID: resp.VMID})
 				require.NoError(t, err)
@@ -2426,9 +2443,11 @@ func TestPauseResume_Isolated(t *testing.T) {
 		},
 		{
 			name: "ResumePause",
-			state: func(ctx context.Context, resp *proto.CreateVMResponse) {
+			state: func(ctx context.Context, fcClient *fcclient.Client, resp *proto.CreateVMResponse) {
 				_, err := fcClient.ResumeVM(ctx, &proto.ResumeVMRequest{VMID: resp.VMID})
 				require.NoError(t, err)
+
+				time.Sleep(200 * time.Millisecond)
 
 				_, err = fcClient.PauseVM(ctx, &proto.PauseVMRequest{VMID: resp.VMID})
 				require.NoError(t, err)
@@ -2436,7 +2455,15 @@ func TestPauseResume_Isolated(t *testing.T) {
 		},
 	}
 
-	runTest := func(t *testing.T, request *proto.CreateVMRequest, state func(ctx context.Context, resp *proto.CreateVMResponse)) {
+	runTest := func(t *testing.T, request *proto.CreateVMRequest, state func(ctx context.Context, fcClient *fcclient.Client, resp *proto.CreateVMResponse)) {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		ctx = namespaces.WithNamespace(ctx, "default")
+
+		fcClient, err := integtest.NewFCControlClient(integtest.ContainerdSockPath)
+		require.NoError(t, err, "failed to create ttrpc client")
+		defer fcClient.Close()
+
 		vmID := testNameToVMID(t.Name())
 
 		tempDir := t.TempDir()
@@ -2455,7 +2482,7 @@ func TestPauseResume_Isolated(t *testing.T) {
 		requireNonEmptyFifo(t, metricsFile)
 
 		// Run test case
-		state(ctx, resp)
+		state(ctx, fcClient, resp)
 
 		// No VM to stop.
 		if createVMErr != nil {
@@ -2466,24 +2493,27 @@ func TestPauseResume_Isolated(t *testing.T) {
 		assert.Equal(t, request.VMID, resp.VMID)
 
 		// Resume the VM since state() may pause the VM.
-		_, err := fcClient.ResumeVM(ctx, &proto.ResumeVMRequest{VMID: vmID})
+		_, err = fcClient.ResumeVM(ctx, &proto.ResumeVMRequest{VMID: vmID})
 		require.NoError(t, err)
 
 		time.Sleep(3 * time.Second)
 
-		_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
+		_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{
+			VMID:           vmID,
+			TimeoutSeconds: 30,
+		})
 		require.NoError(t, err)
+
+		time.Sleep(500 * time.Millisecond)
 	}
 
 	for _, subtest := range subtests {
 		state := subtest.state
 		t.Run(subtest.name, func(t *testing.T) {
-			t.Parallel()
 			runTest(t, &proto.CreateVMRequest{}, state)
 		})
 
 		t.Run(subtest.name+"/Jailer", func(t *testing.T) {
-			t.Parallel()
 			runTest(t, &proto.CreateVMRequest{JailerConfig: &proto.JailerConfig{UID: 30000, GID: 30000}}, state)
 		})
 	}

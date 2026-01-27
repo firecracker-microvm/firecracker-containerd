@@ -78,7 +78,7 @@ const (
 	// Firecracker's API server. The channel is closed once the VM starts.
 	vmReadyTimeout = 5 * time.Second
 
-	defaultCreateVMTimeout     = 20 * time.Second
+	defaultCreateVMTimeout     = 60 * time.Second
 	defaultStopVMTimeout       = 5 * time.Second
 	defaultShutdownTimeout     = 5 * time.Second
 	defaultVSockConnectTimeout = 5 * time.Second
@@ -604,7 +604,9 @@ func (s *service) createVM(requestCtx context.Context, request *proto.CreateVMRe
 	}
 
 	s.logger.Info("calling agent")
-	conn, err := vsock.DialContext(requestCtx, relVSockPath, defaultVsockPort, vsock.WithLogger(s.logger))
+	conn, err := vsock.DialContext(requestCtx, relVSockPath, defaultVsockPort,
+		vsock.WithLogger(s.logger),
+		vsock.WithRetryTimeout(defaultCreateVMTimeout))
 	if err != nil {
 		return fmt.Errorf("failed to dial the VM over vsock: %w", err)
 	}

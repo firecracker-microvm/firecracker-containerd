@@ -2471,19 +2471,20 @@ func TestPauseResume_Isolated(t *testing.T) {
 
 		time.Sleep(3 * time.Second)
 
-		_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: vmID})
+		_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{
+			VMID:           vmID,
+			TimeoutSeconds: 30,
+		})
 		require.NoError(t, err)
 	}
 
 	for _, subtest := range subtests {
 		state := subtest.state
 		t.Run(subtest.name, func(t *testing.T) {
-			t.Parallel()
 			runTest(t, &proto.CreateVMRequest{}, state)
 		})
 
 		t.Run(subtest.name+"/Jailer", func(t *testing.T) {
-			t.Parallel()
 			runTest(t, &proto.CreateVMRequest{JailerConfig: &proto.JailerConfig{UID: 30000, GID: 30000}}, state)
 		})
 	}

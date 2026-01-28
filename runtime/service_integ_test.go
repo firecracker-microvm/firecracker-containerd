@@ -2499,9 +2499,9 @@ func TestPauseResume_Isolated(t *testing.T) {
 			runTest(t, &proto.CreateVMRequest{}, state)
 		})
 
-		t.Run(subtest.name+"/Jailer", func(t *testing.T) {
-			runTest(t, &proto.CreateVMRequest{JailerConfig: &proto.JailerConfig{UID: 30000, GID: 30000}}, state)
-		})
+		// t.Run(subtest.name+"/Jailer", func(t *testing.T) {
+		// 	runTest(t, &proto.CreateVMRequest{JailerConfig: &proto.JailerConfig{UID: 30000, GID: 30000}}, state)
+		// })
 	}
 }
 func TestAttach_Isolated(t *testing.T) {

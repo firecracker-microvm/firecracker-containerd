@@ -3,7 +3,7 @@ module github.com/firecracker-microvm/firecracker-containerd
 go 1.24.0
 
 require (
-	github.com/awslabs/tc-redirect-tap v0.0.0-20211025175357-e30dfca224c2
+	github.com/awslabs/tc-redirect-tap v0.0.0-20250516183331-34bf829e9a5c
 	github.com/containerd/containerd v1.7.29
 	github.com/containerd/containerd/api v1.8.0
 	github.com/containerd/continuity v0.4.4

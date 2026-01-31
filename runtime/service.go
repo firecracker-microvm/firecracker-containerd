@@ -1672,7 +1672,9 @@ func (s *service) terminate(ctx context.Context) (retErr error) {
 		return err
 	}
 	_, err = agent.Shutdown(ctx, &taskAPI.ShutdownRequest{ID: s.vmID, Now: true})
-	if err != nil {
+	// Ignore "ttrpc: closed" error - this is expected when the agent shuts down
+	// quickly and closes the connection before sending the response.
+	if err != nil && err.Error() != "ttrpc: closed" {
 		s.logger.WithError(err).Error("failed to call in-VM agent")
 		return
 	}

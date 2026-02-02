@@ -75,6 +75,7 @@ steps:
     artifact_paths:
       - "runtime/logs/*"
     command:
+      # Temporarily only run TestStopVM_Isolated to validate runc 1.2 fix
       - make -C runtime integ-test FICD_DM_POOL=build_${BUILDKITE_BUILD_NUMBER}_runtime
     retry:
       automatic:

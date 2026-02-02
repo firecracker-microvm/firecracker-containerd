@@ -675,6 +675,17 @@ func (j runcJailer) Stop(force bool) error {
 	return j.runcClient.Kill(j.ctx, j.vmID, int(signal), &runc.KillOpts{All: true})
 }
 
+// IsRunning checks if the runc container is still running.
+func (j *runcJailer) IsRunning(ctx context.Context) bool {
+	state, err := j.runcClient.State(ctx, j.vmID)
+	if err != nil {
+		j.logger.WithError(err).Debug("runc state failed")
+		return false
+	}
+	j.logger.WithField("status", state.Status).Debug("runc container status")
+	return state.Status == "running"
+}
+
 // setupCacheTopology will copy indexed contents from the cacheTopologyPath to
 // the jailer. This is needed for arm architecture as arm does not
 // automatically setup any cache topology

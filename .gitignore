@@ -4,4 +4,3 @@ tmp/
 runtime/logs
 *stamp
 default-vmlinux.bin
-.buildkite/.logs

@@ -353,6 +353,7 @@ func (m *taskManager) AttachIO(_ context.Context, taskID, execID string, proxy I
 
 	initDone, copyDone := proxy.start(proc)
 	proc.proxy = proxy
+	proc.ioCopyDone = copyDone
 
 	// This must be in a goroutine. Otherwise, sending to initDone channel blocks forever.
 	go func() {

@@ -48,7 +48,10 @@ func createAndStopVM(
 	}
 	elapsed := time.Since(t0)
 
-	_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: request.VMID})
+	_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{
+		VMID:           request.VMID,
+		TimeoutSeconds: 30,
+	})
 	if err != nil {
 		return 0, err
 	}

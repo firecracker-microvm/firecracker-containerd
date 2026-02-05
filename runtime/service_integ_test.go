@@ -2651,10 +2651,66 @@ func TestAttach_Isolated(t *testing.T) {
 
 // errorBuffer simulates a broken pipe (EPIPE) case.
 type errorBuffer struct {
+	writeAttempts int
+	mu            sync.Mutex
 }
 
-func (errorBuffer) Write(b []byte) (int, error) {
-	return 0, fmt.Errorf("failed to write %d bytes", len(b))
+func (e *errorBuffer) Write(b []byte) (int, error) {
+	e.mu.Lock()
+	e.writeAttempts++
+	attempts := e.writeAttempts
+	e.mu.Unlock()
+	return 0, fmt.Errorf("failed to write %d bytes (attempt %d)", len(b), attempts)
+}
+
+func (e *errorBuffer) GetWriteAttempts() int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.writeAttempts
+}
+
+// safeBuffer provides thread-safe access to a bytes.Buffer with a signal channel
+type safeBuffer struct {
+	buf      bytes.Buffer
+	mu       sync.RWMutex
+	dataRecv chan struct{}
+	once     sync.Once
+}
+
+func newSafeBuffer() *safeBuffer {
+	return &safeBuffer{
+		dataRecv: make(chan struct{}),
+	}
+}
+
+func (s *safeBuffer) Write(p []byte) (n int, err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	n, err = s.buf.Write(p)
+	if n > 0 {
+		// Signal that data has been received (only once)
+		s.once.Do(func() {
+			close(s.dataRecv)
+		})
+	}
+	return n, err
+}
+
+func (s *safeBuffer) String() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.buf.String()
+}
+
+func (s *safeBuffer) Len() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.buf.Len()
+}
+
+func (s *safeBuffer) DataReceived() <-chan struct{} {
+	return s.dataRecv
 }
 
 func TestBrokenPipe_Isolated(t *testing.T) {
@@ -2684,38 +2740,123 @@ func TestBrokenPipe_Isolated(t *testing.T) {
 
 	var stdout1 errorBuffer
 	var stderr1 errorBuffer
+	t.Logf("Creating task with errorBuffer that simulates broken pipe")
 	t1, err := c.NewTask(ctx, cio.NewCreator(cio.WithStreams(nil, &stdout1, &stderr1)))
 	require.NoError(t, err)
 
 	ch, err := t1.Wait(ctx)
 	require.NoError(t, err)
 
+	t.Logf("Starting task...")
 	err = t1.Start(ctx)
 	require.NoError(t, err)
 
-	time.Sleep(10 * time.Second)
+	// Check task status before CloseIO
+	status, err := t1.Status(ctx)
+	require.NoError(t, err)
+	t.Logf("Task status after start: Status=%s", status.Status)
 
+	// Give a small grace period for the task to start producing output
+	t.Logf("Waiting 1 second for task to start producing output...")
+	time.Sleep(1 * time.Second)
+
+	t.Logf("errorBuffer received %d write attempts so far", stdout1.GetWriteAttempts())
+
+	t.Logf("Closing IO to simulate broken pipe scenario...")
 	err = t1.CloseIO(ctx, containerd.WithStdinCloser)
 	require.NoError(t, err)
 
-	var stdout2 bytes.Buffer
-	var stderr2 bytes.Buffer
+	// Check task status after CloseIO
+	status, err = t1.Status(ctx)
+	require.NoError(t, err)
+	t.Logf("Task status after CloseIO: Status=%s", status.Status)
+
+	stdout2 := newSafeBuffer()
+	stderr2 := newSafeBuffer()
+	t.Logf("Re-attaching with new streams...")
 	t2, err := c.Task(
 		ctx,
-		cio.NewAttach(cio.WithStreams(nil, &stdout2, &stderr2)),
+		cio.NewAttach(cio.WithStreams(nil, stdout2, stderr2)),
 	)
 	require.NoError(t, err)
 	assert.Equal(t, t1.ID(), t2.ID())
 
-	time.Sleep(10 * time.Second)
+	// Check task status after re-attach
+	status, err = t2.Status(ctx)
+	require.NoError(t, err)
+	t.Logf("Task status after re-attach: Status=%s", status.Status)
 
+	// Wait for data with timeout and logging
+	t.Logf("Waiting for data in re-attached stdout2...")
+	pollCtx, pollCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer pollCancel()
+
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	startTime := time.Now()
+
+	select {
+	case <-stdout2.DataReceived():
+		elapsed := time.Since(startTime)
+		t.Logf("SUCCESS: Data received in stdout2 after %v, length=%d", elapsed, stdout2.Len())
+		goto dataReceived
+	case <-ticker.C:
+		// Log periodic status updates
+		elapsed := time.Since(startTime)
+		status, err := t2.Status(ctx)
+		if err != nil {
+			t.Logf("After %v: Failed to get task status: %v", elapsed, err)
+		} else {
+			t.Logf("After %v: Task status=%s, stdout2.len=%d, stderr2.len=%d",
+				elapsed, status.Status, stdout2.Len(), stderr2.Len())
+		}
+
+		// Continue waiting
+		select {
+		case <-stdout2.DataReceived():
+			elapsed := time.Since(startTime)
+			t.Logf("SUCCESS: Data received in stdout2 after %v, length=%d", elapsed, stdout2.Len())
+			goto dataReceived
+		case <-pollCtx.Done():
+			elapsed := time.Since(startTime)
+			t.Logf("TIMEOUT: No data received after %v", elapsed)
+
+			// Final status check
+			status, err := t2.Status(ctx)
+			if err != nil {
+				t.Logf("Final task status check failed: %v", err)
+			} else {
+				t.Logf("Final task status: Status=%s", status.Status)
+			}
+
+			t.Logf("Final buffer lengths: stdout2=%d, stderr2=%d", stdout2.Len(), stderr2.Len())
+			t.Logf("Final buffer contents: stdout2=%q, stderr2=%q", stdout2.String(), stderr2.String())
+			t.Logf("Total errorBuffer write attempts: %d", stdout1.GetWriteAttempts())
+
+			require.Fail(t, "timeout waiting for stdout2 to receive data",
+				"timeout after 30s waiting for re-attached streams to capture output")
+		}
+	case <-pollCtx.Done():
+		elapsed := time.Since(startTime)
+		t.Logf("TIMEOUT: No data received after %v", elapsed)
+		require.Fail(t, "timeout waiting for stdout2 to receive data",
+			"timeout after 30s waiting for re-attached streams to capture output")
+	}
+
+dataReceived:
+	t.Logf("Data successfully received, killing task...")
 	err = t2.Kill(ctx, syscall.SIGKILL)
 	assert.NoError(t, err)
 
+	t.Logf("Waiting for task to exit...")
 	<-ch
 
+	t.Logf("Deleting task...")
 	_, err = t2.Delete(ctx)
 	require.NoError(t, err)
 
-	assert.NotEqual(t, "", stdout2.String())
+	finalOutput := stdout2.String()
+	t.Logf("Final stdout2 output: %q (length: %d)", finalOutput, len(finalOutput))
+	assert.NotEqual(t, "", finalOutput)
 }

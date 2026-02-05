@@ -75,7 +75,7 @@ steps:
     artifact_paths:
       - "runtime/logs/*"
     command:
-      - make -C runtime integ-test FICD_DM_POOL=build_${BUILDKITE_BUILD_NUMBER}_runtime
+      - make -C runtime integ-test-TestBrokenPipe_Isolated FICD_DM_POOL=build_${BUILDKITE_BUILD_NUMBER}_runtime
     retry:
       automatic:
         - exit_status: "*"

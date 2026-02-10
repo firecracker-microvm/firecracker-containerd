@@ -78,7 +78,7 @@ const (
 	// Firecracker's API server. The channel is closed once the VM starts.
 	vmReadyTimeout = 5 * time.Second
 
-	defaultCreateVMTimeout     = 20 * time.Second
+	defaultCreateVMTimeout     = 60 * time.Second
 	defaultStopVMTimeout       = 5 * time.Second
 	defaultShutdownTimeout     = 5 * time.Second
 	defaultVSockConnectTimeout = 5 * time.Second
@@ -604,7 +604,9 @@ func (s *service) createVM(requestCtx context.Context, request *proto.CreateVMRe
 	}
 
 	s.logger.Info("calling agent")
-	conn, err := vsock.DialContext(requestCtx, relVSockPath, defaultVsockPort, vsock.WithLogger(s.logger))
+	conn, err := vsock.DialContext(requestCtx, relVSockPath, defaultVsockPort,
+		vsock.WithLogger(s.logger),
+		vsock.WithRetryTimeout(defaultCreateVMTimeout))
 	if err != nil {
 		return fmt.Errorf("failed to dial the VM over vsock: %w", err)
 	}
@@ -1667,10 +1669,13 @@ func (s *service) terminate(ctx context.Context) (retErr error) {
 	s.logger.Info("gracefully shutdown VM")
 	agent, err := s.agent()
 	if err != nil {
-		return err
+		s.logger.WithError(err).Error("failed to get agent")
+		return
 	}
 	_, err = agent.Shutdown(ctx, &taskAPI.ShutdownRequest{ID: s.vmID, Now: true})
-	if err != nil {
+	// Ignore "ttrpc: closed" error - this is expected when the agent shuts down
+	// quickly and closes the connection before sending the response.
+	if err != nil && err.Error() != "ttrpc: closed" {
 		s.logger.WithError(err).Error("failed to call in-VM agent")
 		return
 	}
@@ -1773,6 +1778,10 @@ func (s *service) cleanup() error {
 
 // monitorVMExit watches the VM and cleanup resources when it terminates.
 func (s *service) monitorVMExit() {
+	if rj, isRuncJailer := s.jailer.(*runcJailer); isRuncJailer {
+		go s.monitorJailedFirecracker(rj)
+	}
+
 	// Block until the VM exits
 	if err := s.machine.Wait(s.shimCtx); err != nil && err != context.Canceled {
 		s.logger.WithError(err).Error("error returned from VM wait")
@@ -1780,6 +1789,28 @@ func (s *service) monitorVMExit() {
 
 	if err := s.cleanup(); err != nil {
 		s.logger.WithError(err).Error("failed to clean up the VM")
+	}
+}
+
+// For runcJailer: in runc 1.2+, FC death may not exit runc immediately.
+// Monitor container state and force cleanup to unblock machine.Wait().
+func (s *service) monitorJailedFirecracker(rj *runcJailer) {
+	s.logger.Info("starting jailed firecracker monitor")
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.shimCtx.Done():
+			s.logger.Info("jailed firecracker monitor: shim context done")
+			return
+		case <-ticker.C:
+			if !rj.IsRunning(s.shimCtx) {
+				s.logger.Warn("runc container init process died, canceling shim context")
+				s.shimCancel()
+				return
+			}
+		}
 	}
 }
 

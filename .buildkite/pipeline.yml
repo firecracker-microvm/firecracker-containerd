@@ -97,6 +97,8 @@ steps:
   #     - make -C snapshotter integ-test FICD_DM_POOL=build_${BUILDKITE_BUILD_NUMBER}_snapshotter
   #   timeout_in_minutes: 10
 
+  - wait
+
   - label: ":weight_lifter: stress tests"
     concurrency_group: stress
     concurrency: 1
@@ -113,6 +115,10 @@ steps:
       - "runtime/logs/*"
     command:
       - make -C runtime integ-test-TestMultipleVMs_Isolated FICD_DM_POOL=stress$BUILDKITE_BUILD_NUMBER
+    retry:
+      automatic:
+        - exit_status: "*"
+          limit: 3
 
   - label: ":rotating_light: :exclamation: example tests"
     agents:

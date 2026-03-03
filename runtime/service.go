@@ -21,6 +21,7 @@ import (
 	"math"
 	"net"
 	"os"
+	"path/filepath"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -98,6 +99,10 @@ var (
 	// type assertions
 	_ taskAPI.TaskService = &service{}
 	_ shim.Init           = NewService
+
+	// ErrInvalidPath is the error thrown when a
+	// path provided in the config is invalid
+	ErrInvalidPath = errors.New("error validating path")
 )
 
 // implements shimapi
@@ -962,9 +967,35 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 		cfg.MachineCfg.CPUTemplate = ""
 	}
 
+	validatePath := func(path string) (string, error) {
+		if !filepath.IsAbs(path) {
+			return "", fmt.Errorf("path must be absolute: %q", path)
+		}
+		cleaned := filepath.Clean(path)
+		return cleaned, nil
+	}
+
+	// If the VM isn't jailed anyway there's no need to ensure the FIFOs are in the shim
+	if _, ok := s.jailer.(*noopJailer); !ok {
+		validateInShimDir := func(path string) (string, error) {
+			path, err := validatePath(path)
+			if err != nil {
+				return "", err
+			}
+			if !strings.HasPrefix(path, string(s.shimDir)+"/") {
+				return "", fmt.Errorf("path must be within shim directory: %q", path)
+			}
+			return path, nil
+		}
+		validatePath = validateInShimDir
+	}
+
 	logPath := s.shimDir.FirecrackerLogFifoPath()
 	if req.LogFifoPath != "" {
-		logPath = req.LogFifoPath
+		logPath, err = validatePath(req.LogFifoPath)
+		if err != nil {
+			return nil, fmt.Errorf("%v LogFifoPath: %v", ErrInvalidPath, err)
+		}
 	}
 	err = syscall.Mkfifo(logPath, 0700)
 	if err != nil {
@@ -973,7 +1004,10 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 
 	metricsPath := s.shimDir.FirecrackerMetricsFifoPath()
 	if req.MetricsFifoPath != "" {
-		metricsPath = req.MetricsFifoPath
+		metricsPath, err = validatePath(req.MetricsFifoPath)
+		if err != nil {
+			return nil, fmt.Errorf("%v MetricsFifoPath: %v", ErrInvalidPath, err)
+		}
 	}
 	err = syscall.Mkfifo(metricsPath, 0700)
 	if err != nil {

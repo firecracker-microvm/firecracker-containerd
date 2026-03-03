@@ -53,6 +53,7 @@ func TestBuildVMConfiguration(t *testing.T) {
 		config                 *config.Config
 		expectedCfg            *firecracker.Config
 		expectedStubDriveCount int
+		expectedErr            error
 	}{
 		{
 			name:    "Only Config",
@@ -227,6 +228,66 @@ func TestBuildVMConfiguration(t *testing.T) {
 			},
 			expectedStubDriveCount: 2,
 		},
+		{
+			name: "LogFifoPath path must be absolute",
+			request: &proto.CreateVMRequest{
+				LogFifoPath: "not/absolute",
+			},
+			config: &config.Config{
+				KernelArgs:      "KERNEL ARGS",
+				KernelImagePath: "KERNEL IMAGE",
+				RootDrive:       "ROOT DRIVE",
+				CPUTemplate:     "C3",
+				DebugHelper:     debugHelper,
+			},
+			expectedCfg: &firecracker.Config{},
+			expectedErr: ErrInvalidPath,
+		},
+		{
+			name: "MetricsFifoPath path must be absolute",
+			request: &proto.CreateVMRequest{
+				MetricsFifoPath: "not/absolute",
+			},
+			config: &config.Config{
+				KernelArgs:      "KERNEL ARGS",
+				KernelImagePath: "KERNEL IMAGE",
+				RootDrive:       "ROOT DRIVE",
+				CPUTemplate:     "C3",
+				DebugHelper:     debugHelper,
+			},
+			expectedCfg: &firecracker.Config{},
+			expectedErr: ErrInvalidPath,
+		},
+		{
+			name: "LogFifoPath path must be within shim dir",
+			request: &proto.CreateVMRequest{
+				LogFifoPath: "/not/in/shim",
+			},
+			config: &config.Config{
+				KernelArgs:      "KERNEL ARGS",
+				KernelImagePath: "KERNEL IMAGE",
+				RootDrive:       "ROOT DRIVE",
+				CPUTemplate:     "C3",
+				DebugHelper:     debugHelper,
+			},
+			expectedCfg: &firecracker.Config{},
+			expectedErr: ErrInvalidPath,
+		},
+		{
+			name: "LogFifoPath path must be within shim dir",
+			request: &proto.CreateVMRequest{
+				MetricsFifoPath: "/not/in/shim",
+			},
+			config: &config.Config{
+				KernelArgs:      "KERNEL ARGS",
+				KernelImagePath: "KERNEL IMAGE",
+				RootDrive:       "ROOT DRIVE",
+				CPUTemplate:     "C3",
+				DebugHelper:     debugHelper,
+			},
+			expectedCfg: &firecracker.Config{},
+			expectedErr: ErrInvalidPath,
+		},
 	}
 
 	for _, tc := range testcases {
@@ -271,8 +332,13 @@ func TestBuildVMConfiguration(t *testing.T) {
 			tc.expectedCfg.Drives = append(tc.expectedCfg.Drives, drives...)
 
 			actualCfg, err := svc.buildVMConfiguration(tc.request)
-			assert.NoError(t, err)
-			require.Equal(t, tc.expectedCfg, actualCfg)
+			if tc.expectedErr == nil {
+				assert.NoError(t, err)
+				require.Equal(t, tc.expectedCfg, actualCfg)
+			} else {
+				// Can't use errors.Is as we get an error string, not an actual error
+				assert.True(t, strings.Contains(err.Error(), tc.expectedErr.Error()))
+			}
 		})
 	}
 }

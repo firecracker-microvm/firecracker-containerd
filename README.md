@@ -22,6 +22,7 @@ Potential use cases of Firecracker-based containers include:
   running containers using kernel-based container runtimes,
   without the isolation compromise of such solutions.  Multi-tenant
   hosts would particularly benefit from this use case.
+  * Please note that multi-tenant use cases are at the user's own risk.
 
 To maintain compatibility with the container ecosystem, where possible, we use
 container standards such as the OCI image format.

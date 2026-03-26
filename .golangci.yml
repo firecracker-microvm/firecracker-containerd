@@ -25,7 +25,6 @@ issues:
   exclude:
     - G104 # Errors unhandled
     - G103 # Use of unsafe calls should be audited
-    - G114 # Use of net/http serve function without timeouts.
     - G115 # Integer overflow conversion should be audited
     - G204 # Subprocess launched with variable
     - G301 # Expect directory permissions to be 0750 or less

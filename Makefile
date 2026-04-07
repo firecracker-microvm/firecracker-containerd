@@ -131,7 +131,9 @@ deps = \
 
 lint: $(deps)
 	$(BINPATH)/ltag -t ./.headers -excludes "tools $(SUBMODULES)" -check -v
-	$(BINPATH)/git-validation -run DCO,short-subject -range HEAD~20..HEAD
+# Change HEAD~1 to HEAD~20 once this commit falls out of range:
+# https://github.com/firecracker-microvm/firecracker-containerd/commit/9711138b150ac9133ca01379ac19a2e7884c251d
+	$(BINPATH)/git-validation -run DCO,short-subject -range HEAD~1..HEAD
 	$(BINPATH)/golangci-lint run
 
 tidy:

@@ -99,6 +99,69 @@ func TestMachineConfigurationFromProto(t *testing.T) {
 				Smt:         firecracker.Bool(true),
 			},
 		},
+		{
+			name: "ConfigDefaultVcpuAndMem",
+			config: &config.Config{
+				CPUTemplate:       "T2",
+				DefaultVcpuCount:  4,
+				DefaultMemSizeMib: 512,
+			},
+			proto: nil,
+			expectedMachineConfig: models.MachineConfiguration{
+				CPUTemplate: models.CPUTemplateT2,
+				VcpuCount:   firecracker.Int64(4),
+				MemSizeMib:  firecracker.Int64(512),
+				Smt:         firecracker.Bool(false),
+			},
+		},
+		{
+			name: "ConfigDefaultsWithEmptyProto",
+			config: &config.Config{
+				CPUTemplate:       "T2",
+				DefaultVcpuCount:  8,
+				DefaultMemSizeMib: 1024,
+			},
+			proto: &proto.FirecrackerMachineConfiguration{},
+			expectedMachineConfig: models.MachineConfiguration{
+				CPUTemplate: models.CPUTemplateT2,
+				VcpuCount:   firecracker.Int64(8),
+				MemSizeMib:  firecracker.Int64(1024),
+				Smt:         firecracker.Bool(false),
+			},
+		},
+		{
+			name: "ProtoOverridesConfigDefaults",
+			config: &config.Config{
+				CPUTemplate:       "T2",
+				DefaultVcpuCount:  4,
+				DefaultMemSizeMib: 512,
+			},
+			proto: &proto.FirecrackerMachineConfiguration{
+				VcpuCount:  16,
+				MemSizeMib: 2048,
+			},
+			expectedMachineConfig: models.MachineConfiguration{
+				CPUTemplate: models.CPUTemplateT2,
+				VcpuCount:   firecracker.Int64(16),
+				MemSizeMib:  firecracker.Int64(2048),
+				Smt:         firecracker.Bool(false),
+			},
+		},
+		{
+			name: "ZeroConfigDefaultsFallbackToHardcoded",
+			config: &config.Config{
+				CPUTemplate:       "T2",
+				DefaultVcpuCount:  0,
+				DefaultMemSizeMib: 0,
+			},
+			proto: nil,
+			expectedMachineConfig: models.MachineConfiguration{
+				CPUTemplate: models.CPUTemplateT2,
+				VcpuCount:   firecracker.Int64(defaultCPUCount),
+				MemSizeMib:  firecracker.Int64(defaultMemSizeMb),
+				Smt:         firecracker.Bool(false),
+			},
+		},
 	}
 
 	for _, tc := range testcases {

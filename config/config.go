@@ -49,6 +49,12 @@ type Config struct {
 	CPUTemplate           string   `json:"cpu_template"`
 	LogLevels             []string `json:"log_levels"`
 	SmtEnabled            bool     `json:"smt_enabled"`
+	// DefaultVcpuCount is the default number of vCPUs for a microVM.
+	// If not specified (0), defaults to 1.
+	DefaultVcpuCount uint32 `json:"default_vcpu_count"`
+	// DefaultMemSizeMib is the default memory size in MiB for a microVM.
+	// Must be at least 1 MiB. If not specified (0), defaults to 128 MiB.
+	DefaultMemSizeMib uint32 `json:"default_mem_size_mib"`
 	// If a CreateVM call specifies no network interfaces and DefaultNetworkInterfaces is non-empty,
 	// the VM will default to using the network interfaces as specified here. This is especially
 	// useful when a CNI-based network interface is provided in DefaultNetworkInterfaces.

@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"os/exec"
 	"testing"
+	"time"
 
 	"github.com/miekg/dns"
 	"golang.org/x/sync/errgroup"
@@ -132,7 +133,14 @@ func (l localNetworkServices) Serve(ctx context.Context) error {
 			})
 		}
 
-		return http.ListenAndServe(l.ipAddr+":80", nil)
+		srv := &http.Server{
+			Addr:         l.ipAddr + ":80",
+			Handler:      nil,
+			ReadTimeout:  5 * time.Second,
+			WriteTimeout: 5 * time.Second,
+			IdleTimeout:  30 * time.Second,
+		}
+		return srv.ListenAndServe()
 	})
 
 	return errGroup.Wait()

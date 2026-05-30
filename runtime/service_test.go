@@ -277,6 +277,46 @@ func TestBuildVMConfiguration(t *testing.T) {
 	}
 }
 
+func TestBuildVMConfiguration_DefaultNetworkInterfacesAreCloned(t *testing.T) {
+	debugHelper, err := debug.New()
+	require.NoError(t, err, "failed to create debug helper")
+
+	svc := &service{
+		namespace: "TestBuildVMConfiguration_DefaultNetworkInterfacesAreCloned",
+		logger:    logrus.WithField("test", t.Name()),
+		config: &config.Config{
+			KernelArgs:      "KERNEL ARGS",
+			KernelImagePath: "KERNEL IMAGE",
+			RootDrive:       "ROOT DRIVE",
+			DebugHelper:     debugHelper,
+			DefaultNetworkInterfaces: []proto.FirecrackerNetworkInterface{
+				{
+					StaticConfig: &proto.StaticNetworkConfiguration{
+						MacAddress:  mac,
+						HostDevName: hostDevName,
+					},
+				},
+			},
+		},
+	}
+
+	tempDir := t.TempDir()
+	svc.shimDir = vm.Dir(tempDir)
+	svc.jailer = newNoopJailer(context.Background(), svc.logger, svc.shimDir)
+
+	req := &proto.CreateVMRequest{}
+
+	_, err = svc.buildVMConfiguration(req)
+	require.NoError(t, err)
+	require.Len(t, req.NetworkInterfaces, 1)
+
+	req.NetworkInterfaces[0].AllowMMDS = true
+	req.NetworkInterfaces[0].StaticConfig.MacAddress = "AA:FC:00:00:00:FF"
+
+	assert.False(t, svc.config.DefaultNetworkInterfaces[0].AllowMMDS)
+	assert.Equal(t, mac, svc.config.DefaultNetworkInterfaces[0].StaticConfig.MacAddress)
+}
+
 func TestDebugConfig(t *testing.T) {
 	emptyDebugHelper, err := debug.New()
 	require.NoError(t, err, "failed to create empty debug helper")

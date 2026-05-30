@@ -60,6 +60,7 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	gproto "google.golang.org/protobuf/proto"
 )
 
 const (
@@ -743,18 +744,18 @@ func TestLongUnixSocketPath_Isolated(t *testing.T) {
 
 	subtests := []struct {
 		name    string
-		request proto.CreateVMRequest
+		request *proto.CreateVMRequest
 	}{
 		{
 			name: "Without Jailer",
-			request: proto.CreateVMRequest{
+			request: &proto.CreateVMRequest{
 				VMID:              vmID,
 				NetworkInterfaces: []*proto.FirecrackerNetworkInterface{},
 			},
 		},
 		{
 			name: "With Jailer",
-			request: proto.CreateVMRequest{
+			request: &proto.CreateVMRequest{
 				VMID:              vmID,
 				NetworkInterfaces: []*proto.FirecrackerNetworkInterface{},
 				JailerConfig: &proto.JailerConfig{
@@ -766,10 +767,10 @@ func TestLongUnixSocketPath_Isolated(t *testing.T) {
 	}
 
 	for _, subtest := range subtests {
-		request := subtest.request
+		request := gproto.Clone(subtest.request).(*proto.CreateVMRequest)
 		vmID := request.VMID
 		t.Run(subtest.name, func(t *testing.T) {
-			_, err = fcClient.CreateVM(ctx, &request)
+			_, err = fcClient.CreateVM(ctx, request)
 			require.NoError(t, err, "failed to create VM")
 
 			// double-check that the sockets are at the expected path and that their absolute
@@ -1703,8 +1704,8 @@ func TestStopVM_Isolated(t *testing.T) {
 
 	tests := []struct {
 		name            string
-		createVMRequest proto.CreateVMRequest
-		stopFunc        func(ctx context.Context, tb testing.TB, fcClient fccontrol.FirecrackerService, req proto.CreateVMRequest)
+		createVMRequest *proto.CreateVMRequest
+		stopFunc        func(ctx context.Context, tb testing.TB, fcClient fccontrol.FirecrackerService, req *proto.CreateVMRequest)
 		withStopVM      bool
 	}{
 
@@ -1712,8 +1713,8 @@ func TestStopVM_Isolated(t *testing.T) {
 			name:       "Successful",
 			withStopVM: true,
 
-			createVMRequest: proto.CreateVMRequest{},
-			stopFunc: func(ctx context.Context, tb testing.TB, fcClient fccontrol.FirecrackerService, req proto.CreateVMRequest) {
+			createVMRequest: &proto.CreateVMRequest{},
+			stopFunc: func(ctx context.Context, tb testing.TB, fcClient fccontrol.FirecrackerService, req *proto.CreateVMRequest) {
 				_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{
 					VMID:           req.VMID,
 					TimeoutSeconds: 30,
@@ -1728,13 +1729,13 @@ func TestStopVM_Isolated(t *testing.T) {
 			name:       "Timeout",
 			withStopVM: true,
 
-			createVMRequest: proto.CreateVMRequest{
+			createVMRequest: &proto.CreateVMRequest{
 				KernelArgs: kernelArgs + " failure=slow-reboot",
 				RootDrive: &proto.FirecrackerRootDrive{
 					HostPath: "/var/lib/firecracker-containerd/runtime/rootfs-debug.img",
 				},
 			},
-			stopFunc: func(ctx context.Context, tb testing.TB, fcClient fccontrol.FirecrackerService, req proto.CreateVMRequest) {
+			stopFunc: func(ctx context.Context, tb testing.TB, fcClient fccontrol.FirecrackerService, req *proto.CreateVMRequest) {
 				_, err = fcClient.StopVM(ctx, &proto.StopVMRequest{VMID: req.VMID})
 				require.Error(tb, err)
 				assert.Equal(tb, codes.Internal, status.Code(err))
@@ -1747,8 +1748,8 @@ func TestStopVM_Isolated(t *testing.T) {
 			name:       "SIGKILLFirecracker",
 			withStopVM: false,
 
-			createVMRequest: proto.CreateVMRequest{},
-			stopFunc: func(ctx context.Context, tb testing.TB, _ fccontrol.FirecrackerService, _ proto.CreateVMRequest) {
+			createVMRequest: &proto.CreateVMRequest{},
+			stopFunc: func(ctx context.Context, tb testing.TB, _ fccontrol.FirecrackerService, _ *proto.CreateVMRequest) {
 				firecrackerProcesses, err := findProcess(ctx, findFirecracker)
 				require.NoError(tb, err, "failed waiting for expected firecracker process %q to come up", firecrackerProcessName)
 				require.Len(tb, firecrackerProcesses, 1, "expected only one firecracker process to exist")
@@ -1765,13 +1766,13 @@ func TestStopVM_Isolated(t *testing.T) {
 			name:       "ErrorExit",
 			withStopVM: true,
 
-			createVMRequest: proto.CreateVMRequest{
+			createVMRequest: &proto.CreateVMRequest{
 				KernelArgs: kernelArgs + " failure=slow-reboot",
 				RootDrive: &proto.FirecrackerRootDrive{
 					HostPath: "/var/lib/firecracker-containerd/runtime/rootfs-debug.img",
 				},
 			},
-			stopFunc: func(ctx context.Context, tb testing.TB, fcClient fccontrol.FirecrackerService, req proto.CreateVMRequest) {
+			stopFunc: func(ctx context.Context, tb testing.TB, fcClient fccontrol.FirecrackerService, req *proto.CreateVMRequest) {
 				firecrackerProcesses, err := findProcess(ctx, findFirecracker)
 				require.NoError(tb, err, "failed waiting for expected firecracker process %q to come up", firecrackerProcessName)
 				require.Len(tb, firecrackerProcesses, 1, "expected only one firecracker process to exist")
@@ -1801,8 +1802,8 @@ func TestStopVM_Isolated(t *testing.T) {
 			name:       "PauseStop",
 			withStopVM: true,
 
-			createVMRequest: proto.CreateVMRequest{},
-			stopFunc: func(ctx context.Context, tb testing.TB, fcClient fccontrol.FirecrackerService, req proto.CreateVMRequest) {
+			createVMRequest: &proto.CreateVMRequest{},
+			stopFunc: func(ctx context.Context, tb testing.TB, fcClient fccontrol.FirecrackerService, req *proto.CreateVMRequest) {
 				_, err = fcClient.PauseVM(ctx, &proto.PauseVMRequest{VMID: req.VMID})
 				require.Equal(tb, status.Code(err), codes.OK)
 
@@ -1817,8 +1818,8 @@ func TestStopVM_Isolated(t *testing.T) {
 			name:       "Suspend",
 			withStopVM: true,
 
-			createVMRequest: proto.CreateVMRequest{},
-			stopFunc: func(ctx context.Context, tb testing.TB, fcClient fccontrol.FirecrackerService, req proto.CreateVMRequest) {
+			createVMRequest: &proto.CreateVMRequest{},
+			stopFunc: func(ctx context.Context, tb testing.TB, fcClient fccontrol.FirecrackerService, req *proto.CreateVMRequest) {
 				firecrackerProcesses, err := findProcess(ctx, findFirecracker)
 				require.NoError(tb, err, "failed waiting for expected firecracker process %q to come up", firecrackerProcessName)
 				require.Len(tb, firecrackerProcesses, 1, "expected only one firecracker process to exist")
@@ -1839,13 +1840,13 @@ func TestStopVM_Isolated(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, test := range tests {
-		testFunc := func(tb testing.TB, createVMRequest proto.CreateVMRequest) {
+		testFunc := func(tb testing.TB, createVMRequest *proto.CreateVMRequest) {
 			ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 			defer cancel()
 
 			vmID := createVMRequest.VMID
 
-			_, err = fcClient.CreateVM(ctx, &createVMRequest)
+			_, err = fcClient.CreateVM(ctx, createVMRequest)
 			require.NoError(tb, err)
 
 			c, err := client.NewContainer(ctx,
@@ -1892,7 +1893,7 @@ func TestStopVM_Isolated(t *testing.T) {
 			if test.name == "SIGKILLFirecracker" || test.name == "ErrorExit" || test.name == "PauseStop" || test.name == "Suspend" {
 				t.Skip("Skipping test - investigating runc 1.2 behavior")
 			}
-			req := test.createVMRequest
+			req := gproto.Clone(test.createVMRequest).(*proto.CreateVMRequest)
 			req.VMID = testNameToVMID(t.Name())
 			testFunc(t, req)
 		})
@@ -1902,7 +1903,7 @@ func TestStopVM_Isolated(t *testing.T) {
 			if test.name == "SIGKILLFirecracker" || test.name == "ErrorExit" || test.name == "PauseStop" || test.name == "Suspend" {
 				t.Skip("Skipping jailer test - investigating runc 1.2 behavior")
 			}
-			req := test.createVMRequest
+			req := gproto.Clone(test.createVMRequest).(*proto.CreateVMRequest)
 			req.VMID = testNameToVMID(t.Name())
 			req.JailerConfig = &proto.JailerConfig{
 				UID: 300000,

@@ -3,7 +3,7 @@ module github.com/firecracker-microvm/firecracker-containerd/example/remote-snap
 go 1.24.0
 
 require (
-	github.com/containerd/containerd v1.7.29
+	github.com/containerd/containerd v1.7.33
 	github.com/containerd/stargz-snapshotter v0.11.3
 	github.com/firecracker-microvm/firecracker-containerd v0.0.0-20220430002346-5f6efb9fdce8
 )
@@ -46,7 +46,7 @@ require (
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.0 // indirect
 	github.com/opencontainers/runtime-spec v1.2.0 // indirect
-	github.com/opencontainers/selinux v1.13.0 // indirect
+	github.com/opencontainers/selinux v1.13.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	go.opencensus.io v0.24.0 // indirect

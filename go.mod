@@ -21,8 +21,8 @@ require (
 	github.com/miekg/dns v1.1.62
 	github.com/moby/sys/user v0.3.0
 	github.com/opencontainers/image-spec v1.1.0
-	github.com/opencontainers/runc v1.2.8
-	github.com/opencontainers/runtime-spec v1.2.0
+	github.com/opencontainers/runc v1.3.6
+	github.com/opencontainers/runtime-spec v1.2.1
 	github.com/pelletier/go-toml v1.9.5
 	github.com/shirou/gopsutil v2.18.12+incompatible
 	github.com/sirupsen/logrus v1.9.3
@@ -47,7 +47,7 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/cilium/ebpf v0.16.0 // indirect
+	github.com/cilium/ebpf v0.17.3 // indirect
 	github.com/containerd/cgroups v1.1.0 // indirect
 	github.com/containerd/cgroups/v3 v3.0.3 // indirect
 	github.com/containerd/console v1.0.5 // indirect
@@ -59,7 +59,7 @@ require (
 	github.com/containerd/typeurl v1.0.2 // indirect
 	github.com/containers/ocicrypt v1.1.10 // indirect
 	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
-	github.com/cpuguy83/go-md2man/v2 v2.0.4 // indirect
+	github.com/cpuguy83/go-md2man/v2 v2.0.5 // indirect
 	github.com/cyphar/filepath-securejoin v0.6.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
@@ -103,7 +103,7 @@ require (
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/moby/locker v1.0.1 // indirect
 	github.com/moby/spdystream v0.5.1 // indirect
-	github.com/moby/sys/mountinfo v0.7.1 // indirect
+	github.com/moby/sys/mountinfo v0.7.2 // indirect
 	github.com/moby/sys/sequential v0.5.0 // indirect
 	github.com/moby/sys/signal v0.7.0 // indirect
 	github.com/moby/sys/symlink v0.2.0 // indirect
@@ -128,7 +128,7 @@ require (
 	github.com/stefanberger/go-pkcs11uri v0.0.0-20230803200340-78284954bff6 // indirect
 	github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635 // indirect
 	github.com/tchap/go-patricia/v2 v2.3.1 // indirect
-	github.com/urfave/cli v1.22.15 // indirect
+	github.com/urfave/cli v1.22.16 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
 	go.etcd.io/bbolt v1.3.10 // indirect
 	go.mongodb.org/mongo-driver v1.17.7 // indirect
@@ -141,7 +141,6 @@ require (
 	go.opentelemetry.io/otel/metric v1.41.0 // indirect
 	go.opentelemetry.io/otel/trace v1.41.0 // indirect
 	golang.org/x/crypto v0.52.0 // indirect
-	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56 // indirect
 	golang.org/x/mod v0.35.0 // indirect
 	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect

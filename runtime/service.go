@@ -54,6 +54,7 @@ import (
 	"golang.org/x/sys/unix"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	gproto "google.golang.org/protobuf/proto"
 
 	"github.com/firecracker-microvm/firecracker-containerd/config"
 	"github.com/firecracker-microvm/firecracker-containerd/eventbridge"
@@ -1031,9 +1032,9 @@ func (s *service) buildVMConfiguration(req *proto.CreateVMRequest) (*firecracker
 	// If no value for NetworkInterfaces was specified (not even an empty but non-nil list) and
 	// the runtime config specifies a default list, use those defaults
 	if req.NetworkInterfaces == nil {
-		for _, ni := range s.config.DefaultNetworkInterfaces {
-			niCopy := ni // we don't want to allow any further calls to modify structs in s.config.DefaultNetworkInterfaces
-			req.NetworkInterfaces = append(req.NetworkInterfaces, &niCopy)
+		for i := range s.config.DefaultNetworkInterfaces {
+			ni := &s.config.DefaultNetworkInterfaces[i]
+			req.NetworkInterfaces = append(req.NetworkInterfaces, gproto.Clone(ni).(*proto.FirecrackerNetworkInterface))
 		}
 	}
 

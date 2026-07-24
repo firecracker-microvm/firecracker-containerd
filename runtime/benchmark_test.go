@@ -25,6 +25,7 @@ import (
 	fccontrol "github.com/firecracker-microvm/firecracker-containerd/proto/service/fccontrol/ttrpc"
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
+	gproto "google.golang.org/protobuf/proto"
 )
 
 const benchmarkCount = 10
@@ -32,17 +33,18 @@ const benchmarkCount = 10
 func createAndStopVM(
 	ctx context.Context,
 	fcClient fccontrol.FirecrackerService,
-	request proto.CreateVMRequest,
+	request *proto.CreateVMRequest,
 ) (time.Duration, error) {
 	uuid, err := uuid.NewV4()
 	if err != nil {
 		return 0, err
 	}
 
+	request = gproto.Clone(request).(*proto.CreateVMRequest)
 	request.VMID = uuid.String()
 
 	t0 := time.Now()
-	_, err = fcClient.CreateVM(ctx, &request)
+	_, err = fcClient.CreateVM(ctx, request)
 	if err != nil {
 		return 0, err
 	}
@@ -81,7 +83,7 @@ func benchmarkCreateAndStopVM(t *testing.T, vcpuCount uint32, kernelArgs string)
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 
-		elapsed, err := createAndStopVM(ctx, fcClient, request)
+		elapsed, err := createAndStopVM(ctx, fcClient, &request)
 		if err != nil {
 			return
 		}

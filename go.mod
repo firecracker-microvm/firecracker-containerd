@@ -4,7 +4,7 @@ go 1.25.0
 
 require (
 	github.com/awslabs/tc-redirect-tap v0.0.0-20250516183331-34bf829e9a5c
-	github.com/containerd/containerd v1.7.33
+	github.com/containerd/containerd v1.7.35
 	github.com/containerd/containerd/api v1.8.0
 	github.com/containerd/continuity v0.4.4
 	github.com/containerd/fifo v1.1.0

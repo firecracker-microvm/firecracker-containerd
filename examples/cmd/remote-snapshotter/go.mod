@@ -3,7 +3,7 @@ module github.com/firecracker-microvm/firecracker-containerd/example/remote-snap
 go 1.25.0
 
 require (
-	github.com/containerd/containerd v1.7.33
+	github.com/containerd/containerd v1.7.35
 	github.com/containerd/stargz-snapshotter v0.11.3
 	github.com/firecracker-microvm/firecracker-containerd v0.0.0-20220430002346-5f6efb9fdce8
 )

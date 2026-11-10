@@ -1,3 +1,33 @@
+# As of November 10 2026, this project is no longer maintained.
+
+### TL;DR firecracker-containerd is no longer maintained. Please see [alternatives](#alternatives) for migrating workloads to more modern, secure alternatives.
+
+---
+
+We have made the decision to deprecate firecracker-containerd.
+
+firecracker-containerd was created to combine the lightweight, friendly interface of containers with the security of kernel-level isolation. When the project started, this was a novel approach. Since then, the ecosystem has matured: several projects now deliver the same model with more robust implementations and active investment behind them. Amazon has done the same via [Nitro Sandboxes](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/amazon-ec2-nitro-sandboxes.html), which leverages Nitro Enclaves to achieve hardware-backed isolation for your container workloads.
+
+Given those alternatives, we have archived firecracker-containerd rather than continue partial maintenance. The repository will remain available in read-only form for reference.
+
+If you want to keep developing the project, you are welcome to fork it and maintain your own copy, provided you continue to follow the original [LICENSE](./LICENSE).
+
+## Alternatives
+
+Below are a list of alternatives that achieve the goal of kernel-level isolation for containerized workloads.
+- [Nitro Sandboxes](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/amazon-ec2-nitro-sandboxes.html) - for folks who wish to have an Amazon-backed sandboxed container experience, this is the best option offered by Amazon that is currently supported.
+  - Please note that this is currently closed-source, unlike firecracker-containerd.
+
+All of the below alternatives are not owned or endorsed by Amazon, but they are open-source alternatives to achieve VM-level isolation for containers.
+
+- [kata-containers](https://github.com/kata-containers/kata-containers) — likely the closest open-source alternative, supports multiple hypervisors including Firecracker
+- [apple/container](https://github.com/apple/container) — useful for local dev work on Apple silicon machines
+- [nerdbox](https://github.com/containerd/nerdbox) — runs on all platforms using libkrun hypervisor
+- [Lima](https://github.com/lima-vm/lima) — used in conjunction with a container runtime to run Linux containers.
+  - Note that Lima runs multiple containers inside of a single VM, which is a different architecture from firecracker-containerd, but may still be an option users want to consider
+
+---
+
 # firecracker-containerd
 
 [![BuildKite](https://badge.buildkite.com/aab4ae547d5e5079a5915522e8cdb18492349aef67aae5a8c5.svg?branch=main)](https://buildkite.com/firecracker-microvm/firecracker-containerd)
